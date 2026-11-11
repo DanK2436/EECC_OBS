@@ -8,7 +8,7 @@ function createWindow() {
     minWidth: 1024,
     minHeight: 600,
     title: 'EECC Studio — Régie de Production',
-    icon: path.join(__dirname, '../public/favicon.ico'),
+    icon: path.join(__dirname, '../public/icon-512.png'),
     autoHideMenuBar: true,
     webPreferences: {
       nodeIntegration: true,

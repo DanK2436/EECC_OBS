@@ -111,6 +111,8 @@ jobs:
           fi
           sed -i '/<application/i \    <uses-permission android:name="android.permission.INTERNET"\/>\n    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"\/>' android/app/src/main/AndroidManifest.xml
           flutter pub get
+          # Corriger le bug Gradle flutter.compileSdkVersion dans le cache de app_links
+          find /home/runner/.pub-cache -name "build.gradle" -path "*app_links*" -exec sed -i 's/flutter.compileSdkVersion/34/g' {} + || true
 
       - name: Build TV Release APK
         working-directory: apps/tv_mobile
@@ -159,6 +161,8 @@ jobs:
           fi
           sed -i '/<application/i \    <uses-permission android:name="android.permission.INTERNET"\/>\n    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"\/>\n    <uses-permission android:name="android.permission.CAMERA"\/>\n    <uses-permission android:name="android.permission.RECORD_AUDIO"\/>\n    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE"\/>\n    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE"\/>' android/app/src/main/AndroidManifest.xml
           flutter pub get
+          # Corriger le bug Gradle flutter.compileSdkVersion dans le cache de app_links
+          find /home/runner/.pub-cache -name "build.gradle" -path "*app_links*" -exec sed -i 's/flutter.compileSdkVersion/34/g' {} + || true
 
       - name: Build Caméra Release APK
         working-directory: apps/camera_mobile

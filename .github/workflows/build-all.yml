@@ -106,7 +106,6 @@ jobs:
             cp -r /tmp/tv_res/* android/app/src/main/res/ || true
           fi
           sed -i '/<application/i \    <uses-permission android:name="android.permission.INTERNET"\/>\n    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"\/>' android/app/src/main/AndroidManifest.xml
-          cat gradle_fix.gradle >> android/build.gradle
           flutter pub get
 
       - name: Build TV Release APK

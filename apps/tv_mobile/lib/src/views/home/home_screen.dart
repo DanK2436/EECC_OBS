@@ -101,27 +101,30 @@ class _HomeScreenState extends State<HomeScreen> {
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          children: [
-            // 1. BANNIÈRE DIRECT OU PROCHAIN CULTE
-            _buildLiveOrScheduledCard(),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // 1. BANNIÈRE DIRECT OU PROCHAIN CULTE
+              _buildLiveOrScheduledCard(),
 
-            const SizedBox(height: 16),
+              const SizedBox(height: 16),
 
-            // 2. BANNIÈRE SOUTENIR L'ÉGLISE
-            _buildDonationCard(),
+              // 2. BANNIÈRE SOUTENIR L'ÉGLISE
+              _buildDonationCard(),
 
-            const SizedBox(height: 24),
+              const SizedBox(height: 24),
 
-            // 3. RAIL HORIZONTAL : REPLAYS À RETROUVER (YouTube, Facebook, TikTok)
-            _buildReplaysRail(),
+              // 3. RAIL HORIZONTAL : REPLAYS À RETROUVER (YouTube, Facebook, TikTok)
+              _buildReplaysRail(),
 
-            const SizedBox(height: 24),
+              const SizedBox(height: 24),
 
-            // 4. RAIL HORIZONTAL : DERNIERS PODCASTS ET PRÉDICATIONS
-            _buildPodcastsRail(),
+              // 4. RAIL HORIZONTAL : DERNIERS PODCASTS ET PRÉDICATIONS
+              _buildPodcastsRail(),
 
-            const SizedBox(height: 30),
-          ],
+              const SizedBox(height: 30),
+            ],
+          ),
         ),
       ),
     );

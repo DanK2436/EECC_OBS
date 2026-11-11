@@ -47,7 +47,7 @@ class _DonationModalState extends State<DonationModal> {
               child: Container(
                 width: 40,
                 height: 4,
-                margin: const EdgeInsets.bottom: 20,
+                margin: const EdgeInsets.only(bottom: 20),
                 decoration: BoxDecoration(
                   color: EeccColors.border,
                   borderRadius: BorderRadius.circular(2),

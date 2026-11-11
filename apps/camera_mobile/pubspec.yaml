@@ -1,0 +1,26 @@
+name: eecc_camera
+description: "Application mobile officielle EECC Caméra — Captation smartphone sans fil pour EECC Studio"
+publish_to: "none"
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+  flutter: ">=3.10.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  mobile_scanner: ^5.2.3
+  camera: ^0.11.0
+  web_socket_channel: ^2.4.5
+  battery_plus: ^6.0.2
+  intl: ^0.19.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true

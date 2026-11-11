@@ -1,0 +1,145 @@
+name: Build EECC Ecosystem
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  # ========================================================
+  # 1. BUILD EECC WEB PORTAL (Next.js)
+  # ========================================================
+  build-web-portal:
+    name: Build Web Portal
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: 'apps/web_portal/package.json'
+
+      - name: Install dependencies
+        working-directory: apps/web_portal
+        run: npm install
+
+      - name: Build Web Portal
+        working-directory: apps/web_portal
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL || 'https://rwojdiomftillhsamjal.supabase.co' }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'sb_publishable_GjqG64b82uXaDQzGJmo3Aw_pIcpjxKb' }}
+        run: npm run build
+
+  # ========================================================
+  # 2. BUILD EECC STUDIO (React / Vite)
+  # ========================================================
+  build-studio:
+    name: Build EECC Studio
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: 'apps/studio/package.json'
+
+      - name: Install dependencies
+        working-directory: apps/studio
+        run: npm install
+
+      - name: Build Studio
+        working-directory: apps/studio
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL || 'https://rwojdiomftillhsamjal.supabase.co' }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY || 'sb_publishable_GjqG64b82uXaDQzGJmo3Aw_pIcpjxKb' }}
+        run: npm run build
+
+      - name: Upload Studio Web Dist Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: eecc-studio-dist
+          path: apps/studio/dist/
+
+  # ========================================================
+  # 3. BUILD EECC TV MOBILE (Flutter Android APK)
+  # ========================================================
+  build-tv-apk:
+    name: Build EECC TV APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.22.x'
+          channel: 'stable'
+          cache: true
+
+      - name: Get TV dependencies
+        working-directory: apps/tv_mobile
+        run: flutter pub get
+
+      - name: Build TV Release APK
+        working-directory: apps/tv_mobile
+        run: flutter build apk --release
+
+      - name: Upload EECC TV APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: EECC_TV_Release_APK
+          path: apps/tv_mobile/build/app/outputs/flutter-apk/app-release.apk
+
+  # ========================================================
+  # 4. BUILD EECC CAMERA MOBILE (Flutter Android APK)
+  # ========================================================
+  build-camera-apk:
+    name: Build EECC Caméra APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.22.x'
+          channel: 'stable'
+          cache: true
+
+      - name: Get Caméra dependencies
+        working-directory: apps/camera_mobile
+        run: flutter pub get
+
+      - name: Build Caméra Release APK
+        working-directory: apps/camera_mobile
+        run: flutter build apk --release
+
+      - name: Upload EECC Caméra APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: EECC_Camera_Release_APK
+          path: apps/camera_mobile/build/app/outputs/flutter-apk/app-release.apk

@@ -1,0 +1,44 @@
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+Maishapay.txt
+*.key
+*.pem
+
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build outputs
+dist/
+build/
+bin/
+obj/
+out/
+.next/
+*.exe
+*.dll
+
+# Flutter / Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+*.apk
+*.aab
+*.ipa
+
+# IDE & OS files
+.vscode/
+.idea/
+*.suo
+*.user
+Thumbs.db
+[Dd]esktop.ini
+.DS_Store
+
+# Supabase
+.branches
+.temp

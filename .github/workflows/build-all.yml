@@ -83,7 +83,7 @@ jobs:
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
-          distribution: 'zulu'
+          distribution: 'temurin'
           java-version: '17'
 
       - name: Setup Flutter
@@ -93,9 +93,20 @@ jobs:
           channel: 'stable'
           cache: true
 
-      - name: Get TV dependencies
+      - name: Prepare Clean Android Platform
         working-directory: apps/tv_mobile
-        run: flutter pub get
+        run: |
+          mkdir -p /tmp/tv_res
+          if [ -d "android/app/src/main/res" ]; then
+            cp -r android/app/src/main/res/* /tmp/tv_res/ || true
+          fi
+          rm -rf android
+          flutter create --platforms=android --org cd.eecc .
+          if [ -d "/tmp/tv_res" ]; then
+            cp -r /tmp/tv_res/* android/app/src/main/res/ || true
+          fi
+          sed -i '/<application/i \    <uses-permission android:name="android.permission.INTERNET"\/>\n    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"\/>' android/app/src/main/AndroidManifest.xml
+          flutter pub get
 
       - name: Build TV Release APK
         working-directory: apps/tv_mobile
@@ -120,7 +131,7 @@ jobs:
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
-          distribution: 'zulu'
+          distribution: 'temurin'
           java-version: '17'
 
       - name: Setup Flutter
@@ -130,9 +141,20 @@ jobs:
           channel: 'stable'
           cache: true
 
-      - name: Get Caméra dependencies
+      - name: Prepare Clean Android Platform
         working-directory: apps/camera_mobile
-        run: flutter pub get
+        run: |
+          mkdir -p /tmp/cam_res
+          if [ -d "android/app/src/main/res" ]; then
+            cp -r android/app/src/main/res/* /tmp/cam_res/ || true
+          fi
+          rm -rf android
+          flutter create --platforms=android --org cd.eecc .
+          if [ -d "/tmp/cam_res" ]; then
+            cp -r /tmp/cam_res/* android/app/src/main/res/ || true
+          fi
+          sed -i '/<application/i \    <uses-permission android:name="android.permission.INTERNET"\/>\n    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"\/>\n    <uses-permission android:name="android.permission.CAMERA"\/>\n    <uses-permission android:name="android.permission.RECORD_AUDIO"\/>\n    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE"\/>\n    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE"\/>' android/app/src/main/AndroidManifest.xml
+          flutter pub get
 
       - name: Build Caméra Release APK
         working-directory: apps/camera_mobile

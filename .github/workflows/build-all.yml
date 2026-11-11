@@ -37,11 +37,11 @@ jobs:
         run: npm run build
 
   # ========================================================
-  # 2. BUILD EECC STUDIO (React / Vite)
+  # 2. BUILD EECC STUDIO (Windows .exe Installer)
   # ========================================================
   build-studio:
-    name: Build EECC Studio
-    runs-on: ubuntu-latest
+    name: Build EECC Studio Windows Installer (.exe)
+    runs-on: windows-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -57,18 +57,22 @@ jobs:
         working-directory: apps/studio
         run: npm install
 
-      - name: Build Studio
+      - name: Build Web Dist
         working-directory: apps/studio
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL || 'https://rwojdiomftillhsamjal.supabase.co' }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY || 'sb_publishable_GjqG64b82uXaDQzGJmo3Aw_pIcpjxKb' }}
         run: npm run build
 
-      - name: Upload Studio Web Dist Artifact
+      - name: Package Windows Installer (.exe)
+        working-directory: apps/studio
+        run: npx electron-builder --win nsis portable
+
+      - name: Upload EECC Studio Windows Installer (.exe)
         uses: actions/upload-artifact@v4
         with:
-          name: eecc-studio-dist
-          path: apps/studio/dist/
+          name: EECC_Studio_Windows_Installer
+          path: apps/studio/release/*.exe
 
   # ========================================================
   # 3. BUILD EECC TV MOBILE (Flutter Android APK)

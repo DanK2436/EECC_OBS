@@ -20,7 +20,7 @@ class EeccConfig {
   // Maishapay Configuration publique
   static const String maishapayPublicKey = String.fromEnvironment(
     'MAISHAPAY_PUBLIC_KEY',
-    defaultValue: 'MP-LIVEPK-DOw\$T0SnM/SekDy32h0M5\$A6Z2H350e.TJSq1HIRT70jndZdocX.v53cSIcxy65\$qD2ThvocUy\$EYn10vD\$3S80\$Mh4SnfByyHSH.Fazv1Dfmc2uy9sjE7VG',
+    defaultValue: '',
   );
 
   // Liens officiels

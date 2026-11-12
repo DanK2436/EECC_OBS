@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
-import { Heart, ShieldCheck, Smartphone, CreditCard, CheckCircle2 } from "lucide-react";
+import { Heart, ShieldCheck, Smartphone, CreditCard } from "lucide-react";
 
 export default function DonationPage() {
   const [selectedAmount, setSelectedAmount] = useState<number>(20);
@@ -12,20 +12,15 @@ export default function DonationPage() {
   const [donorName, setDonorName] = useState<string>("");
   const [donorPhone, setDonorPhone] = useState<string>("");
   const [donorEmail, setDonorEmail] = useState<string>("");
-  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
-  const [isSuccess, setIsSuccess] = useState<boolean>(false);
+  const [notice, setNotice] = useState<string>("");
 
   const predefinedAmounts = [5, 10, 20, 50, 100, 200];
 
   const handleDonate = (e: React.FormEvent) => {
     e.preventDefault();
-    setIsSubmitting(true);
-
-    // Simulation d'appel sécurisé vers l'Edge function Supabase Maishapay
-    setTimeout(() => {
-      setIsSubmitting(false);
-      setIsSuccess(true);
-    }, 1200);
+    setNotice(
+      "Aucun paiement n'a été envoyé. MaishaPay n'est pas branché : il manque les clés sandbox serveur et un callback vérifié. Ce formulaire n'encaisse rien.",
+    );
   };
 
   const finalAmount = customAmount ? parseFloat(customAmount) || 0 : selectedAmount;
@@ -49,24 +44,7 @@ export default function DonationPage() {
           </div>
 
           <div className="bg-white rounded-3xl border border-slate-200/80 shadow-xl overflow-hidden p-8 sm:p-12">
-            {isSuccess ? (
-              <div className="text-center py-12">
-                <div className="w-16 h-16 rounded-full bg-green-100 text-green-600 flex items-center justify-center mx-auto mb-4">
-                  <CheckCircle2 className="w-10 h-10" />
-                </div>
-                <h2 className="text-2xl font-bold text-textMain mb-2">Merci pour votre générosité !</h2>
-                <p className="text-sm text-slate max-w-md mx-auto mb-6">
-                  Votre intention de don de <strong>{finalAmount} $</strong> a été enregistrée avec succès. Vous recevrez la confirmation et le reçu après validation de votre opérateur.
-                </p>
-                <button
-                  onClick={() => setIsSuccess(false)}
-                  className="px-6 py-2.5 rounded-xl text-sm font-bold text-white bg-primary hover:bg-primary-dark transition-colors"
-                >
-                  Effectuer un autre don
-                </button>
-              </div>
-            ) : (
-              <form onSubmit={handleDonate} className="space-y-8">
+            <form onSubmit={handleDonate} className="space-y-8">
                 {/* 1. Choix du montant */}
                 <div>
                   <label className="block text-sm font-bold text-textMain mb-3">
@@ -186,21 +164,21 @@ export default function DonationPage() {
                 <div className="pt-4 border-t border-slate-100">
                   <button
                     type="submit"
-                    disabled={isSubmitting || finalAmount <= 0}
+                    disabled={finalAmount <= 0}
                     className="w-full py-4 rounded-xl font-bold text-white bg-primary hover:bg-primary-dark transition-all shadow-lg shadow-primary/25 disabled:opacity-50 text-base flex items-center justify-center"
                   >
                     <Heart className="w-5 h-5 mr-2 fill-current" />
-                    {isSubmitting
-                      ? "Traitement en cours..."
-                      : `Confirmer mon don de ${finalAmount} $`}
+                    {`Le paiement de ${finalAmount} $ n'est pas disponible`}
                   </button>
+                  {notice ? (
+                    <p className="mt-4 text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-xl p-3">{notice}</p>
+                  ) : null}
                   <div className="flex items-center justify-center space-x-2 text-xs text-slate-400 mt-4">
-                    <ShieldCheck className="w-4 h-4 text-green-500" />
-                    <span>Paiement chiffré et sécurisé par Maishapay. Aucun numéro de carte n'est conservé.</span>
+                    <ShieldCheck className="w-4 h-4 text-slate-400" />
+                    <span>MaishaPay n'est pas relié. Aucun débit n'est lancé depuis cette page.</span>
                   </div>
                 </div>
               </form>
-            )}
           </div>
         </div>
       </main>

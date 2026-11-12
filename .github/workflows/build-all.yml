@@ -243,6 +243,9 @@ jobs:
         working-directory: apps/web_portal
         run: npm install
 
+      - name: Test MaishaPay callback decisions
+        run: node --test supabase/functions/maishapay-webhook/decision_test.mjs
+
       - name: Build Next.js Web Portal
         working-directory: apps/web_portal
         env:

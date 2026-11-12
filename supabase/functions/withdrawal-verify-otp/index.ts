@@ -28,8 +28,6 @@ serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const maishapaySecretKey = Deno.env.get("MAISHAPAY_SECRET_KEY");
-    const maishapayApiUrl = Deno.env.get("MAISHAPAY_API_URL") || "https://api.maishapay.net/v1";
 
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
@@ -173,85 +171,36 @@ serve(async (req) => {
       p_metadata: { reference: withdrawal.reference },
     });
 
-    // Passer à l'état de traitement auprès de Maishapay
-    await supabaseClient
-      .from("withdrawal_requests")
-      .update({ status: "processing" })
-      .eq("id", withdrawal_id);
-
-    // Déclenchement de l'ordre de décaissement (Disbursement) auprès de Maishapay si configuré
-    let providerSuccess = false;
-    let providerRef = `MP-TX-${Date.now()}`;
-    let failureMsg = null;
-
-    if (maishapaySecretKey) {
-      try {
-        const maishaRes = await fetch(`${maishapayApiUrl}/disbursements`, {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${maishapaySecretKey}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            reference: withdrawal.reference,
-            amount: withdrawal.amount_net,
-            currency: withdrawal.currency,
-            destination_account: withdrawal.destination_account,
-            provider: withdrawal.destination_provider,
-          }),
-        });
-
-        if (maishaRes.ok) {
-          const maishaData = await maishaRes.json();
-          providerSuccess = true;
-          providerRef = maishaData.transaction_id || providerRef;
-        } else {
-          const errBody = await maishaRes.text();
-          failureMsg = `Erreur prestataire: ${errBody}`;
-        }
-      } catch (pErr) {
-        failureMsg = (pErr as Error).message;
-      }
-    } else {
-      // Mode simulation si la clé n'est pas encore liée
-      providerSuccess = true;
-      providerRef = `SIMULATED-${Date.now()}`;
-    }
-
-    const finalStatus = providerSuccess ? "completed" : "failed";
-
+    const failureMsg = "Décaissement non envoyé. Cette version ne contacte pas MaishaPay et n'utilise pas de clé marchand.";
     await supabaseClient
       .from("withdrawal_requests")
       .update({
-        status: finalStatus,
-        provider_reference: providerRef,
+        status: "payout_not_sent",
         failure_reason: failureMsg,
-        processed_at: new Date().toISOString(),
       })
       .eq("id", withdrawal_id);
 
     await supabaseClient.rpc("log_audit_event", {
       p_actor_id: user.id,
-      p_action: providerSuccess ? "WITHDRAWAL_COMPLETED" : "WITHDRAWAL_FAILED",
+      p_action: "WITHDRAWAL_PAYOUT_NOT_SENT",
       p_entity_type: "withdrawal_requests",
       p_entity_id: withdrawal_id,
       p_metadata: {
         reference: withdrawal.reference,
         amount_net: withdrawal.amount_net,
         currency: withdrawal.currency,
-        provider_reference: providerRef,
-        status: finalStatus,
+        status: "payout_not_sent",
       },
     });
 
     return new Response(
       JSON.stringify({
-        success: providerSuccess,
-        status: finalStatus,
-        provider_reference: providerRef,
+        success: false,
+        status: "payout_not_sent",
         error: failureMsg,
       }),
       {
+        status: 409,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       }
     );

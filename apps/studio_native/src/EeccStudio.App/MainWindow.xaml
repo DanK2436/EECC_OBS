@@ -21,33 +21,69 @@
         </Grid.RowDefinitions>
 
         <!-- 1. BARRE DE TITRE & MENU SUPÉRIEUR (Style OBS Studio Yami) -->
-        <Border Grid.Row="0" Background="#161B22" BorderBrush="#30363D" BorderThickness="0,0,0,1" Padding="12,8">
-            <DockPanel LastChildFill="True">
-                <StackPanel Orientation="Horizontal" DockPanel.Dock="Left" VerticalAlignment="Center">
-                    <!-- Logo Vectoriel Déployé EECC Studio -->
-                    <Border Width="28" Height="28" CornerRadius="6" Background="#14151C" BorderBrush="#71717A" BorderThickness="1" Margin="0,0,10,0">
-                        <TextBlock Text="✦" Foreground="#FFFFFF" HorizontalAlignment="Center" VerticalAlignment="Center" FontWeight="Bold"/>
-                    </Border>
-                    <TextBlock Text="EECC STUDIO" FontWeight="Black" FontSize="15" Foreground="#FFFFFF" VerticalAlignment="Center"/>
-                    <Border Background="#30363D" Width="1" Margin="14,2"/>
-                    <Menu Background="Transparent" Foreground="#F0F6FC" VerticalAlignment="Center">
-                        <MenuItem Header="Fichier" Foreground="#F0F6FC"/>
-                        <MenuItem Header="Édition" Foreground="#F0F6FC"/>
-                        <MenuItem Header="Affichage" Foreground="#F0F6FC"/>
-                        <MenuItem Header="Collection de scènes" Foreground="#F0F6FC"/>
-                        <MenuItem Header="Profils" Foreground="#F0F6FC"/>
-                        <MenuItem Header="Outils" Foreground="#F0F6FC"/>
-                        <MenuItem Header="Aide" Foreground="#F0F6FC"/>
-                    </Menu>
-                </StackPanel>
-
-                <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" VerticalAlignment="Center">
-                    <Button x:Name="BtnPairQr" Content="Appairer EECC Caméra (QR)" Background="#1E293B" Foreground="#FFFFFF" BorderBrush="#30363D" Padding="12,5" Margin="0,0,10,0" FontWeight="SemiBold" Click="BtnPairQr_Click"/>
-                    <Button x:Name="BtnMutePlayback" Content="Couper le son reçu" Background="#21262D" Foreground="#F0F6FC" BorderBrush="#30363D" Padding="12,5" Margin="0,0,10,0" Click="BtnMutePlayback_Click"/>
-                    <Border Background="#30363D" CornerRadius="4" Padding="8,4" Margin="0,0,8,0">
-                        <TextBlock Text="Diffusion externe non branchée" Foreground="#F0F6FC" FontSize="11" FontWeight="Bold"/>
-                    </Border>
-                </StackPanel>
+        <Border Grid.Row="0" Background="#161B22" BorderBrush="#30363D" BorderThickness="0,0,0,1">
+            <DockPanel>
+                <DockPanel DockPanel.Dock="Top" Margin="12,8,12,4" LastChildFill="False">
+                    <StackPanel Orientation="Horizontal" DockPanel.Dock="Left" VerticalAlignment="Center">
+                        <Border Width="28" Height="28" CornerRadius="6" Background="#14151C" BorderBrush="#71717A" BorderThickness="1" Margin="0,0,10,0">
+                            <TextBlock Text="✦" Foreground="#FFFFFF" HorizontalAlignment="Center" VerticalAlignment="Center" FontWeight="Bold"/>
+                        </Border>
+                        <TextBlock Text="EECC STUDIO" FontWeight="Black" FontSize="15" Foreground="#FFFFFF" VerticalAlignment="Center"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" VerticalAlignment="Center">
+                        <Button x:Name="BtnPairQr" Content="Appairer EECC Caméra (QR)" Background="#1E293B" Foreground="#FFFFFF" BorderBrush="#30363D" Padding="12,5" Margin="0,0,10,0" FontWeight="SemiBold" Click="BtnPairQr_Click"/>
+                        <Button x:Name="BtnMutePlayback" Content="Couper le son reçu" Background="#21262D" Foreground="#F0F6FC" BorderBrush="#30363D" Padding="12,5" Margin="0,0,10,0" Click="BtnMutePlayback_Click"/>
+                        <Border Background="#30363D" CornerRadius="4" Padding="8,4">
+                            <TextBlock Text="Diffusion externe non branchée" Foreground="#F0F6FC" FontSize="11" FontWeight="Bold"/>
+                        </Border>
+                    </StackPanel>
+                </DockPanel>
+                <Menu Background="Transparent" Foreground="#F0F6FC" Padding="8,0,8,4">
+                    <Menu.Resources>
+                        <Style TargetType="MenuItem">
+                            <Setter Property="Foreground" Value="#111111"/>
+                            <Setter Property="Background" Value="#FFFFFF"/>
+                            <Style.Triggers>
+                                <Trigger Property="Role" Value="TopLevelHeader">
+                                    <Setter Property="Foreground" Value="#F0F6FC"/>
+                                    <Setter Property="Background" Value="Transparent"/>
+                                </Trigger>
+                                <Trigger Property="Role" Value="TopLevelItem">
+                                    <Setter Property="Foreground" Value="#F0F6FC"/>
+                                    <Setter Property="Background" Value="Transparent"/>
+                                </Trigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Menu.Resources>
+                    <MenuItem Header="Fichier">
+                        <MenuItem Header="Appairer EECC Caméra" Click="BtnPairQr_Click"/>
+                        <Separator/>
+                        <MenuItem Header="Quitter" Click="MenuQuit_Click"/>
+                    </MenuItem>
+                    <MenuItem Header="Édition">
+                        <MenuItem Header="Couper ou rétablir le son reçu" Click="BtnMutePlayback_Click"/>
+                        <MenuItem Header="Copier, coller et annuler (non branchés)" IsEnabled="False"/>
+                    </MenuItem>
+                    <MenuItem Header="Affichage">
+                        <MenuItem Header="Le double moniteur est déjà affiché" IsEnabled="False"/>
+                        <MenuItem Header="Plein écran et projecteurs (non branchés)" IsEnabled="False"/>
+                    </MenuItem>
+                    <MenuItem Header="Collection de scènes">
+                        <MenuItem Header="Les scènes affichées ne commandent pas le flux" IsEnabled="False"/>
+                    </MenuItem>
+                    <MenuItem Header="Profils">
+                        <MenuItem Header="Aucun profil n'est enregistré" IsEnabled="False"/>
+                    </MenuItem>
+                    <MenuItem Header="Outils">
+                        <MenuItem Header="Tally aperçu" Click="BtnTallyPreview_Click"/>
+                        <MenuItem Header="Tally programme" Click="BtnTallyProgram_Click"/>
+                        <MenuItem Header="Tally attente" Click="BtnTallyStandby_Click"/>
+                        <Separator/>
+                        <MenuItem Header="Enregistrement (non branché)" IsEnabled="False"/>
+                        <MenuItem Header="Diffusion externe (non branchée)" IsEnabled="False"/>
+                    </MenuItem>
+                    <MenuItem Header="Aide" Click="MenuHelp_Click"/>
+                </Menu>
             </DockPanel>
         </Border>
 

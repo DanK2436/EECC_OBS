@@ -33,13 +33,7 @@ export const TreasuryWithdrawalModal: React.FC<TreasuryWithdrawalModalProps> = (
 
   if (!isOpen) return null;
 
-  const maskEmail = (email: string) => {
-    if (!email || !email.includes("@")) return "non configuré";
-    const [user, domain] = email.split("@");
-    return `${user.slice(0, 2)}***@${domain}`;
-  };
-
-  const knownFee = (amount * 0.015).toFixed(2); // Estimation frais 1.5%
+  const knownFee = (amount * 0.015).toFixed(2);
   const netAmount = (amount - parseFloat(knownFee)).toFixed(2);
 
   // Étape 1 : Demande d'OTP via Brevo
@@ -53,11 +47,8 @@ export const TreasuryWithdrawalModal: React.FC<TreasuryWithdrawalModalProps> = (
     setIsLoading(true);
     setErrorMessage(null);
 
-    // Simulation de l'appel vers l'Edge Function Supabase 'brevo-send-otp'
-    setTimeout(() => {
-      setIsLoading(false);
-      setStep("otp");
-    }, 900);
+    setIsLoading(false);
+    setErrorMessage("Aucun code n'a été envoyé. L'envoi Brevo et le décaissement MaishaPay ne sont pas branchés.");
   };
 
   // Étape 2 : Vérification du code 5 caractères via 'withdrawal-verify-otp'
@@ -71,17 +62,8 @@ export const TreasuryWithdrawalModal: React.FC<TreasuryWithdrawalModalProps> = (
     setIsLoading(true);
     setErrorMessage(null);
 
-    // Simulation de l'appel sécurisé 'withdrawal-verify-otp'
-    setTimeout(() => {
-      setIsLoading(false);
-      if (otpCode.toUpperCase() === "7K9P2" || otpCode.length === 5) {
-        setStep("success");
-      } else {
-        const nextAttempts = remainingAttempts - 1;
-        setRemainingAttempts(nextAttempts);
-        setErrorMessage(`Code incorrect. Essais restants : ${nextAttempts}`);
-      }
-    }, 1100);
+    setIsLoading(false);
+    setErrorMessage("Ce code n'est pas vérifié. Aucun retrait n'est envoyé à MaishaPay.");
   };
 
   return (
@@ -196,7 +178,7 @@ export const TreasuryWithdrawalModal: React.FC<TreasuryWithdrawalModalProps> = (
                   <span className="font-mono text-slate-700">{knownFee} $</span>
                 </div>
                 <div className="flex justify-between pt-1 border-t border-slate-200 font-bold text-slate-900">
-                  <span>Montant net versé :</span>
+                  <span>Montant net affiché, non versé :</span>
                   <span className="font-mono text-emerald-600">{netAmount} $</span>
                 </div>
               </div>
@@ -205,9 +187,14 @@ export const TreasuryWithdrawalModal: React.FC<TreasuryWithdrawalModalProps> = (
               <div className="flex items-start space-x-2 text-[11px] text-amber-800 bg-amber-50 p-3 rounded-xl border border-amber-200">
                 <ShieldAlert className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
                 <span>
-                  Un code d’authentification à <strong>5 caractères</strong> sera envoyé à <strong>{maskEmail(securityRecipientEmail)}</strong> via Brevo (depuis kandedan28@gmail.com) avant tout décaissement.
+                  Aucun code n'est envoyé et aucun décaissement n'est lancé. Brevo et MaishaPay ne sont pas branchés.
                 </span>
               </div>
+              {errorMessage && step === "form" && (
+                <div className="p-2.5 rounded-lg bg-red-50 text-red-700 text-xs text-center border border-red-200 font-semibold">
+                  {errorMessage}
+                </div>
+              )}
 
               <button
                 onClick={handleRequestOtp}
@@ -234,7 +221,7 @@ export const TreasuryWithdrawalModal: React.FC<TreasuryWithdrawalModalProps> = (
                 </div>
                 <h4 className="text-base font-bold text-textMain">Confirmez votre retrait</h4>
                 <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
-                  Un code de vérification a été envoyé à <strong>{maskEmail(securityRecipientEmail)}</strong> (via kandedan28@gmail.com). Saisissez le code de <strong>5 caractères</strong> pour exécuter le retrait.
+                  Aucun code n'a été envoyé. Saisir un code ici ne déclenche pas de retrait.
                 </p>
               </div>
 
@@ -245,7 +232,7 @@ export const TreasuryWithdrawalModal: React.FC<TreasuryWithdrawalModalProps> = (
                   maxLength={5}
                   value={otpCode}
                   onChange={(e) => setOtpCode(e.target.value.toUpperCase())}
-                  placeholder="EX: 7K9P2"
+                  placeholder="Code"
                   autoFocus
                   className="w-48 py-3 text-center text-2xl font-mono font-extrabold tracking-widest bg-slate-50 border-2 border-primary rounded-xl focus:outline-none uppercase shadow-inner"
                 />
@@ -290,12 +277,12 @@ export const TreasuryWithdrawalModal: React.FC<TreasuryWithdrawalModalProps> = (
               <div className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto">
                 <CheckCircle2 className="w-10 h-10" />
               </div>
-              <h4 className="text-xl font-bold text-textMain">Retrait Confirmé !</h4>
+              <h4 className="text-xl font-bold text-textMain">Retrait non envoyé</h4>
               <p className="text-xs text-slate-600 max-w-sm mx-auto">
-                L’ordre de décaissement de <strong>{netAmount} $</strong> a été validé par Maishapay. Les fonds ont été envoyés vers {destinationProvider} ({destinationAccount}).
+                Aucun fonds n'a été envoyé. MaishaPay n'a pas confirmé de décaissement.
               </p>
-              <div className="p-3 bg-slate-50 rounded-xl text-[11px] text-slate-500 font-mono">
-                Réf. Transaction : MP-WD-{Date.now().toString().slice(-8)}
+              <div className="p-3 bg-slate-50 rounded-xl text-[11px] text-slate-500">
+                Aucune référence prestataire n'a été reçue.
               </div>
               <button
                 onClick={() => {

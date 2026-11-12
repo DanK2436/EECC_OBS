@@ -66,7 +66,7 @@ namespace EeccStudio.Core.Network
                 _isRunning = true;
                 Task.Run(() => ListenLoopAsync(_cts.Token));
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 // Fallback local si les permissions de binding global nécessitent élévation
                 _listener.Prefixes.Clear();

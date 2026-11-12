@@ -93,27 +93,15 @@ jobs:
           channel: 'stable'
           cache: true
 
-      - name: Prepare Clean Android Project
+      - name: Flutter Pub Get
         working-directory: apps/tv_mobile
-        run: |
-          mkdir -p /tmp/tv_res
-          if [ -d "android/app/src/main/res" ]; then
-            cp -r android/app/src/main/res/* /tmp/tv_res/ || true
-          fi
-          rm -rf android
-          flutter create --platforms=android --org cd.eecc .
-          if [ -d "/tmp/tv_res" ]; then
-            cp -r /tmp/tv_res/* android/app/src/main/res/ || true
-          fi
-          sed -i '/<application/i \    <uses-permission android:name="android.permission.INTERNET"\/>\n    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"\/>' android/app/src/main/AndroidManifest.xml
-          flutter pub get
-          find /home/runner/.pub-cache -name "build.gradle" -exec sed -i 's/flutter\.compileSdkVersion/34/g; s/flutter\.minSdkVersion/21/g; s/flutter\.targetSdkVersion/34/g' {} + || true
+        run: flutter pub get
 
       - name: Build Release APK
         working-directory: apps/tv_mobile
         run: flutter build apk --release
 
-      - name: Rename & Upload EECC TV APK
+      - name: Prepare Artifact
         working-directory: apps/tv_mobile
         run: |
           cp build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/EECC_TV_Release.apk
@@ -147,27 +135,15 @@ jobs:
           channel: 'stable'
           cache: true
 
-      - name: Prepare Clean Android Project
+      - name: Flutter Pub Get
         working-directory: apps/camera_mobile
-        run: |
-          mkdir -p /tmp/cam_res
-          if [ -d "android/app/src/main/res" ]; then
-            cp -r android/app/src/main/res/* /tmp/cam_res/ || true
-          fi
-          rm -rf android
-          flutter create --platforms=android --org cd.eecc .
-          if [ -d "/tmp/cam_res" ]; then
-            cp -r /tmp/cam_res/* android/app/src/main/res/ || true
-          fi
-          sed -i '/<application/i \    <uses-permission android:name="android.permission.INTERNET"\/>\n    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"\/>\n    <uses-permission android:name="android.permission.CAMERA"\/>\n    <uses-permission android:name="android.permission.RECORD_AUDIO"\/>\n    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE"\/>\n    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE"\/>' android/app/src/main/AndroidManifest.xml
-          flutter pub get
-          find /home/runner/.pub-cache -name "build.gradle" -exec sed -i 's/flutter\.compileSdkVersion/34/g; s/flutter\.minSdkVersion/21/g; s/flutter\.targetSdkVersion/34/g' {} + || true
+        run: flutter pub get
 
       - name: Build Release APK
         working-directory: apps/camera_mobile
         run: flutter build apk --release
 
-      - name: Rename & Upload EECC Caméra APK
+      - name: Prepare Artifact
         working-directory: apps/camera_mobile
         run: |
           cp build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/EECC_Camera_Release.apk

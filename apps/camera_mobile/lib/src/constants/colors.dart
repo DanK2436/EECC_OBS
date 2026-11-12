@@ -10,8 +10,10 @@ class EeccCamColors {
   static const Color surfaceLight = Color(0xFF27272A);
   static const Color border = Color(0xFF3F3F46); // Bordure solide 1px
 
-  // 2. Accents et sélections
-  static const Color accent = Color(0xFF3B82F6); // Bleu de réglage solide
+  // 2. Couleurs de marque et accents (Aplats solides)
+  static const Color primary = Color(0xFF1E3A8A); // Bleu EECC institutionnel
+  static const Color primaryLight = Color(0xFF3B82F6); // Bleu vif d'action
+  static const Color accent = Color(0xFF3B82F6);
   static const Color telemetryGauge = Color(0xFFFACC15); // Jaune studio solide (Batterie, Débit, FPS)
 
   // 3. Typographie solide haute lisibilité

@@ -60,7 +60,7 @@ class StudioConnectionService {
         'type': 'handshake',
         'role': 'camera_source',
         'stream_name': config.streamName,
-        'token': config.pairingToken,
+        'token': config.token,
         'protocol_version': '1.0-native',
       };
       _wsChannel?.sink.add(jsonEncode(handshakePacket));

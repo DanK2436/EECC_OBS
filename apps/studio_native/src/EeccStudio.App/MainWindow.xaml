@@ -22,7 +22,7 @@
         <!-- 1. BARRE DE TITRE & MENU SUPÉRIEUR (Style OBS Studio Yami) -->
         <Border Grid.Row="0" Background="#161B22" BorderBrush="#30363D" BorderThickness="0,0,0,1" Padding="12,8">
             <DockPanel LastChildFill="True">
-                <StackPanel Orientation="Horizontal" DockPanelDock="Left" VerticalAlignment="Center">
+                <StackPanel Orientation="Horizontal" DockPanel.Dock="Left" VerticalAlignment="Center">
                     <!-- Logo Vectoriel Déployé EECC Studio -->
                     <Border Width="28" Height="28" CornerRadius="6" Background="#14151C" BorderBrush="#71717A" BorderThickness="1" Margin="0,0,10,0">
                         <TextBlock Text="✦" Foreground="#FFFFFF" HorizontalAlignment="Center" VerticalAlignment="Center" FontWeight="Bold"/>
@@ -40,7 +40,7 @@
                     </Menu>
                 </StackPanel>
 
-                <StackPanel Orientation="Horizontal" DockPanelDock="Right" VerticalAlignment="Center">
+                <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" VerticalAlignment="Center">
                     <Button x:Name="BtnPairQr" Content="Appairer EECC Caméra (QR)" Background="#1E293B" Foreground="#FFFFFF" BorderBrush="#30363D" Padding="12,5" Margin="0,0,10,0" FontWeight="SemiBold" Click="BtnPairQr_Click"/>
                     <Border Background="#DC2626" CornerRadius="4" Padding="8,4" Margin="0,0,8,0">
                         <TextBlock Text="DIFFUSION EN COURS" Foreground="#FFFFFF" FontSize="11" FontWeight="Black" LetterSpacing="1"/>
@@ -170,7 +170,7 @@
         <!-- 4. BARRE DE STATUT BROADCAST (OBS Yami) -->
         <Border Grid.Row="3" Background="#0D1117" BorderBrush="#30363D" BorderThickness="0,1,0,0" Padding="12,4">
             <DockPanel LastChildFill="True">
-                <StackPanel Orientation="Horizontal" DockPanelDock="Left">
+                <StackPanel Orientation="Horizontal" DockPanel.Dock="Left">
                     <TextBlock Text="LIVE: 01:28:44" Foreground="#DC2626" FontWeight="Bold" FontFamily="JetBrains Mono" Margin="0,0,16,0"/>
                     <TextBlock Text="REC: 01:28:44" Foreground="#F0F6FC" FontFamily="JetBrains Mono" Margin="0,0,16,0"/>
                     <TextBlock Text="CPU: 4.8%" Foreground="#8B949E" FontFamily="JetBrains Mono" Margin="0,0,16,0"/>

@@ -19,6 +19,8 @@ class EeccColors {
   static const Color textMain = Color(0xFF0F172A); // Noir ardoise profond (Contraste > 12:1)
   static const Color textSecondary = Color(0xFF475569); // Gris neutre descriptif
   static const Color textMuted = Color(0xFF94A3B8); // Gris légende
+  static const Color slate = textSecondary;
+  static const Color slateLight = textMuted;
 
   // 4. Signaux fonctionnels stricts (Aplats solides)
   static const Color liveRed = Color(0xFFB91C1C); // Badge solide « EN DIRECT »

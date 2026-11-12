@@ -190,13 +190,14 @@ jobs:
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'sb_publishable_GjqG64b82uXaDQzGJmo3Aw_pIcpjxKb' }}
         run: npm run build
 
+      - name: Package Web Portal build
+        run: tar -czf web-portal-next.tar.gz --exclude=.next/cache -C apps/web_portal .next
+
       - name: Upload Web Portal build
         uses: actions/upload-artifact@v4
         with:
           name: EECC_Web_Portal
-          path: |
-            apps/web_portal/.next
-            !apps/web_portal/.next/cache
+          path: web-portal-next.tar.gz
           if-no-files-found: error
 
   # ========================================================

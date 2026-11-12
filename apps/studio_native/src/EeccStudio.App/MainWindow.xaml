@@ -27,7 +27,7 @@
                     <Border Width="28" Height="28" CornerRadius="6" Background="#14151C" BorderBrush="#71717A" BorderThickness="1" Margin="0,0,10,0">
                         <TextBlock Text="✦" Foreground="#FFFFFF" HorizontalAlignment="Center" VerticalAlignment="Center" FontWeight="Bold"/>
                     </Border>
-                    <TextBlock Text="EECC STUDIO" FontWeight="Black" FontSize="15" Foreground="#FFFFFF" VerticalAlignment="Center" CharacterSpacing="120"/>
+                    <TextBlock Text="EECC STUDIO" FontWeight="Black" FontSize="15" Foreground="#FFFFFF" VerticalAlignment="Center"/>
                     <Border Background="#30363D" Width="1" Margin="14,2"/>
                     <Menu Background="Transparent" Foreground="#F0F6FC" VerticalAlignment="Center">
                         <MenuItem Header="Fichier" Foreground="#F0F6FC"/>
@@ -43,7 +43,7 @@
                 <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" VerticalAlignment="Center">
                     <Button x:Name="BtnPairQr" Content="Appairer EECC Caméra (QR)" Background="#1E293B" Foreground="#FFFFFF" BorderBrush="#30363D" Padding="12,5" Margin="0,0,10,0" FontWeight="SemiBold" Click="BtnPairQr_Click"/>
                     <Border Background="#DC2626" CornerRadius="4" Padding="8,4" Margin="0,0,8,0">
-                        <TextBlock Text="DIFFUSION EN COURS" Foreground="#FFFFFF" FontSize="11" FontWeight="Black" CharacterSpacing="100"/>
+                        <TextBlock Text="DIFFUSION EN COURS" Foreground="#FFFFFF" FontSize="11" FontWeight="Black"/>
                     </Border>
                 </StackPanel>
             </DockPanel>

@@ -36,7 +36,7 @@ namespace EeccStudio.Core.Network
     /// </summary>
     public class CameraServer
     {
-        private readonly HttpListener _listener = new();
+        private HttpListener? _listener;
         private readonly ConcurrentDictionary<string, CameraClient> _connectedCameras = new();
         private CancellationTokenSource? _cts;
         private bool _isRunning;
@@ -52,28 +52,50 @@ namespace EeccStudio.Core.Network
             Port = port;
         }
 
-        public void Start()
+        public bool TryStart(out string detail)
         {
-            if (_isRunning) return;
+            if (_isRunning)
+            {
+                detail = string.Empty;
+                return true;
+            }
 
-            _cts = new CancellationTokenSource();
-            _listener.Prefixes.Clear();
-            _listener.Prefixes.Add($"http://*:{Port}/");
+            if (TryListen($"http://+:{Port}/", out detail))
+            {
+                detail = string.Empty;
+                return true;
+            }
 
+            var wideError = detail;
+            if (TryListen($"http://127.0.0.1:{Port}/", out detail))
+            {
+                detail = "écoute locale uniquement (" + wideError + ")";
+                return true;
+            }
+
+            detail = wideError + " | " + detail;
+            return false;
+        }
+
+        private bool TryListen(string prefix, out string error)
+        {
+            error = string.Empty;
+            var listener = new HttpListener();
             try
             {
-                _listener.Start();
+                listener.Prefixes.Add(prefix);
+                listener.Start();
+                _listener = listener;
+                _cts = new CancellationTokenSource();
                 _isRunning = true;
                 Task.Run(() => ListenLoopAsync(_cts.Token));
+                return true;
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                // Fallback local si les permissions de binding global nécessitent élévation
-                _listener.Prefixes.Clear();
-                _listener.Prefixes.Add($"http://localhost:{Port}/");
-                _listener.Start();
-                _isRunning = true;
-                Task.Run(() => ListenLoopAsync(_cts.Token));
+                error = ex.GetType().Name + ": " + ex.Message;
+                try { listener.Close(); } catch { /* listener déjà fermé */ }
+                return false;
             }
         }
 
@@ -81,17 +103,27 @@ namespace EeccStudio.Core.Network
         {
             if (!_isRunning) return;
             _cts?.Cancel();
-            _listener.Stop();
+            try
+            {
+                _listener?.Stop();
+                _listener?.Close();
+            }
+            catch
+            {
+                // L'arrêt ne doit pas masquer la fermeture de la fenêtre.
+            }
             _isRunning = false;
         }
 
         private async Task ListenLoopAsync(CancellationToken token)
         {
-            while (!token.IsCancellationRequested && _listener.IsListening)
+            while (!token.IsCancellationRequested)
             {
+                var listener = _listener;
+                if (listener is not { IsListening: true }) break;
                 try
                 {
-                    var context = await _listener.GetContextAsync();
+                    var context = await listener.GetContextAsync();
                     if (context.Request.IsWebSocketRequest)
                     {
                         _ = ProcessWebSocketAsync(context, token);

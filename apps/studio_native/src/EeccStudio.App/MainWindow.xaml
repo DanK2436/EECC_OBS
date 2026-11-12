@@ -5,7 +5,8 @@
         Height="800" Width="1280"
         MinHeight="720" MinWidth="1024"
         Background="#14151C"
-        WindowStartupLocation="CenterScreen">
+        WindowStartupLocation="CenterScreen"
+        Icon="Assets/eecc.ico">
     
     <Window.Resources>
         <ResourceDictionary Source="Theme/StudioColors.xaml"/>
@@ -177,7 +178,7 @@
                     <TextBlock Text="60.00 FPS" Foreground="#16A34A" FontWeight="Bold" FontFamily="JetBrains Mono" Margin="0,0,16,0"/>
                     <TextBlock Text="5850 kbps" Foreground="#16A34A" FontFamily="JetBrains Mono"/>
                 </StackPanel>
-                <TextBlock Text="Serveur Caméra Mobile Actif (Port 8089) — 1 Caméra Connectée" Foreground="#8B949E" HorizontalAlignment="Right" FontSize="11"/>
+                <TextBlock x:Name="StatusServerText" Text="Démarrage du serveur caméra…" Foreground="#8B949E" HorizontalAlignment="Right" FontSize="11"/>
             </DockPanel>
         </Border>
     </Grid>

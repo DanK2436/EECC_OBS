@@ -53,6 +53,57 @@ jobs:
         run: |
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer/EeccStudio_Setup.iss
 
+      - name: Install silently and launch the installed EECC Studio
+        working-directory: apps/studio_native
+        run: |
+          $ErrorActionPreference = "Stop"
+          $dest = Join-Path $env:USERPROFILE "EECCStudioSmoke"
+          if (Test-Path $dest) { Remove-Item $dest -Recurse -Force }
+          $setup = (Resolve-Path "dist_installer\EECC_Studio_Setup_x64.exe").Path
+          $install = Start-Process -FilePath $setup -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART","/DIR=$dest","/MERGETASKS=!desktopicon,!firewall" -Wait -PassThru
+          Write-Host "Installer exit code: $($install.ExitCode)"
+          if ($install.ExitCode -ne 0) { throw "Silent install failed with exit $($install.ExitCode)" }
+
+          $exe = Join-Path $dest "EeccStudio.exe"
+          if (-not (Test-Path $exe)) { throw "Installed executable missing: $exe" }
+          foreach ($required in @("EeccStudio.dll","coreclr.dll","hostfxr.dll","wpfgfx_cor3.dll")) {
+            $path = Join-Path $dest $required
+            if (-not (Test-Path $path)) { throw "Installed package is missing $required" }
+          }
+
+          Add-Type -AssemblyName System.Drawing
+          $icon = [System.Drawing.Icon]::ExtractAssociatedIcon($exe)
+          if ($null -eq $icon -or $icon.Width -lt 16) { throw "Installed EeccStudio.exe has no usable icon" }
+          Write-Host "Embedded icon: $($icon.Width)x$($icon.Height)"
+
+          $psi = New-Object System.Diagnostics.ProcessStartInfo
+          $psi.FileName = $exe
+          $psi.WorkingDirectory = $dest
+          $psi.UseShellExecute = $false
+          $psi.Environment["EECC_STUDIO_SMOKE"] = "1"
+          $proc = [System.Diagnostics.Process]::Start($psi)
+          if ($null -eq $proc) { throw "Failed to start installed EeccStudio.exe" }
+
+          $ready = Join-Path $dest "startup.ready"
+          $log = Join-Path $dest "startup.log"
+          $deadline = (Get-Date).AddSeconds(25)
+          do {
+            $proc.Refresh()
+            if ($proc.HasExited -or (Test-Path $ready)) { break }
+            Start-Sleep -Milliseconds 500
+          } while ((Get-Date) -lt $deadline)
+
+          if (Test-Path $log) { Write-Host "---- startup.log ----"; Get-Content $log -Raw; Write-Host "---- end log ----" }
+          if ($proc.HasExited) {
+            Write-Host "Process exit code: $($proc.ExitCode)"
+            throw "Installed EECC Studio exited before the window was ready"
+          }
+          if (-not (Test-Path $ready)) { throw "Installed EECC Studio stayed running but did not open its window" }
+          $proc.Refresh()
+          Write-Host "MainWindowHandle=$($proc.MainWindowHandle) ready=yes"
+          Stop-Process -Id $proc.Id -Force
+          Write-Host "Installed EECC Studio started and opened its window"
+
       - name: Create Portable Zip Package
         working-directory: apps/studio_native
         run: |

@@ -97,6 +97,10 @@ jobs:
         working-directory: apps/tv_mobile
         run: flutter pub get
 
+      - name: Patch Cached Gradle Plugins
+        run: |
+          find /home/runner/.pub-cache -name "build.gradle" -exec sed -i 's/flutter\.compileSdkVersion/35/g; s/flutter\.minSdkVersion/21/g; s/flutter\.targetSdkVersion/35/g' {} + || true
+
       - name: Build Release APK
         working-directory: apps/tv_mobile
         run: flutter build apk --release
@@ -138,6 +142,10 @@ jobs:
       - name: Flutter Pub Get
         working-directory: apps/camera_mobile
         run: flutter pub get
+
+      - name: Patch Cached Gradle Plugins
+        run: |
+          find /home/runner/.pub-cache -name "build.gradle" -exec sed -i 's/flutter\.compileSdkVersion/35/g; s/flutter\.minSdkVersion/21/g; s/flutter\.targetSdkVersion/35/g' {} + || true
 
       - name: Build Release APK
         working-directory: apps/camera_mobile

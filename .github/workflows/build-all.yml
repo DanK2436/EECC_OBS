@@ -34,6 +34,10 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
+      - name: Test Studio pairing, QR and synthetic media
+        working-directory: apps/studio_native
+        run: dotnet test tests/EeccStudio.Core.Tests/EeccStudio.Core.Tests.csproj -c Release --nologo
+
       - name: Install Inno Setup
         run: choco install innosetup -y --no-progress
 
@@ -193,6 +197,10 @@ jobs:
       - name: Flutter Pub Get
         working-directory: apps/camera_mobile
         run: flutter pub get
+
+      - name: Test camera pairing contract
+        working-directory: apps/camera_mobile
+        run: flutter test
 
       - name: Patch Cached Gradle Plugins
         run: |

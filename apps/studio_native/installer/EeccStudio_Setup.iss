@@ -36,7 +36,7 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
-Name: "firewall"; Description: "Autoriser EECC Studio dans le pare-feu Windows (pour la réception des caméras mobiles)"; GroupDescription: "Réseau et Sécurité:"
+Name: "firewall"; Description: "Autoriser seulement EECC Studio sur les réseaux privés (réception des caméras du réseau local). Ne désactive pas le pare-feu."; GroupDescription: "Réseau et Sécurité:"
 
 [Files]
 ; Fichiers publiés de l'application C# .NET 8 (Self-contained win-x64)
@@ -49,8 +49,8 @@ Name: "{group}\Désinstaller {#MyAppName}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Run]
-; Règle pare-feu pour le serveur de réception de caméra mobile (Port 8089)
-Filename: "netsh"; Parameters: "advfirewall firewall add rule name=""EECC Studio Camera Receiver"" dir=in action=allow program=""{app}\{#MyAppExeName}"" enable=yes"; Flags: runhidden; Tasks: firewall
+; Exception limitée au programme EECC Studio et au profil privé (LAN). Pas de désactivation globale du pare-feu.
+Filename: "netsh"; Parameters: "advfirewall firewall add rule name=""EECC Studio Camera Receiver"" dir=in action=allow program=""{app}\{#MyAppExeName}"" enable=yes profile=private"; Flags: runhidden; Tasks: firewall
 ; Option de lancement à la fin de l'installation
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
 

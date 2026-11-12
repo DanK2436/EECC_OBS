@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
 import '../constants/colors.dart';
-import '../models/session_config.dart';
 import 'qr_scanner_screen.dart';
 import 'manual_connect_dialog.dart';
-import 'camera_active_screen.dart';
 
 class CamHomeScreen extends StatelessWidget {
   const CamHomeScreen({super.key});
@@ -46,18 +44,17 @@ class CamHomeScreen extends StatelessWidget {
               ),
               child: const Row(
                 children: [
-                  Icon(Icons.wifi_rounded, color: Colors.greenAccent, size: 28),
+                  Icon(Icons.wifi_rounded, color: EeccCamColors.textSecondary, size: 28),
                   SizedBox(width: 14),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Réseau Local Actif', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                        Text('Connecté au Wi-Fi de la régie', style: TextStyle(color: EeccCamColors.textSecondary, fontSize: 12)),
+                        Text('Réseau non vérifié', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                        Text('Le téléphone et le PC doivent être sur le même réseau local. Cet écran ne mesure pas le Wi-Fi.', style: TextStyle(color: EeccCamColors.textSecondary, fontSize: 12)),
                       ],
                     ),
                   ),
-                  Icon(Icons.check_circle_rounded, color: Colors.greenAccent, size: 20),
                 ],
               ),
             ),
@@ -98,15 +95,8 @@ class CamHomeScreen extends StatelessWidget {
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                 ),
                 icon: const Icon(Icons.tune_rounded, color: Colors.white70),
-                label: const Text('Connexion manuelle (IP & Port)', style: TextStyle(color: Colors.white70)),
-                onPressed: () {
-                  ManualConnectDialog.show(context, (config) {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (context) => CameraActiveScreen(config: config)),
-                    );
-                  });
-                },
+                label: const Text('Coller le texte du QR', style: TextStyle(color: Colors.white70)),
+                onPressed: () => ManualConnectDialog.show(context),
               ),
             ),
 
@@ -133,8 +123,8 @@ class CamHomeScreen extends StatelessWidget {
                   const SizedBox(height: 14),
                   _buildStep('1', 'Lancez EECC Studio sur le PC de la régie.'),
                   _buildStep('2', 'Assurez-vous que le PC et ce téléphone sont sur le même réseau Wi-Fi.'),
-                  _buildStep('3', 'Dans Studio, ajoutez la source "EECC Caméra" et cliquez sur "Appairer".'),
-                  _buildStep('4', 'Scannez le QR code affiché à l\'écran du PC.'),
+                  _buildStep('3', 'Dans Studio, cliquez sur « Appairer EECC Caméra (QR) » et choisissez l\'adresse locale.'),
+                  _buildStep('4', 'Scannez le QR affiché. Le jeton expire en 3 minutes et ne sert qu\'une fois.'),
                 ],
               ),
             ),

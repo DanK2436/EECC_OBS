@@ -1,0 +1,26 @@
+<Window x:Class="EeccStudio.PairingWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Appairer EECC Caméra"
+        Height="640" Width="460"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        Background="#14151C">
+    <DockPanel Margin="16">
+        <TextBlock DockPanel.Dock="Top" TextWrapping="Wrap" Foreground="#F0F6FC" FontSize="13" Margin="0,0,0,12"
+                   Text="Choisissez l'adresse locale que le téléphone peut joindre, puis générez le QR. Le jeton est aléatoire, à usage unique, valable 3 minutes, et il n'est pas écrit dans les journaux."/>
+        <TextBlock DockPanel.Dock="Bottom" x:Name="SecurityNote" TextWrapping="Wrap" Foreground="#8B949E" FontSize="11" Margin="0,12,0,0"
+                   Text="La signalisation est en TLS vers ce PC. Le média WebRTC (DTLS-SRTP, VP8 et PCMU) reste sur le réseau local, sans serveur externe. Si Windows bloque la réception, l'installateur peut ajouter une exception limitée au programme EECC Studio et au profil réseau privé. Ne désactivez pas le pare-feu."/>
+        <StackPanel>
+            <TextBlock Text="Adresse du PC" Foreground="#8B949E" Margin="0,0,0,4"/>
+            <ComboBox x:Name="AddressBox" Height="28" Margin="0,0,0,10"/>
+            <Button x:Name="GenerateButton" Content="Générer le QR" Padding="10,6" Click="Generate_Click"/>
+            <Border Background="#FFFFFF" Width="280" Height="280" Margin="0,14,0,8" HorizontalAlignment="Center">
+                <Image x:Name="QrImage" Stretch="Uniform"/>
+            </Border>
+            <TextBlock x:Name="ExpiryText" Foreground="#F0F6FC" TextWrapping="Wrap" Text="Aucun QR actif."/>
+            <TextBlock x:Name="StatusText" Foreground="#F59E0B" TextWrapping="Wrap" Margin="0,8,0,0" Text=""/>
+            <Button x:Name="CopyButton" Content="Copier le texte du QR" Margin="0,10,0,0" Padding="10,6" IsEnabled="False" Click="Copy_Click"/>
+        </StackPanel>
+    </DockPanel>
+</Window>

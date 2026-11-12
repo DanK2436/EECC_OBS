@@ -1,0 +1,43 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- Charte Graphique EECC Studio (C# .NET WPF / WinUI 3) -->
+    <!-- APLATS PURS DE COULEURS SOLIDES (0% DEGRADE, ZERO GRADIENT) -->
+    
+    <!-- 1. Fonds et Surfaces Régie Solides -->
+    <Color x:Key="ConsoleBackgroundKey">#0D1117</Color>
+    <SolidColorBrush x:Key="ConsoleBackground" Color="{StaticResource ConsoleBackgroundKey}" />
+
+    <Color x:Key="PanelSurfaceKey">#161B22</Color>
+    <SolidColorBrush x:Key="PanelSurface" Color="{StaticResource PanelSurfaceKey}" />
+
+    <Color x:Key="PanelSurfaceElevatedKey">#21262D</Color>
+    <SolidColorBrush x:Key="PanelSurfaceElevated" Color="{StaticResource PanelSurfaceElevatedKey}" />
+
+    <Color x:Key="SolidBorderKey">#30363D</Color>
+    <SolidColorBrush x:Key="SolidBorder" Color="{StaticResource SolidBorderKey}" />
+
+    <!-- 2. Signaux Broadcast Stricts (Aplats solides) -->
+    <Color x:Key="LiveProgramRedKey">#DC2626</Color>
+    <SolidColorBrush x:Key="LiveProgramRed" Color="{StaticResource LiveProgramRedKey}" />
+
+    <Color x:Key="PreviewCueGreenKey">#16A34A</Color>
+    <SolidColorBrush x:Key="PreviewCueGreen" Color="{StaticResource PreviewCueGreenKey}" />
+
+    <Color x:Key="StudioAmberKey">#F59E0B</Color>
+    <SolidColorBrush x:Key="StudioAmber" Color="{StaticResource StudioAmberKey}" />
+
+    <Color x:Key="TechCyanKey">#06B6D4</Color>
+    <SolidColorBrush x:Key="TechCyan" Color="{StaticResource TechCyanKey}" />
+
+    <!-- 3. Typographie Solide Haute Lisibilité -->
+    <Color x:Key="TextPrimaryCrispKey">#F0F6FC</Color>
+    <SolidColorBrush x:Key="TextPrimaryCrisp" Color="{StaticResource TextPrimaryCrispKey}" />
+
+    <Color x:Key="TextSecondaryMutedKey">#8B949E</Color>
+    <SolidColorBrush x:Key="TextSecondaryMuted" Color="{StaticResource TextSecondaryMutedKey}" />
+
+    <!-- 4. Vu-mètres Audio par Paliers Solides Nets (Zéro dégradé) -->
+    <SolidColorBrush x:Key="AudioMeterSafe" Color="#16A34A" />     <!-- -inf à -18 dB (Vert) -->
+    <SolidColorBrush x:Key="AudioMeterWarning" Color="#F59E0B" />  <!-- -18 dB à -6 dB (Jaune/Ambre) -->
+    <SolidColorBrush x:Key="AudioMeterClip" Color="#DC2626" />     <!-- -6 dB à 0 dB (Rouge Crête) -->
+</ResourceDictionary>

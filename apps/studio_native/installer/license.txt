@@ -1,0 +1,15 @@
+CONTRAT DE LICENCE ET D'UTILISATION — EECC STUDIO
+
+1. OBJET
+Le logiciel EECC Studio est l'outil officiel de régie audiovisuelle broadcast de l'Église Évangélique du Congo (EECC).
+
+2. USAGE AUTORISÉ
+Ce logiciel est mis à disposition des régisseurs, techniciens et membres autorisés pour la captation, le mixage et la diffusion en direct des cultes, conférences et programmes d'édification spirituelle.
+
+3. SÉCURITÉ ET DONNÉES
+Aucune donnée personnelle n'est transmise à des tiers sans consentement. Les flux caméras locaux sont traités directement sur le réseau local de la régie.
+
+4. GARANTIE
+Le logiciel est fourni « en l'état », optimisé pour Windows 10/11 64-bit avec accélération matérielle native.
+
+© EECC — Tous droits réservés.

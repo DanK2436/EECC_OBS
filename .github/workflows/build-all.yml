@@ -1,103 +1,99 @@
-name: Build EECC Ecosystem
+name: Build & Release EECC Ecosystem
 
 on:
   push:
     branches: [ main, master ]
+    tags:
+      - 'v*'
   pull_request:
     branches: [ main, master ]
   workflow_dispatch:
+    inputs:
+      create_release:
+        description: 'Publier automatiquement une Release GitHub avec les installateurs et APKs'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
 
 jobs:
   # ========================================================
-  # 1. BUILD EECC WEB PORTAL (Next.js)
+  # 1. BUILD EECC STUDIO (Windows Natif C# / C++ + Installateur)
   # ========================================================
-  build-web-portal:
-    name: Build Web Portal
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: 'npm'
-          cache-dependency-path: 'apps/web_portal/package.json'
-
-      - name: Install dependencies
-        working-directory: apps/web_portal
-        run: npm install
-
-      - name: Build Web Portal
-        working-directory: apps/web_portal
-        env:
-          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL || 'https://rwojdiomftillhsamjal.supabase.co' }}
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'sb_publishable_GjqG64b82uXaDQzGJmo3Aw_pIcpjxKb' }}
-        run: npm run build
-
-  # ========================================================
-  # 2. BUILD EECC STUDIO (Windows .exe Installer)
-  # ========================================================
-  build-studio:
-    name: Build EECC Studio Windows Installer (.exe)
+  build-studio-windows:
+    name: Build EECC Studio (Installateur Windows C# / C++)
     runs-on: windows-latest
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Setup .NET 8 SDK
+        uses: actions/setup-dotnet@v4
         with:
-          node-version: 20
-          cache: 'npm'
-          cache-dependency-path: 'apps/studio/package.json'
+          dotnet-version: '8.0.x'
 
-      - name: Install dependencies
-        working-directory: apps/studio
-        run: npm install
+      - name: Install Inno Setup
+        run: choco install innosetup -y --no-progress
 
-      - name: Build Web Dist
-        working-directory: apps/studio
-        env:
-          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL || 'https://rwojdiomftillhsamjal.supabase.co' }}
-          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY || 'sb_publishable_GjqG64b82uXaDQzGJmo3Aw_pIcpjxKb' }}
-        run: npm run build
+      - name: Publish EECC Studio Native (.NET 8 Win-x64 Self-Contained)
+        working-directory: apps/studio_native
+        run: |
+          dotnet publish src/EeccStudio.App/EeccStudio.App.csproj `
+            -c Release `
+            -r win-x64 `
+            --self-contained true `
+            -p:PublishSingleFile=false `
+            -p:IncludeNativeLibrariesForSelfExtract=true `
+            -o publish/win-x64
 
-      - name: Package Windows Installer (.exe)
-        working-directory: apps/studio
-        run: npx electron-builder --win nsis portable
+      - name: Compile Windows Installer (.exe) with Inno Setup
+        working-directory: apps/studio_native
+        run: |
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer/EeccStudio_Setup.iss
 
-      - name: Upload EECC Studio Windows Installer (.exe)
+      - name: Create Portable Zip Package
+        working-directory: apps/studio_native
+        run: |
+          Compress-Archive -Path publish/win-x64/* -DestinationPath dist_installer/EECC_Studio_Portable_win-x64.zip -Force
+
+      - name: Upload Windows Installer (.exe)
         uses: actions/upload-artifact@v4
         with:
-          name: EECC_Studio_Windows_Installer
-          path: apps/studio/release/*.exe
+          name: EECC_Studio_Setup_x64
+          path: apps/studio_native/dist_installer/EECC_Studio_Setup_x64.exe
+
+      - name: Upload Windows Portable (.zip)
+        uses: actions/upload-artifact@v4
+        with:
+          name: EECC_Studio_Portable_x64
+          path: apps/studio_native/dist_installer/EECC_Studio_Portable_win-x64.zip
 
   # ========================================================
-  # 3. BUILD EECC TV MOBILE (Flutter Android APK)
+  # 2. BUILD EECC TV MOBILE (Flutter Android APK)
   # ========================================================
   build-tv-apk:
-    name: Build EECC TV APK
+    name: Build EECC TV (Mobile APK)
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Java
+      - name: Setup Java 17
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Setup Flutter
+      - name: Setup Flutter SDK
         uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.24.x'
           channel: 'stable'
           cache: true
 
-      - name: Prepare Clean Android Platform
+      - name: Prepare Clean Android Project
         working-directory: apps/tv_mobile
         run: |
           mkdir -p /tmp/tv_res
@@ -111,43 +107,47 @@ jobs:
           fi
           sed -i '/<application/i \    <uses-permission android:name="android.permission.INTERNET"\/>\n    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"\/>' android/app/src/main/AndroidManifest.xml
           flutter pub get
-          # Corriger le bug Gradle flutter.compileSdkVersion pour tous les plugins dans le cache
           find /home/runner/.pub-cache -name "build.gradle" -exec sed -i 's/flutter\.compileSdkVersion/34/g; s/flutter\.minSdkVersion/21/g; s/flutter\.targetSdkVersion/34/g' {} + || true
 
-      - name: Build TV Release APK
+      - name: Build Release APK
         working-directory: apps/tv_mobile
         run: flutter build apk --release
 
-      - name: Upload EECC TV APK
+      - name: Rename & Upload EECC TV APK
+        working-directory: apps/tv_mobile
+        run: |
+          cp build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/EECC_TV_Release.apk
+
+      - name: Upload EECC TV APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: EECC_TV_Release_APK
-          path: apps/tv_mobile/build/app/outputs/flutter-apk/app-release.apk
+          path: apps/tv_mobile/build/app/outputs/flutter-apk/EECC_TV_Release.apk
 
   # ========================================================
-  # 4. BUILD EECC CAMERA MOBILE (Flutter Android APK)
+  # 3. BUILD EECC CAMÉRA MOBILE (Flutter Android APK)
   # ========================================================
   build-camera-apk:
-    name: Build EECC Caméra APK
+    name: Build EECC Caméra (Mobile APK)
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Java
+      - name: Setup Java 17
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Setup Flutter
+      - name: Setup Flutter SDK
         uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.24.x'
           channel: 'stable'
           cache: true
 
-      - name: Prepare Clean Android Platform
+      - name: Prepare Clean Android Project
         working-directory: apps/camera_mobile
         run: |
           mkdir -p /tmp/cam_res
@@ -161,15 +161,107 @@ jobs:
           fi
           sed -i '/<application/i \    <uses-permission android:name="android.permission.INTERNET"\/>\n    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"\/>\n    <uses-permission android:name="android.permission.CAMERA"\/>\n    <uses-permission android:name="android.permission.RECORD_AUDIO"\/>\n    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE"\/>\n    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE"\/>' android/app/src/main/AndroidManifest.xml
           flutter pub get
-          # Corriger le bug Gradle flutter.compileSdkVersion pour tous les plugins dans le cache
           find /home/runner/.pub-cache -name "build.gradle" -exec sed -i 's/flutter\.compileSdkVersion/34/g; s/flutter\.minSdkVersion/21/g; s/flutter\.targetSdkVersion/34/g' {} + || true
 
-      - name: Build Caméra Release APK
+      - name: Build Release APK
         working-directory: apps/camera_mobile
         run: flutter build apk --release
 
-      - name: Upload EECC Caméra APK
+      - name: Rename & Upload EECC Caméra APK
+        working-directory: apps/camera_mobile
+        run: |
+          cp build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/EECC_Camera_Release.apk
+
+      - name: Upload EECC Caméra APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: EECC_Camera_Release_APK
-          path: apps/camera_mobile/build/app/outputs/flutter-apk/app-release.apk
+          path: apps/camera_mobile/build/app/outputs/flutter-apk/EECC_Camera_Release.apk
+
+  # ========================================================
+  # 4. BUILD EECC WEB PORTAL (Next.js)
+  # ========================================================
+  build-web-portal:
+    name: Build Web Portal
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: 'apps/web_portal/package.json'
+
+      - name: Install dependencies
+        working-directory: apps/web_portal
+        run: npm install
+
+      - name: Build Next.js Web Portal
+        working-directory: apps/web_portal
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL || 'https://rwojdiomftillhsamjal.supabase.co' }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'sb_publishable_GjqG64b82uXaDQzGJmo3Aw_pIcpjxKb' }}
+        run: npm run build
+
+  # ========================================================
+  # 5. GITHUB RELEASE AUTOMATIQUE (Tous les binaires réunis)
+  # ========================================================
+  create-release:
+    name: Publier la Release GitHub
+    needs: [build-studio-windows, build-tv-apk, build-camera-apk, build-web-portal]
+    if: startsWith(github.ref, 'refs/tags/v') || github.event.inputs.create_release == true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download Studio Installer Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: EECC_Studio_Setup_x64
+          path: release_assets/
+
+      - name: Download Studio Portable Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: EECC_Studio_Portable_x64
+          path: release_assets/
+
+      - name: Download TV APK Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: EECC_TV_Release_APK
+          path: release_assets/
+
+      - name: Download Camera APK Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: EECC_Camera_Release_APK
+          path: release_assets/
+
+      - name: Publish Official GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name || 'v1.0.0' }}
+          name: "EECC Écosystème ${{ github.ref_name || 'v1.0.0' }} — Suite Officielle Broadcast & Mobile"
+          body: |
+            ## 🌟 EECC Écosystème Numérique — Version Officielle
+
+            Bienvenue sur la version officielle de la suite numérique de l'Église Évangélique du Congo (EECC).
+
+            ### 📦 Téléchargements disponibles :
+
+            #### 🖥️ Régie Windows Broadcast (C# / C++ Natif)
+            * **[EECC_Studio_Setup_x64.exe](EECC_Studio_Setup_x64.exe)** : Installateur automatique pour Windows 10 et 11 (64-bit).
+            * **[EECC_Studio_Portable_win-x64.zip](EECC_Studio_Portable_win-x64.zip)** : Version portable sans installation.
+
+            #### 📱 Applications Mobiles (Android)
+            * **[EECC_TV_Release.apk](EECC_TV_Release.apk)** : Application mobile pour suivre les cultes en direct, les replays et la Bible.
+            * **[EECC_Camera_Release.apk](EECC_Camera_Release.apk)** : Application caméra sans fil pour transformer vos smartphones en caméras broadcast avec feux Tally.
+
+            ---
+            *Conçu avec des technologies natives et une charte graphique professionnelle 0% dégradé.*
+          files: release_assets/*

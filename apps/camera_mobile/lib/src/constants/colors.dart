@@ -1,18 +1,25 @@
 import 'package:flutter/material.dart';
 
+/// Charte graphique officielle EECC Caméra :
+/// APLATS PURS DE COULEURS SOLIDES (0% dégradé, zéro gradient)
+/// Définie pour l'obscurité en culte (dalles OLED) et la visibilité Tally à distance.
 class EeccCamColors {
-  static const Color background = Color(0xFF0F172A); // Fond sombre immersif pour la prise de vue
-  static const Color surface = Color(0xFF1E293B);
-  static const Color surfaceLight = Color(0xFF334155);
+  // 1. Fond et surfaces solides (Zéro reflet parasite pour l'assemblée)
+  static const Color background = Color(0xFF000000); // Noir OLED pur (pixels éteints)
+  static const Color surface = Color(0xFF18181B); // Surface solide sombre pour boutons
+  static const Color surfaceLight = Color(0xFF27272A);
+  static const Color border = Color(0xFF3F3F46); // Bordure solide 1px
 
-  static const Color primary = Color(0xFF2563EB);
-  static const Color primaryLight = Color(0xFF60A5FA);
+  // 2. Accents et sélections
+  static const Color accent = Color(0xFF3B82F6); // Bleu de réglage solide
+  static const Color telemetryGauge = Color(0xFFFACC15); // Jaune studio solide (Batterie, Débit, FPS)
 
-  static const Color textMain = Colors.white;
-  static const Color textSecondary = Color(0xFF94A3B8);
+  // 3. Typographie solide haute lisibilité
+  static const Color textMain = Color(0xFFFFFFFF); // Blanc pur
+  static const Color textSecondary = Color(0xFFA1A1AA); // Gris moyen lisible
 
-  // Feux Tally stricts (Section 5.4)
-  static const Color tallyProgram = Color(0xFFDC2626); // Rouge : Caméra en direct à l'antenne
-  static const Color tallyPreview = Color(0xFF16A34A); // Vert : Caméra en prévisualisation dans Studio
-  static const Color tallyStandby = Color(0xFF64748B); // Gris : Caméra connectée mais en attente
+  // 4. Feux Tally stricts (Aplats solides ultra-visibles)
+  static const Color tallyProgram = Color(0xFFE11D48); // Rouge solide éclatant : À L'ANTENNE
+  static const Color tallyPreview = Color(0xFF15803D); // Vert émeraude solide : EN APERÇU (CUE)
+  static const Color tallyStandby = Color(0xFF475569); // Gris acier solide : EN ATTENTE
 }

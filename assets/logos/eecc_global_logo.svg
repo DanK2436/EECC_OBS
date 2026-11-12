@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- EECC GLOBAL - LOGO OFFICIEL ECOSYSTEME -->
+  <!-- APLATS PURS DE COULEURS SOLIDES - 0% DEGRADE -->
+  <rect width="512" height="512" rx="96" fill="#1E3A8A" />
+  
+  <!-- Cadre geometrique solide (Octogone de communion) -->
+  <polygon points="256,48 400,108 460,252 400,396 256,456 112,396 52,252 112,108" fill="#0F172A" stroke="#D4AF37" stroke-width="8" stroke-linejoin="round" />
+
+  <!-- Croix stylisee solide (Or Majestueux) -->
+  <!-- Fût vertical -->
+  <rect x="232" y="112" width="48" height="260" rx="8" fill="#D4AF37" />
+  <!-- Traverse horizontale -->
+  <rect x="156" y="180" width="200" height="48" rx="8" fill="#D4AF37" />
+  
+  <!-- Centre de la Croix (Purete divine) -->
+  <rect x="236" y="184" width="40" height="40" rx="4" fill="#FFFFFF" />
+
+  <!-- 4 Rayons cardinaux solides (Diffusion de l'Evangile) -->
+  <polygon points="256,80 264,100 248,100" fill="#FFFFFF" />
+  <polygon points="256,396 264,376 248,376" fill="#FFFFFF" />
+  <polygon points="132,204 152,196 152,212" fill="#FFFFFF" />
+  <polygon points="380,204 360,196 360,212" fill="#FFFFFF" />
+
+  <!-- Typogramme EECC solide -->
+  <text x="256" y="428" font-family="Montserrat, Arial, sans-serif" font-size="34" font-weight="900" fill="#D4AF37" text-anchor="middle" letter-spacing="6">EECC</text>
+</svg>

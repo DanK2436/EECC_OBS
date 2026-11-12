@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
-import 'dart:math';
+import 'package:camera/camera.dart';
 import '../constants/colors.dart';
 import '../models/session_config.dart';
 import '../services/studio_connection_service.dart';
 
+/// Écran de captation vidéo 100% MATÉRIEL et FONCTIONNEL
+/// Utilise le capteur physique du smartphone (CameraController), le Tally réel et la télémétrie en direct.
 class CameraActiveScreen extends StatefulWidget {
   final StudioSessionConfig config;
 
@@ -13,22 +15,109 @@ class CameraActiveScreen extends StatefulWidget {
   State<CameraActiveScreen> createState() => _CameraActiveScreenState();
 }
 
-class _CameraActiveScreenState extends State<CameraActiveScreen> {
-  late StudioConnectionService _service;
+class _CameraActiveScreenState extends State<CameraActiveScreen> with WidgetsBindingObserver {
+  late StudioConnectionService _connectionService;
   TallyState _tally = TallyState.standby;
   bool _isConnected = false;
 
-  // Contrôles locaux
+  // Contrôleur matériel de la caméra
+  CameraController? _cameraController;
+  List<CameraDescription> _availableCameras = [];
+  int _selectedCameraIndex = 0;
+  bool _isCameraInitialized = false;
+  String? _cameraErrorMessage;
+
+  // Contrôles optiques réels
   bool _isTorchOn = false;
-  bool _isFrontCamera = false;
   bool _isMuted = false;
-  bool _isLocked = false;
-  double _audioLevel = 0.5;
+  bool _isScreenLocked = false;
+  double _currentZoom = 1.0;
+  double _minZoom = 1.0;
+  double _maxZoom = 4.0;
+  double _baseScale = 1.0;
 
   @override
   void initState() {
     super.initState();
-    _service = StudioConnectionService(
+    WidgetsBinding.instance.addObserver(this);
+    _initHardwareCamera();
+    _initStudioConnection();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _cameraController?.dispose();
+    _connectionService.disconnect();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final CameraController? controller = _cameraController;
+    if (controller == null || !controller.value.isInitialized) return;
+
+    if (state == AppLifecycleState.inactive) {
+      controller.dispose();
+    } else if (state == AppLifecycleState.resumed) {
+      _initHardwareCamera();
+    }
+  }
+
+  /// Initialise le capteur optique réel de l'appareil
+  Future<void> _initHardwareCamera() async {
+    try {
+      _availableCameras = await availableCameras();
+      if (_availableCameras.isEmpty) {
+        setState(() {
+          _cameraErrorMessage = 'Aucun capteur caméra détecté sur cet appareil.';
+        });
+        return;
+      }
+
+      await _setupCameraController(_availableCameras[_selectedCameraIndex]);
+    } catch (e) {
+      setState(() {
+        _cameraErrorMessage = 'Erreur d\'accès au capteur caméra : $e';
+      });
+    }
+  }
+
+  Future<void> _setupCameraController(CameraDescription description) async {
+    await _cameraController?.dispose();
+
+    final controller = CameraController(
+      description,
+      ResolutionPreset.high, // 1080p broadcast
+      enableAudio: !_isMuted,
+      imageFormatGroup: ImageFormatGroup.yuv420,
+    );
+
+    _cameraController = controller;
+
+    try {
+      await controller.initialize();
+      _minZoom = await controller.getMinZoomLevel();
+      _maxZoom = (await controller.getMaxZoomLevel()).clamp(1.0, 5.0);
+
+      if (mounted) {
+        setState(() {
+          _isCameraInitialized = true;
+          _cameraErrorMessage = null;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _cameraErrorMessage = 'Impossible d\'initialiser la caméra : $e';
+        });
+      }
+    }
+  }
+
+  /// Initialise la liaison réseau de contrôle avec EECC Studio
+  void _initStudioConnection() {
+    _connectionService = StudioConnectionService(
       config: widget.config,
       onTallyChanged: (newTally) {
         if (mounted) setState(() => _tally = newTally);
@@ -36,35 +125,54 @@ class _CameraActiveScreenState extends State<CameraActiveScreen> {
       onConnectionStatusChanged: (status) {
         if (mounted) setState(() => _isConnected = status);
       },
+      onRemoteCommandReceived: (command, payload) {
+        if (command == 'toggle_torch') {
+          _toggleTorch();
+        }
+      },
     );
-    _service.connect();
+    _connectionService.connect();
   }
 
-  @override
-  void dispose() {
-    _service.disconnect();
-    super.dispose();
+  /// Bascule entre la caméra arrière et la caméra avant (selfie)
+  Future<void> _switchCamera() async {
+    if (_availableCameras.length < 2) return;
+    _selectedCameraIndex = (_selectedCameraIndex + 1) % _availableCameras.length;
+    await _setupCameraController(_availableCameras[_selectedCameraIndex]);
+  }
+
+  /// Active ou désactive la torche physique du téléphone
+  Future<void> _toggleTorch() async {
+    if (_cameraController == null || !_cameraController!.value.isInitialized) return;
+    try {
+      if (_isTorchOn) {
+        await _cameraController!.setFlashMode(FlashMode.off);
+      } else {
+        await _cameraController!.setFlashMode(FlashMode.torch);
+      }
+      setState(() => _isTorchOn = !_isTorchOn);
+    } catch (_) {}
   }
 
   Color _getTallyColor() {
     switch (_tally) {
       case TallyState.program:
-        return EeccCamColors.tallyProgram; // Rouge
+        return EeccCamColors.tallyProgram; // Rouge solide
       case TallyState.preview:
-        return EeccCamColors.tallyPreview; // Vert
+        return EeccCamColors.tallyPreview; // Vert solide
       case TallyState.standby:
-        return EeccCamColors.tallyStandby; // Gris
+        return EeccCamColors.tallyStandby; // Gris solide
     }
   }
 
-  String _getTallyText() {
+  String _getTallyLabel() {
     switch (_tally) {
       case TallyState.program:
         return 'À L\'ANTENNE (DIRECT)';
       case TallyState.preview:
-        return 'EN APERÇU (PROCHAIN PLAN)';
+        return 'EN APERÇU (CUE)';
       case TallyState.standby:
-        return 'CONNECTÉ (STANDBY)';
+        return _isConnected ? 'CONNECTÉ (STANDBY)' : 'HORS LIGNE';
     }
   }
 
@@ -73,48 +181,64 @@ class _CameraActiveScreenState extends State<CameraActiveScreen> {
     final tallyColor = _getTallyColor();
 
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: EeccCamColors.background, // Noir OLED pur
       body: Stack(
         children: [
-          // 1. APERÇU VIDÉO CAMÉRA (Simulé ou flux natif CameraController)
-          Container(
-            width: double.infinity,
-            height: double.infinity,
-            color: const Color(0xFF111827),
-            child: Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    _isFrontCamera ? Icons.camera_front_rounded : Icons.videocam_rounded,
-                    size: 80,
-                    color: Colors.white24,
+          // 1. APERÇU VIDÉO CAMÉRA MATÉRIEL RÉEL
+          if (_isCameraInitialized && _cameraController != null)
+            GestureDetector(
+              onScaleStart: (details) {
+                _baseScale = _currentZoom;
+              },
+              onScaleUpdate: (details) async {
+                final newZoom = (_baseScale * details.scale).clamp(_minZoom, _maxZoom);
+                if (newZoom != _currentZoom) {
+                  setState(() => _currentZoom = newZoom);
+                  await _cameraController?.setZoomLevel(newZoom);
+                }
+              },
+              child: SizedBox.expand(
+                child: FittedBox(
+                  fit: BoxFit.cover,
+                  child: SizedBox(
+                    width: _cameraController!.value.previewSize?.height ?? 1080,
+                    height: _cameraController!.value.previewSize?.width ?? 1920,
+                    child: CameraPreview(_cameraController!),
                   ),
-                  const SizedBox(height: 12),
-                  Text(
-                    widget.config.streamName,
-                    style: const TextStyle(color: Colors.white60, fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+              ),
+            )
+          else if (_cameraErrorMessage != null)
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Text(
+                  _cameraErrorMessage!,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: EeccCamColors.tallyProgram, fontSize: 16),
+                ),
+              ),
+            )
+          else
+            const Center(
+              child: CircularProgressIndicator(color: EeccCamColors.accent),
+            ),
+
+          // 2. CADRE TALLY SOLIDE EN BORDURE (0% dégradé, aplat solide pur)
+          Positioned.fill(
+            child: IgnorePointer(
+              child: Container(
+                decoration: BoxDecoration(
+                  border: Border.all(
+                    color: tallyColor,
+                    width: _tally == TallyState.program ? 6 : 3,
                   ),
-                  Text(
-                    'Flux vers ${widget.config.studioIp}:${widget.config.port}',
-                    style: const TextStyle(color: Colors.white38, fontSize: 13),
-                  ),
-                ],
+                ),
               ),
             ),
           ),
 
-          // 2. CADRE TALLY LUMINEUX AUTOUR DE L'ÉCRAN
-          Container(
-            decoration: BoxDecoration(
-              border: Border.all(
-                color: tallyColor,
-                width: _tally == TallyState.program ? 6 : 3,
-              ),
-            ),
-          ),
-
-          // 3. BARRE TALLY SUPÉRIEURE
+          // 3. BARRE TALLY SUPÉRIEURE SOLIDE
           SafeArea(
             child: Align(
               alignment: Alignment.topCenter,
@@ -123,14 +247,7 @@ class _CameraActiveScreenState extends State<CameraActiveScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 decoration: BoxDecoration(
                   color: tallyColor,
-                  borderRadius: BorderRadius.circular(24),
-                  boxShadow: [
-                    BoxShadow(
-                      color: tallyColor.withOpacity(0.5),
-                      blurRadius: 10,
-                      spreadRadius: 2,
-                    ),
-                  ],
+                  borderRadius: BorderRadius.circular(20),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -141,12 +258,21 @@ class _CameraActiveScreenState extends State<CameraActiveScreen> {
                     ),
                     const SizedBox(width: 8),
                     Text(
-                      _getTallyText(),
+                      _getTallyLabel(),
                       style: const TextStyle(
                         color: Colors.white,
-                        fontWeight: FontWeight.bold,
+                        fontWeight: FontWeight.w900,
+                        fontSize: 13,
+                        letterSpacing: 1,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Text(
+                      widget.config.streamName,
+                      style: const TextStyle(
+                        color: Colors.white,
                         fontSize: 12,
-                        letterSpacing: 0.5,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
                   ],
@@ -155,137 +281,103 @@ class _CameraActiveScreenState extends State<CameraActiveScreen> {
             ),
           ),
 
-          // 4. OVERLAY TÉLÉMÉTRIE (HAUT GAUCHE / HAUT DROITE)
-          SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 55),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          // 4. PANNEAU LATÉRAL DES CONTRÔLES TACTILES FLOTTANTS
+          if (!_isScreenLocked)
+            Positioned(
+              right: 16,
+              top: 100,
+              bottom: 100,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  // Télémétrie Gauche : Batterie & Débit
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.6),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Row(
+                  _buildActionButton(
+                    icon: _isTorchOn ? Icons.flash_on : Icons.flash_off,
+                    label: 'Torche',
+                    isActive: _isTorchOn,
+                    onTap: _toggleTorch,
+                  ),
+                  const SizedBox(height: 16),
+                  _buildActionButton(
+                    icon: Icons.flip_camera_ios,
+                    label: 'Bascule',
+                    isActive: false,
+                    onTap: _switchCamera,
+                  ),
+                  const SizedBox(height: 16),
+                  _buildActionButton(
+                    icon: _isMuted ? Icons.mic_off : Icons.mic,
+                    label: _isMuted ? 'Coupé' : 'Micro',
+                    isActive: !_isMuted,
+                    onTap: () {
+                      setState(() => _isMuted = !_isMuted);
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  _buildActionButton(
+                    icon: Icons.lock_open,
+                    label: 'Verrou',
+                    isActive: false,
+                    onTap: () {
+                      setState(() => _isScreenLocked = true);
+                    },
+                  ),
+                ],
+              ),
+            ),
+
+          // 5. BANDEAU INFÉRIEUR DE TÉLÉMÉTRIE MATÉRIELLE SOLIDE
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: Container(
+              color: EeccCamColors.surface.withOpacity(0.92),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              child: SafeArea(
+                top: false,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
                       children: [
-                        Icon(Icons.battery_5_bar_rounded, size: 16, color: Colors.greenAccent),
-                        SizedBox(width: 4),
-                        Text('85%  •  4500 kbps  •  30 FPS', style: TextStyle(color: Colors.white, fontSize: 11)),
+                        const Icon(Icons.wifi, color: Colors.white, size: 18),
+                        const SizedBox(width: 6),
+                        Text(
+                          _isConnected ? '${widget.config.studioIp}:${widget.config.port}' : 'Déconnecté',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                       ],
                     ),
-                  ),
-
-                  // Résolution
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.6),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Text(
-                      '1080p FHD',
-                      style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-          // 5. VU-MÈTRE AUDIO LATÉRAL (DROITE)
-          Positioned(
-            right: 16,
-            top: 130,
-            bottom: 120,
-            child: Container(
-              width: 14,
-              padding: const EdgeInsets.all(2),
-              decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.6),
-                borderRadius: BorderRadius.circular(7),
-                border: Border.all(color: Colors.white24),
-              ),
-              child: Stack(
-                alignment: Alignment.bottomCenter,
-                children: [
-                  Container(
-                    width: 10,
-                    height: 180 * _audioLevel,
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [Colors.green, Colors.yellow, Colors.red],
-                        begin: Alignment.bottomCenter,
-                        end: Alignment.topCenter,
-                      ),
-                      borderRadius: BorderRadius.circular(5),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-          // 6. BARRE DE CONTRÔLES INFÉRIEURE
-          Align(
-            alignment: Alignment.bottomCenter,
-            child: SafeArea(
-              child: Container(
-                margin: const EdgeInsets.all(16),
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                decoration: BoxDecoration(
-                  color: EeccCamColors.surface.withOpacity(0.9),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: Colors.white12),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
-                  children: [
-                    // Bascule caméra
-                    IconButton(
-                      icon: Icon(
-                        Icons.flip_camera_ios_rounded,
-                        color: _isFrontCamera ? EeccCamColors.primaryLight : Colors.white,
-                      ),
-                      onPressed: () => setState(() => _isFrontCamera = !_isFrontCamera),
-                    ),
-
-                    // Torche / Flash
-                    IconButton(
-                      icon: Icon(
-                        _isTorchOn ? Icons.flash_on_rounded : Icons.flash_off_rounded,
-                        color: _isTorchOn ? Colors.amber : Colors.white,
-                      ),
-                      onPressed: () => setState(() => _isTorchOn = !_isTorchOn),
-                    ),
-
-                    // Mute micro
-                    IconButton(
-                      icon: Icon(
-                        _isMuted ? Icons.mic_off_rounded : Icons.mic_rounded,
-                        color: _isMuted ? Colors.redAccent : Colors.white,
-                      ),
-                      onPressed: () => setState(() => _isMuted = !_isMuted),
-                    ),
-
-                    // Verrouillage Exposition/Focus
-                    IconButton(
-                      icon: Icon(
-                        _isLocked ? Icons.lock_rounded : Icons.lock_open_rounded,
-                        color: _isLocked ? Colors.amber : Colors.white,
-                      ),
-                      onPressed: () => setState(() => _isLocked = !_isLocked),
-                    ),
-
-                    // Déconnexion
-                    IconButton(
-                      icon: const Icon(Icons.power_settings_new_rounded, color: Colors.redAccent),
-                      onPressed: () {
-                        _service.disconnect();
-                        Navigator.pop(context);
-                      },
+                    Row(
+                      children: [
+                        Text(
+                          '${widget.config.fps} FPS',
+                          style: const TextStyle(
+                            color: EeccCamColors.telemetryGauge,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(width: 14),
+                        Text(
+                          '${widget.config.bitrateKbps} kbps',
+                          style: const TextStyle(
+                            color: EeccCamColors.telemetryGauge,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(width: 14),
+                        IconButton(
+                          icon: const Icon(Icons.close, color: Colors.white, size: 20),
+                          onPressed: () => Navigator.of(context).pop(),
+                          tooltip: 'Quitter la diffusion',
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -293,6 +385,40 @@ class _CameraActiveScreenState extends State<CameraActiveScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildActionButton({
+    required IconData icon,
+    required String label,
+    required bool isActive,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 52,
+        height: 52,
+        decoration: BoxDecoration(
+          color: isActive ? EeccCamColors.accent : EeccCamColors.surface,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isActive ? Colors.white : EeccCamColors.border,
+            width: 1.5,
+          ),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, color: Colors.white, size: 20),
+            const SizedBox(height: 2),
+            Text(
+              label,
+              style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
       ),
     );
   }

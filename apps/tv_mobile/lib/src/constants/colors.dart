@@ -1,27 +1,28 @@
 import 'package:flutter/material.dart';
 
-/// Charte graphique officielle EECC :
-/// 70 % blanc/fond clair, 20 % bleu-gris, 10 % noir/accents sombres
+/// Charte graphique officielle EECC TV :
+/// APLATS PURS DE COULEURS SOLIDES (0% dégradé, zéro gradient)
+/// Définie pour la lisibilité biblique, la sérénité et le direct.
 class EeccColors {
-  // Couleurs principales
-  static const Color background = Color(0xFFF8FAFC);
-  static const Color surface = Colors.white;
+  // 1. Fonds et surfaces solides
+  static const Color background = Color(0xFFF8FAFC); // Fond blanc céleste reposant
+  static const Color surface = Color(0xFFFFFFFF); // Surface pure blanche
   static const Color surfaceElevated = Color(0xFFFFFFFF);
+  static const Color border = Color(0xFFE2E8F0); // Bordure solide nette de 1 px
 
-  // Bleu-gris institutionnel (20 %)
-  static const Color primary = Color(0xFF1E3A8A); // Bleu profond
-  static const Color primaryLight = Color(0xFF3B82F6);
-  static const Color primaryDark = Color(0xFF172554);
-  static const Color slate = Color(0xFF475569); // Bleu-gris texte/icônes
-  static const Color slateLight = Color(0xFF94A3B8);
+  // 2. Couleur institutionnelle solide
+  static const Color primary = Color(0xFF1E3A8A); // Bleu royal église profond
+  static const Color primaryLight = Color(0xFF2563EB); // Bleu d'état actif
+  static const Color primaryDark = Color(0xFF1E293B);
 
-  // Noir et texte (10 %)
-  static const Color textMain = Color(0xFF0F172A);
-  static const Color textSecondary = Color(0xFF64748B);
-  static const Color border = Color(0xFFE2E8F0);
+  // 3. Typographie solide contrastée
+  static const Color textMain = Color(0xFF0F172A); // Noir ardoise profond (Contraste > 12:1)
+  static const Color textSecondary = Color(0xFF475569); // Gris neutre descriptif
+  static const Color textMuted = Color(0xFF94A3B8); // Gris légende
 
-  // Signaux fonctionnels stricts
-  static const Color liveRed = Color(0xFFDC2626); // EN DIRECT
-  static const Color warningOrange = Color(0xFFF59E0B);
-  static const Color successGreen = Color(0xFF10B981);
+  // 4. Signaux fonctionnels stricts (Aplats solides)
+  static const Color liveRed = Color(0xFFB91C1C); // Badge solide « EN DIRECT »
+  static const Color goldLiturgical = Color(0xFFD97706); // Or liturgique solide (Dons, favoris)
+  static const Color warningOrange = Color(0xFFD97706);
+  static const Color successGreen = Color(0xFF15803D);
 }

@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- EECC STUDIO - INSPIRÉ D'OBS STUDIO (NOM COMPLET : EECC STUDIO) -->
+  <!-- APLATS PURS SOLIDES - 2 COULEURS : NOIR OBS & BLANC PUR -->
+  <rect width="512" height="512" rx="100" fill="#14151C" />
+  
+  <!-- Hélice Broadcast OBS Studio (Triple Pale Rotative) équilibrée et centrée -->
+  <g transform="translate(256, 205)">
+    <!-- Pale 1 (Haut) -->
+    <path d="M 0,-115 C 45,-115 80,-80 80,-35 C 80,-10 62,8 35,8 C 12,8 0,-8 0,-30 C 0,-62 -18,-85 -48,-94 C -34,-106 -18,-115 0,-115 Z" fill="#FFFFFF" />
+    
+    <!-- Pale 2 (Bas Droite - rotation 120 deg) -->
+    <path d="M 0,-115 C 45,-115 80,-80 80,-35 C 80,-10 62,8 35,8 C 12,8 0,-8 0,-30 C 0,-62 -18,-85 -48,-94 C -34,-106 -18,-115 0,-115 Z" fill="#FFFFFF" transform="rotate(120)" />
+    
+    <!-- Pale 3 (Bas Gauche - rotation 240 deg) -->
+    <path d="M 0,-115 C 45,-115 80,-80 80,-35 C 80,-10 62,8 35,8 C 12,8 0,-8 0,-30 C 0,-62 -18,-85 -48,-94 C -34,-106 -18,-115 0,-115 Z" fill="#FFFFFF" transform="rotate(240)" />
+
+    <!-- Oeil central du flux broadcast -->
+    <circle cx="0" cy="0" r="26" fill="#14151C" />
+    <circle cx="0" cy="0" r="12" fill="#FFFFFF" />
+  </g>
+
+  <!-- NOM COMPLET : EECC STUDIO (Imposant, équilibré, très lisible) -->
+  <text x="256" y="380" font-family="'Plus Jakarta Sans', Montserrat, Arial, sans-serif" font-size="36" font-weight="900" fill="#FFFFFF" text-anchor="middle" letter-spacing="8">EECC STUDIO</text>
+  
+  <!-- Filet de centrage sobre & tag C# / C++ -->
+  <rect x="186" y="404" width="140" height="4" rx="2" fill="#71717A" />
+  <text x="256" y="432" font-family="'JetBrains Mono', monospace" font-size="14" font-weight="700" fill="#9CA3AF" text-anchor="middle" letter-spacing="4">NATIVE BROADCAST</text>
+</svg>

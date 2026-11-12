@@ -8,7 +8,7 @@
         WindowStartupLocation="CenterScreen">
     
     <Window.Resources>
-        <ResourceDictionary Source="../../Theme/StudioColors.xaml"/>
+        <ResourceDictionary Source="Theme/StudioColors.xaml"/>
     </Window.Resources>
 
     <Grid>

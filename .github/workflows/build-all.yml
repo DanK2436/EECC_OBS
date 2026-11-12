@@ -34,6 +34,10 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
+      - name: Test Studio pairing, QR and synthetic media
+        working-directory: apps/studio_native
+        run: dotnet test tests/EeccStudio.Core.Tests/EeccStudio.Core.Tests.csproj -c Release --nologo
+
       - name: Install Inno Setup
         run: choco install innosetup -y --no-progress
 
@@ -194,9 +198,14 @@ jobs:
         working-directory: apps/camera_mobile
         run: flutter pub get
 
+      - name: Test camera pairing contract
+        working-directory: apps/camera_mobile
+        run: flutter test
+
       - name: Patch Cached Gradle Plugins
         run: |
           find /home/runner/.pub-cache -name "build.gradle" -exec sed -i 's/flutter\.compileSdkVersion/35/g; s/flutter\.minSdkVersion/21/g; s/flutter\.targetSdkVersion/35/g' {} + || true
+          find /home/runner/.pub-cache -path '*flutter_webrtc*' -name SurfaceTextureRenderer.java -exec sed -i 's/onSurfaceAvailable/onSurfaceCreated/g' {} +
 
       - name: Build Release APK
         working-directory: apps/camera_mobile

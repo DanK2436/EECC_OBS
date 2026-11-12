@@ -43,8 +43,9 @@
 
                 <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" VerticalAlignment="Center">
                     <Button x:Name="BtnPairQr" Content="Appairer EECC Caméra (QR)" Background="#1E293B" Foreground="#FFFFFF" BorderBrush="#30363D" Padding="12,5" Margin="0,0,10,0" FontWeight="SemiBold" Click="BtnPairQr_Click"/>
-                    <Border Background="#DC2626" CornerRadius="4" Padding="8,4" Margin="0,0,8,0">
-                        <TextBlock Text="DIFFUSION EN COURS" Foreground="#FFFFFF" FontSize="11" FontWeight="Black"/>
+                    <Button x:Name="BtnMutePlayback" Content="Couper le son reçu" Background="#21262D" Foreground="#F0F6FC" BorderBrush="#30363D" Padding="12,5" Margin="0,0,10,0" Click="BtnMutePlayback_Click"/>
+                    <Border Background="#30363D" CornerRadius="4" Padding="8,4" Margin="0,0,8,0">
+                        <TextBlock Text="Diffusion externe non branchée" Foreground="#F0F6FC" FontSize="11" FontWeight="Bold"/>
                     </Border>
                 </StackPanel>
             </DockPanel>
@@ -61,29 +62,25 @@
             <!-- Moniteur Gauche : APERÇU (Preview - Vert #16A34A) -->
             <Border Grid.Column="0" Background="#0D1117" BorderBrush="#16A34A" BorderThickness="2" CornerRadius="8">
                 <Grid>
-                    <TextBlock Text="APERÇU (PREVIEW)" Foreground="#16A34A" FontWeight="Bold" FontSize="12" Margin="12,10" HorizontalAlignment="Left" VerticalAlignment="Top"/>
-                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                        <TextBlock Text="[ Flux Caméra Mobile 1 - Pupitre ]" Foreground="#8B949E" FontSize="14" HorizontalAlignment="Center"/>
-                        <TextBlock Text="1920x1080 @ 60 FPS — 5200 kbps" Foreground="#16A34A" FontSize="12" HorizontalAlignment="Center" Margin="0,6,0,0"/>
-                    </StackPanel>
+                    <Image x:Name="PreviewImage" Stretch="Uniform" Margin="8"/>
+                    <TextBlock x:Name="PreviewPlaceholder" Text="Aucune image reçue du téléphone." Foreground="#8B949E" FontSize="14" HorizontalAlignment="Center" VerticalAlignment="Center" TextWrapping="Wrap" Margin="16"/>
+                    <TextBlock Text="APERÇU REÇU" Foreground="#16A34A" FontWeight="Bold" FontSize="12" Margin="12,10" HorizontalAlignment="Left" VerticalAlignment="Top"/>
                 </Grid>
             </Border>
 
             <!-- Boutons de Transition Centraux (Cut & Fade) -->
             <StackPanel Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Center">
-                <Button x:Name="BtnTransition" Content="COUPER ▶" Background="#DC2626" Foreground="#FFFFFF" FontWeight="Black" Padding="12,8" Margin="0,4" BorderThickness="0" Click="BtnTransition_Click"/>
-                <Button Content="FONDU" Background="#21262D" Foreground="#F0F6FC" FontWeight="Bold" Padding="12,6" Margin="0,4" BorderBrush="#30363D"/>
-                <TextBlock Text="300 ms" Foreground="#8B949E" FontSize="11" HorizontalAlignment="Center" Margin="0,4,0,0"/>
+                <Button x:Name="BtnTransition" Content="TALLY ANTENNE" Background="#DC2626" Foreground="#FFFFFF" FontWeight="Black" Padding="8,8" Margin="0,4" BorderThickness="0" Click="BtnTallyProgram_Click"/>
+                <Button Content="TALLY APERÇU" Background="#15803D" Foreground="#FFFFFF" FontWeight="Bold" Padding="8,6" Margin="0,4" BorderThickness="0" Click="BtnTallyPreview_Click"/>
+                <Button Content="TALLY ATTENTE" Background="#21262D" Foreground="#F0F6FC" FontWeight="Bold" Padding="8,6" Margin="0,4" BorderBrush="#30363D" Click="BtnTallyStandby_Click"/>
+                <TextBlock Text="Le tally est envoyé au téléphone. Il ne commute pas l'image programme." Foreground="#8B949E" FontSize="10" TextWrapping="Wrap" TextAlignment="Center" Width="100" Margin="0,6,0,0"/>
             </StackPanel>
 
             <!-- Moniteur Droit : PROGRAMME DIRECT (Program - Rouge #DC2626) -->
             <Border Grid.Column="2" Background="#0D1117" BorderBrush="#DC2626" BorderThickness="2" CornerRadius="8">
                 <Grid>
                     <TextBlock Text="PROGRAMME (À L'ANTENNE)" Foreground="#DC2626" FontWeight="Bold" FontSize="12" Margin="12,10" HorizontalAlignment="Left" VerticalAlignment="Top"/>
-                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                        <TextBlock Text="[ Vue Globale Culte Dominical ]" Foreground="#FFFFFF" FontSize="14" FontWeight="Bold" HorizontalAlignment="Center"/>
-                        <TextBlock Text="Diffusé vers YouTube, Facebook &amp; EECC TV" Foreground="#DC2626" FontSize="12" HorizontalAlignment="Center" Margin="0,6,0,0"/>
-                    </StackPanel>
+                    <TextBlock x:Name="ProgramStatus" Text="Sortie programme non branchée. Le mixage, l'enregistrement et la diffusion externe ne sont pas réalisés. Le tally Programme indique seulement l'état au téléphone." Foreground="#F0F6FC" FontSize="13" TextWrapping="Wrap" Margin="16" HorizontalAlignment="Center" VerticalAlignment="Center" TextAlignment="Center"/>
                 </Grid>
             </Border>
         </Grid>
@@ -99,7 +96,7 @@
                 </Grid.ColumnDefinitions>
 
                 <!-- DOCK 1 : SCÈNES -->
-                <GroupBox Grid.Column="0" Header="Scènes" Foreground="#F0F6FC" BorderBrush="#30363D" Margin="4">
+                <GroupBox Grid.Column="0" Header="Scènes (liste non branchée)" Foreground="#F0F6FC" BorderBrush="#30363D" Margin="4">
                     <ListBox Background="#0D1117" Foreground="#F0F6FC" BorderThickness="0" Margin="4">
                         <ListBoxItem IsSelected="True" Content="• Culte — Prédication (Direct)"/>
                         <ListBoxItem Content="• Culte — Louange &amp; Chœur"/>
@@ -110,7 +107,7 @@
                 </GroupBox>
 
                 <!-- DOCK 2 : SOURCES -->
-                <GroupBox Grid.Column="1" Header="Sources de la scène" Foreground="#F0F6FC" BorderBrush="#30363D" Margin="4">
+                <GroupBox Grid.Column="1" Header="Sources (liste non branchée)" Foreground="#F0F6FC" BorderBrush="#30363D" Margin="4">
                     <ListBox Background="#0D1117" Foreground="#F0F6FC" BorderThickness="0" Margin="4">
                         <ListBoxItem Content="[Caméra] EECC Caméra 1 (Mobile sans fil)"/>
                         <ListBoxItem Content="[Caméra] Caméra Fixe Autel (HDMI Capture)"/>
@@ -121,36 +118,36 @@
                 </GroupBox>
 
                 <!-- DOCK 3 : MIXEUR AUDIO PRO (Paliers solides stricts Vert/Jaune/Rouge) -->
-                <GroupBox Grid.Column="2" Header="Mixeur Audio (WASAPI 32-bit)" Foreground="#F0F6FC" BorderBrush="#30363D" Margin="4">
+                <GroupBox Grid.Column="2" Header="Mixeur — non branché" Foreground="#F0F6FC" BorderBrush="#30363D" Margin="4">
                     <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
                         <StackPanel Orientation="Horizontal" Margin="4">
                             <!-- Canal 1 -->
                             <StackPanel Width="110" Margin="6,0">
                                 <TextBlock Text="Master (PGM)" Foreground="#F0F6FC" FontSize="11" HorizontalAlignment="Center"/>
-                                <Slider Orientation="Vertical" Height="110" Value="85" Minimum="0" Maximum="100" Margin="0,6"/>
-                                <Border Height="6" Background="#16A34A" CornerRadius="2" Margin="10,2"/>
-                                <TextBlock Text="-14.2 dB" Foreground="#16A34A" FontSize="10" HorizontalAlignment="Center" FontFamily="JetBrains Mono"/>
+                                <Slider Orientation="Vertical" Height="110" Value="0" Minimum="0" Maximum="100" Margin="0,6" IsEnabled="False"/>
+                                <Border Height="6" Background="#30363D" CornerRadius="2" Margin="10,2"/>
+                                <TextBlock Text="non mesuré" Foreground="#8B949E" FontSize="10" HorizontalAlignment="Center"/>
                             </StackPanel>
                             <!-- Canal 2 -->
                             <StackPanel Width="110" Margin="6,0">
                                 <TextBlock Text="Micro Pasteur" Foreground="#F0F6FC" FontSize="11" HorizontalAlignment="Center"/>
-                                <Slider Orientation="Vertical" Height="110" Value="90" Minimum="0" Maximum="100" Margin="0,6"/>
-                                <Border Height="6" Background="#F59E0B" CornerRadius="2" Margin="10,2"/>
-                                <TextBlock Text="-8.5 dB" Foreground="#F59E0B" FontSize="10" HorizontalAlignment="Center" FontFamily="JetBrains Mono"/>
+                                <Slider Orientation="Vertical" Height="110" Value="0" Minimum="0" Maximum="100" Margin="0,6" IsEnabled="False"/>
+                                <Border Height="6" Background="#30363D" CornerRadius="2" Margin="10,2"/>
+                                <TextBlock Text="non mesuré" Foreground="#8B949E" FontSize="10" HorizontalAlignment="Center"/>
                             </StackPanel>
                             <!-- Canal 3 -->
                             <StackPanel Width="110" Margin="6,0">
                                 <TextBlock Text="Chœur / Musique" Foreground="#F0F6FC" FontSize="11" HorizontalAlignment="Center"/>
-                                <Slider Orientation="Vertical" Height="110" Value="75" Minimum="0" Maximum="100" Margin="0,6"/>
-                                <Border Height="6" Background="#16A34A" CornerRadius="2" Margin="10,2"/>
-                                <TextBlock Text="-18.0 dB" Foreground="#16A34A" FontSize="10" HorizontalAlignment="Center" FontFamily="JetBrains Mono"/>
+                                <Slider Orientation="Vertical" Height="110" Value="0" Minimum="0" Maximum="100" Margin="0,6" IsEnabled="False"/>
+                                <Border Height="6" Background="#30363D" CornerRadius="2" Margin="10,2"/>
+                                <TextBlock Text="non mesuré" Foreground="#8B949E" FontSize="10" HorizontalAlignment="Center"/>
                             </StackPanel>
                             <!-- Canal 4 -->
                             <StackPanel Width="110" Margin="6,0">
                                 <TextBlock Text="EECC Caméra 1" Foreground="#F0F6FC" FontSize="11" HorizontalAlignment="Center"/>
-                                <Slider Orientation="Vertical" Height="110" Value="60" Minimum="0" Maximum="100" Margin="0,6"/>
-                                <Border Height="6" Background="#16A34A" CornerRadius="2" Margin="10,2"/>
-                                <TextBlock Text="-22.1 dB" Foreground="#16A34A" FontSize="10" HorizontalAlignment="Center" FontFamily="JetBrains Mono"/>
+                                <Slider Orientation="Vertical" Height="110" Value="0" Minimum="0" Maximum="100" Margin="0,6" IsEnabled="False"/>
+                                <Border Height="6" Background="#30363D" CornerRadius="2" Margin="10,2"/>
+                                <TextBlock Text="non mesuré" Foreground="#8B949E" FontSize="10" HorizontalAlignment="Center"/>
                             </StackPanel>
                         </StackPanel>
                     </ScrollViewer>
@@ -159,10 +156,10 @@
                 <!-- DOCK 4 : COMMANDES DE DIFFUSION -->
                 <GroupBox Grid.Column="3" Header="Commandes" Foreground="#F0F6FC" BorderBrush="#30363D" Margin="4">
                     <StackPanel Margin="4">
-                        <Button Content="Arrêter le streaming" Background="#DC2626" Foreground="#FFFFFF" FontWeight="Bold" Padding="8,6" Margin="0,2" BorderThickness="0"/>
-                        <Button Content="Démarrer l'enregistrement" Background="#21262D" Foreground="#F0F6FC" Padding="8,5" Margin="0,2" BorderBrush="#30363D"/>
-                        <Button Content="Mode Studio" Background="#16A34A" Foreground="#FFFFFF" FontWeight="SemiBold" Padding="8,5" Margin="0,2" BorderThickness="0"/>
-                        <Button Content="Paramètres" Background="#21262D" Foreground="#F0F6FC" Padding="8,5" Margin="0,2" BorderBrush="#30363D"/>
+                        <Button Content="Diffusion externe (non branchée)" Tag="La diffusion vers un service externe n'est pas branchée." Background="#21262D" Foreground="#F0F6FC" Padding="8,6" Margin="0,2" BorderBrush="#30363D" Click="BtnUnwired_Click"/>
+                        <Button Content="Enregistrement (non branché)" Tag="L'enregistrement n'est pas branché." Background="#21262D" Foreground="#F0F6FC" Padding="8,5" Margin="0,2" BorderBrush="#30363D" Click="BtnUnwired_Click"/>
+                        <Button Content="Mode Studio" Tag="Le double moniteur est affiché. La commutation programme n'est pas branchée." Background="#21262D" Foreground="#F0F6FC" FontWeight="SemiBold" Padding="8,5" Margin="0,2" BorderBrush="#30363D" Click="BtnUnwired_Click"/>
+                        <Button Content="Paramètres" Tag="Aucun réglage supplémentaire n'est branché." Background="#21262D" Foreground="#F0F6FC" Padding="8,5" Margin="0,2" BorderBrush="#30363D" Click="BtnUnwired_Click"/>
                     </StackPanel>
                 </GroupBox>
             </Grid>
@@ -171,14 +168,8 @@
         <!-- 4. BARRE DE STATUT BROADCAST (OBS Yami) -->
         <Border Grid.Row="3" Background="#0D1117" BorderBrush="#30363D" BorderThickness="0,1,0,0" Padding="12,4">
             <DockPanel LastChildFill="True">
-                <StackPanel Orientation="Horizontal" DockPanel.Dock="Left">
-                    <TextBlock Text="LIVE: 01:28:44" Foreground="#DC2626" FontWeight="Bold" FontFamily="JetBrains Mono" Margin="0,0,16,0"/>
-                    <TextBlock Text="REC: 01:28:44" Foreground="#F0F6FC" FontFamily="JetBrains Mono" Margin="0,0,16,0"/>
-                    <TextBlock Text="CPU: 4.8%" Foreground="#8B949E" FontFamily="JetBrains Mono" Margin="0,0,16,0"/>
-                    <TextBlock Text="60.00 FPS" Foreground="#16A34A" FontWeight="Bold" FontFamily="JetBrains Mono" Margin="0,0,16,0"/>
-                    <TextBlock Text="5850 kbps" Foreground="#16A34A" FontFamily="JetBrains Mono"/>
-                </StackPanel>
-                <TextBlock x:Name="StatusServerText" Text="Démarrage du serveur caméra…" Foreground="#8B949E" HorizontalAlignment="Right" FontSize="11"/>
+                <TextBlock x:Name="StatusServerText" DockPanel.Dock="Right" Text="Aucun téléphone appairé" Foreground="#8B949E" FontSize="11" Margin="12,0,0,0"/>
+                <TextBlock x:Name="StatusMeasuredText" Text="Aucune mesure audio/vidéo" Foreground="#8B949E" FontSize="11" TextTrimming="CharacterEllipsis"/>
             </DockPanel>
         </Border>
     </Grid>

@@ -8,6 +8,7 @@ class ChurchEvent {
   final String? liveStreamUrl;
   final String? speaker;
   final String? theme;
+  final String? bibleReference;
 
   ChurchEvent({
     required this.id,
@@ -19,9 +20,38 @@ class ChurchEvent {
     this.liveStreamUrl,
     this.speaker,
     this.theme,
+    this.bibleReference,
   });
 
   bool get isLive => status == 'live';
+
+  String get dateFormatted {
+    const weekdays = [
+      'Lundi',
+      'Mardi',
+      'Mercredi',
+      'Jeudi',
+      'Vendredi',
+      'Samedi',
+      'Dimanche',
+    ];
+    const months = [
+      'janvier',
+      'février',
+      'mars',
+      'avril',
+      'mai',
+      'juin',
+      'juillet',
+      'août',
+      'septembre',
+      'octobre',
+      'novembre',
+      'décembre',
+    ];
+    final local = startTime.toLocal();
+    return '${weekdays[local.weekday - 1]} ${local.day} ${months[local.month - 1]} ${local.year}';
+  }
 
   factory ChurchEvent.fromJson(Map<String, dynamic> json) {
     return ChurchEvent(
@@ -34,6 +64,7 @@ class ChurchEvent {
       liveStreamUrl: json['live_stream_url'] as String?,
       speaker: json['speaker'] as String?,
       theme: json['theme'] as String?,
+      bibleReference: json['bible_reference'] as String?,
     );
   }
 
@@ -48,6 +79,7 @@ class ChurchEvent {
       'live_stream_url': liveStreamUrl,
       'speaker': speaker,
       'theme': theme,
+      'bible_reference': bibleReference,
     };
   }
 }

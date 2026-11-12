@@ -1,3 +1,4 @@
+using System.IO;
 using System.Windows;
 using EeccStudio.Core.Audio;
 using EeccStudio.Core.Network;
@@ -13,12 +14,56 @@ namespace EeccStudio
         {
             InitializeComponent();
 
-            // Initialisation des moteurs C# / C++ natifs
             _cameraServer = new CameraServer(port: 8089);
             _audioEngine = new AudioEngine();
-
             _cameraServer.OnCameraConnected += OnCameraConnected;
-            _cameraServer.Start();
+            Loaded += OnLoaded;
+        }
+
+        private void OnLoaded(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (_cameraServer.TryStart(out var detail))
+                {
+                    StatusServerText.Text = string.IsNullOrEmpty(detail)
+                        ? "Serveur Caméra Mobile actif (port 8089)"
+                        : "Serveur Caméra Mobile — " + detail;
+                    if (!string.IsNullOrEmpty(detail))
+                        App.WriteLog("CameraServer " + detail);
+                }
+                else
+                {
+                    StatusServerText.Text = "Serveur Caméra indisponible";
+                    App.WriteLog("CameraServer failed " + detail);
+                    if (!App.IsSmokeTest)
+                    {
+                        MessageBox.Show(
+                            detail,
+                            "EECC Studio — serveur caméra",
+                            MessageBoxButton.OK,
+                            MessageBoxImage.Warning);
+                    }
+                }
+
+                File.WriteAllText(
+                    Path.Combine(AppContext.BaseDirectory, "startup.ready"),
+                    DateTime.UtcNow.ToString("o"));
+                App.WriteLog("MainWindow loaded");
+            }
+            catch (Exception ex)
+            {
+                App.WriteLog(ex.ToString());
+                StatusServerText.Text = "Erreur au démarrage";
+                if (!App.IsSmokeTest)
+                {
+                    MessageBox.Show(
+                        ex.ToString(),
+                        "EECC Studio — erreur au démarrage",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Error);
+                }
+            }
         }
 
         private void OnCameraConnected(CameraClient camera)

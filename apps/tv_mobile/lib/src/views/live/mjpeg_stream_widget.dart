@@ -92,7 +92,7 @@ class _MjpegStreamWidgetState extends State<MjpegStreamWidget> {
     _streamSubscription = response.listen(
       (chunk) {
         buffer.add(chunk);
-        final bytes = buffer.asBytes();
+        final bytes = buffer.toBytes();
 
         // Recherche du marqueur de fin JPEG (0xFF, 0xD9)
         int eoi = -1;

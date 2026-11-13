@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import 'package:chewie/chewie.dart';
@@ -6,6 +7,7 @@ import '../../constants/colors.dart';
 import '../../models/event_model.dart';
 import '../../models/replay_model.dart';
 import '../../services/supabase_service.dart';
+import 'mjpeg_stream_widget.dart';
 
 /// Écran Culte en Direct et Replays 100% FONCTIONNEL
 /// Reçoit en direct les flux d'EECC Studio (LAN Wi-Fi et Cloud)
@@ -34,20 +36,39 @@ class _LiveScreenState extends State<LiveScreen> with SingleTickerProviderStateM
   ChewieController? _chewieController;
   bool _isVideoPlayerInitialized = false;
   String? _videoErrorMessage;
+  Timer? _liveRefreshTimer;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
     _loadDataAndStream();
+    _liveRefreshTimer = Timer.periodic(const Duration(seconds: 4), (_) {
+      if (mounted) _pollStudioStatus();
+    });
   }
 
   @override
   void dispose() {
+    _liveRefreshTimer?.cancel();
     _tabController.dispose();
     _chewieController?.dispose();
     _videoPlayerController?.dispose();
     super.dispose();
+  }
+
+  Future<void> _pollStudioStatus() async {
+    try {
+      final event = await _dataService.getCurrentOrNextEvent(customStudioIp: _studioIp, port: _studioPort);
+      if (mounted) {
+        if (_currentEvent?.status != event.status || _isStudioConnected != (event.id == 'live-studio-lan')) {
+          setState(() {
+            _currentEvent = event;
+            _isStudioConnected = event.id == 'live-studio-lan';
+          });
+        }
+      }
+    } catch (_) {}
   }
 
   Future<void> _loadDataAndStream() async {
@@ -216,7 +237,7 @@ class _LiveScreenState extends State<LiveScreen> with SingleTickerProviderStateM
           children: [
             ClipRRect(
               borderRadius: BorderRadius.circular(8),
-              child: Image.asset('assets/images/logo.png', height: 28, width: 28, fit: BoxFit.contain),
+              child: Image.asset('assets/images/logo_official.png', height: 28, width: 28, fit: BoxFit.contain),
             ),
             const SizedBox(width: 8),
             const Text(
@@ -292,41 +313,7 @@ class _LiveScreenState extends State<LiveScreen> with SingleTickerProviderStateM
               ],
             ),
             clipBehavior: Clip.antiAlias,
-            child: _isVideoPlayerInitialized && _chewieController != null
-                ? Chewie(controller: _chewieController!)
-                : Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          isLive ? Icons.live_tv_rounded : Icons.schedule_rounded,
-                          size: 54,
-                          color: isLive ? EeccColors.liveRed : Colors.white54,
-                        ),
-                        const SizedBox(height: 10),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 24),
-                          child: Text(
-                            _videoErrorMessage ?? (isLive ? 'Flux direct EECC Studio actif sur le réseau' : 'Prochain culte en direct bientôt'),
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        ElevatedButton.icon(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: EeccColors.liveRed,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                          ),
-                          icon: const Icon(Icons.refresh_rounded, size: 16),
-                          label: const Text('Actualiser le flux', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                          onPressed: _loadDataAndStream,
-                        ),
-                      ],
-                    ),
-                  ),
+            child: _buildVideoArea(event, isLive),
           ),
 
           const SizedBox(height: 16),
@@ -494,6 +481,66 @@ class _LiveScreenState extends State<LiveScreen> with SingleTickerProviderStateM
           ),
         );
       },
+    );
+  }
+
+  Widget _buildVideoArea(ChurchEvent? event, bool isLive) {
+    if (!isLive) {
+      return Container(
+        color: const Color(0xFF0D1117),
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: Image.asset('assets/images/logo_official.png', width: 44, height: 44),
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  'DIFFUSION EN ATTENTE DU CULTE',
+                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13, letterSpacing: 0.5),
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  'Le culte n\'a pas encore démarré sur la régie EECC Studio.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: EeccColors.textSecondary, fontSize: 12),
+                ),
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: Colors.white24),
+                    foregroundColor: Colors.white,
+                  ),
+                  icon: const Icon(Icons.refresh_rounded, size: 16),
+                  label: const Text('Actualiser'),
+                  onPressed: _loadDataAndStream,
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    final url = event?.liveStreamUrl ?? 'http://$_studioIp:$_studioPort/live/stream';
+    if (url.contains(':8089') || url.endsWith('/stream') || url.endsWith('.jpg')) {
+      return MjpegStreamWidget(
+        streamUrl: url,
+        fit: BoxFit.contain,
+      );
+    }
+
+    if (_isVideoPlayerInitialized && _chewieController != null) {
+      return Chewie(controller: _chewieController!);
+    }
+
+    return MjpegStreamWidget(
+      streamUrl: 'http://$_studioIp:$_studioPort/live/stream',
+      fit: BoxFit.contain,
     );
   }
 }

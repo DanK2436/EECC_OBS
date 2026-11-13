@@ -24,23 +24,9 @@
         <Border Grid.Row="0" Background="#161B22" BorderBrush="#30363D" BorderThickness="0,0,0,1" Padding="12,6">
             <DockPanel LastChildFill="True">
                 <StackPanel Orientation="Horizontal" DockPanel.Dock="Left" VerticalAlignment="Center">
-                    <!-- Logo Vectoriel Officiel EECC Studio (OBS Studio Propeller) -->
-                    <Border Width="30" Height="30" CornerRadius="8" Background="#14151C" BorderBrush="#71717A" BorderThickness="1.5" Margin="0,0,10,0">
-                        <Canvas Width="20" Height="20" HorizontalAlignment="Center" VerticalAlignment="Center">
-                            <!-- Hélice OBS Studio blanche -->
-                            <Path Fill="#FFFFFF" Data="M 10,2 C 14,2 17,5 17,9 C 17,11 15,13 13,13 C 11,13 10,11 10,9 C 10,6 8,4 5,3 C 7,2 8,2 10,2 Z"/>
-                            <Path Fill="#FFFFFF" Data="M 10,2 C 14,2 17,5 17,9 C 17,11 15,13 13,13 C 11,13 10,11 10,9 C 10,6 8,4 5,3 C 7,2 8,2 10,2 Z" RenderTransformOrigin="0.5,0.5">
-                                <Path.RenderTransform>
-                                    <RotateTransform Angle="120" CenterX="10" CenterY="10"/>
-                                </Path.RenderTransform>
-                            </Path>
-                            <Path Fill="#FFFFFF" Data="M 10,2 C 14,2 17,5 17,9 C 17,11 15,13 13,13 C 11,13 10,11 10,9 C 10,6 8,4 5,3 C 7,2 8,2 10,2 Z" RenderTransformOrigin="0.5,0.5">
-                                <Path.RenderTransform>
-                                    <RotateTransform Angle="240" CenterX="10" CenterY="10"/>
-                                </Path.RenderTransform>
-                            </Path>
-                            <Ellipse Width="4" Height="4" Canvas.Left="8" Canvas.Top="8" Fill="#FFFFFF"/>
-                        </Canvas>
+                    <!-- Logo Officiel Développé EECC -->
+                    <Border Width="34" Height="34" CornerRadius="8" Background="#0D1117" BorderBrush="#DC2626" BorderThickness="1.5" Margin="0,0,10,0" ClipToBounds="True">
+                        <Image Source="Assets/logo_official.png" Stretch="UniformToFill" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     </Border>
                     
                     <StackPanel VerticalAlignment="Center">
@@ -176,8 +162,11 @@
                         <TextBlock x:Name="TxtPreviewSceneName" Text="[ Orateur Principal ]" Foreground="#8B949E" FontSize="12" HorizontalAlignment="Right"/>
                     </DockPanel>
 
+                    <!-- Flux Vidéo Réel Caméra / Moniteur Aperçu -->
+                    <Image x:Name="ImgPreviewVideo" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+
                     <!-- Simulation Vidéo Active / Mire Broadcast -->
-                    <Grid VerticalAlignment="Center" HorizontalAlignment="Center">
+                    <Grid x:Name="PanelPreviewSlate" VerticalAlignment="Center" HorizontalAlignment="Center">
                         <Border Background="#161B22" CornerRadius="10" Padding="24" BorderBrush="#30363D" BorderThickness="1">
                             <StackPanel HorizontalAlignment="Center">
                                 <TextBlock x:Name="TxtPreviewMain" Text="🎥 Caméra 1 — Pupitre Pasteur" Foreground="#FFFFFF" FontSize="16" FontWeight="Bold" HorizontalAlignment="Center"/>
@@ -223,8 +212,11 @@
                         <TextBlock x:Name="TxtProgramSceneName" Text="[ Accueil &amp; Décompte ]" Foreground="#F0F6FC" FontSize="12" FontWeight="SemiBold" HorizontalAlignment="Right"/>
                     </DockPanel>
 
+                    <!-- Flux Vidéo Réel Programme (À l'antenne) -->
+                    <Image x:Name="ImgProgramVideo" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+
                     <!-- Affichage du flux Antenne actif -->
-                    <Grid VerticalAlignment="Center" HorizontalAlignment="Center">
+                    <Grid x:Name="PanelProgramSlate" VerticalAlignment="Center" HorizontalAlignment="Center">
                         <Border Background="#161B22" CornerRadius="10" Padding="24" BorderBrush="#DC2626" BorderThickness="1">
                             <StackPanel HorizontalAlignment="Center">
                                 <TextBlock x:Name="TxtProgramMain" Text="🎬 Vidéo Intro Officielle EECC" Foreground="#FFFFFF" FontSize="16" FontWeight="Black" HorizontalAlignment="Center"/>
@@ -291,7 +283,7 @@
                             <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
 
-                        <ListBox x:Name="ListSources" Background="#0D1117" Foreground="#F0F6FC" BorderThickness="0" Margin="2">
+                        <ListBox x:Name="ListSources" Background="#0D1117" Foreground="#F0F6FC" BorderThickness="0" Margin="2" SelectionChanged="ListSources_SelectionChanged">
                             <ListBox.ItemTemplate>
                                 <DataTemplate>
                                     <DockPanel Margin="2,2" LastChildFill="True">

@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import '../constants/colors.dart';
@@ -19,6 +20,12 @@ class _CameraActiveScreenState extends State<CameraActiveScreen> with WidgetsBin
   late StudioConnectionService _connectionService;
   TallyState _tally = TallyState.standby;
   bool _isConnected = false;
+  bool _isStreamingFrames = false;
+  bool _isCapturing = false;
+  String _activeSlotName = 'Cam-1';
+  int _activeSlotNumber = 1;
+  int _measuredFps = 0;
+  int _measuredBitrate = 0;
 
   // Contrôleur matériel de la caméra
   CameraController? _cameraController;
@@ -46,6 +53,7 @@ class _CameraActiveScreenState extends State<CameraActiveScreen> with WidgetsBin
 
   @override
   void dispose() {
+    _stopContinuousStreaming();
     WidgetsBinding.instance.removeObserver(this);
     _cameraController?.dispose();
     _connectionService.disconnect();
@@ -123,7 +131,30 @@ class _CameraActiveScreenState extends State<CameraActiveScreen> with WidgetsBin
         if (mounted) setState(() => _tally = newTally);
       },
       onConnectionStatusChanged: (status) {
-        if (mounted) setState(() => _isConnected = status);
+        if (mounted) {
+          setState(() => _isConnected = status);
+          if (status) {
+            _startContinuousStreaming();
+          } else {
+            _stopContinuousStreaming();
+          }
+        }
+      },
+      onSlotAssigned: (slot, num) {
+        if (mounted) {
+          setState(() {
+            _activeSlotName = slot;
+            _activeSlotNumber = num;
+          });
+        }
+      },
+      onMetricsUpdated: (fps, kbps) {
+        if (mounted) {
+          setState(() {
+            _measuredFps = fps;
+            _measuredBitrate = kbps;
+          });
+        }
       },
       onRemoteCommandReceived: (command, payload) {
         if (command == 'toggle_torch') {
@@ -132,6 +163,39 @@ class _CameraActiveScreenState extends State<CameraActiveScreen> with WidgetsBin
       },
     );
     _connectionService.connect();
+  }
+
+  void _startContinuousStreaming() {
+    _isStreamingFrames = true;
+    _captureLoop();
+  }
+
+  void _stopContinuousStreaming() {
+    _isStreamingFrames = false;
+  }
+
+  Future<void> _captureLoop() async {
+    while (_isStreamingFrames && mounted) {
+      if (_isConnected &&
+          !_isCapturing &&
+          _cameraController != null &&
+          _cameraController!.value.isInitialized &&
+          !_cameraController!.value.isTakingPicture) {
+        _isCapturing = true;
+        try {
+          final xfile = await _cameraController!.takePicture();
+          final bytes = await xfile.readAsBytes();
+          _connectionService.sendVideoFrame(bytes);
+          try {
+            await File(xfile.path).delete();
+          } catch (_) {}
+        } catch (_) {
+        } finally {
+          _isCapturing = false;
+        }
+      }
+      await Future.delayed(const Duration(milliseconds: 66)); // ~15 FPS
+    }
   }
 
   /// Bascule entre la caméra arrière et la caméra avant (selfie)
@@ -155,6 +219,7 @@ class _CameraActiveScreenState extends State<CameraActiveScreen> with WidgetsBin
   }
 
   Color _getTallyColor() {
+    if (!_isConnected) return EeccCamColors.tallyStandby;
     switch (_tally) {
       case TallyState.program:
         return EeccCamColors.tallyProgram; // Rouge solide
@@ -166,13 +231,16 @@ class _CameraActiveScreenState extends State<CameraActiveScreen> with WidgetsBin
   }
 
   String _getTallyLabel() {
+    if (!_isConnected) {
+      return '🔴 HORS LIGNE (RÉGIE INTROUVABLE)';
+    }
     switch (_tally) {
       case TallyState.program:
-        return 'À L\'ANTENNE (DIRECT)';
+        return '● À L\'ANTENNE : $_activeSlotName';
       case TallyState.preview:
-        return 'EN APERÇU (CUE)';
+        return '○ EN APERÇU : $_activeSlotName';
       case TallyState.standby:
-        return _isConnected ? 'CONNECTÉ (STANDBY)' : 'HORS LIGNE';
+        return 'CONNECTÉ : $_activeSlotName (STANDBY)';
     }
   }
 
@@ -343,9 +411,9 @@ class _CameraActiveScreenState extends State<CameraActiveScreen> with WidgetsBin
                         const Icon(Icons.wifi, color: Colors.white, size: 18),
                         const SizedBox(width: 6),
                         Text(
-                          _isConnected ? '${widget.config.studioIp}:${widget.config.port}' : 'Déconnecté',
-                          style: const TextStyle(
-                            color: Colors.white,
+                          _isConnected ? '$_activeSlotName (${widget.config.studioIp})' : '🔴 Régie Déconnectée',
+                          style: TextStyle(
+                            color: _isConnected ? Colors.white : Colors.redAccent,
                             fontSize: 12,
                             fontWeight: FontWeight.bold,
                           ),
@@ -355,7 +423,7 @@ class _CameraActiveScreenState extends State<CameraActiveScreen> with WidgetsBin
                     Row(
                       children: [
                         Text(
-                          '${widget.config.fps} FPS',
+                          _measuredFps > 0 ? '$_measuredFps FPS' : '${widget.config.fps} FPS',
                           style: const TextStyle(
                             color: EeccCamColors.telemetryGauge,
                             fontSize: 12,
@@ -364,7 +432,7 @@ class _CameraActiveScreenState extends State<CameraActiveScreen> with WidgetsBin
                         ),
                         const SizedBox(width: 14),
                         Text(
-                          '${widget.config.bitrateKbps} kbps',
+                          _measuredBitrate > 0 ? '$_measuredBitrate kbps' : '${widget.config.bitrateKbps} kbps',
                           style: const TextStyle(
                             color: EeccCamColors.telemetryGauge,
                             fontSize: 12,

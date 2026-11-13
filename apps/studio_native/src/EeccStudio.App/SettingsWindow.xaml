@@ -14,9 +14,14 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <!-- Titre -->
+        <!-- Titre avec Logo Officiel -->
         <DockPanel Grid.Row="0" Margin="0,0,0,16">
-            <TextBlock Text="PARAMÈTRES EECC STUDIO" FontWeight="Black" FontSize="16" Foreground="#FFFFFF"/>
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <Border Width="28" Height="28" CornerRadius="6" Background="#0D1117" BorderBrush="#DC2626" BorderThickness="1.5" Margin="0,0,10,0" ClipToBounds="True">
+                    <Image Source="Assets/logo_official.png" Stretch="UniformToFill"/>
+                </Border>
+                <TextBlock Text="PARAMÈTRES EECC STUDIO" FontWeight="Black" FontSize="16" Foreground="#FFFFFF" VerticalAlignment="Center"/>
+            </StackPanel>
             <TextBlock Text="Régie Broadcast &amp; Réseau Culte" Foreground="#8B949E" FontSize="12" HorizontalAlignment="Right" VerticalAlignment="Center"/>
         </DockPanel>
 

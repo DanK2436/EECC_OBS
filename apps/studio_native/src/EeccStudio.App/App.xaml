@@ -3,6 +3,113 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              StartupUri="MainWindow.xaml">
     <Application.Resources>
-         
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="Theme/StudioColors.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+
+            <!-- 1. STYLE GLOBAL CONTEXT MENU & MENUS DÉROULANTS (ZÉRO BLANC) -->
+            <Style TargetType="ContextMenu">
+                <Setter Property="Background" Value="#161B22"/>
+                <Setter Property="Foreground" Value="#F0F6FC"/>
+                <Setter Property="BorderBrush" Value="#30363D"/>
+                <Setter Property="BorderThickness" Value="1"/>
+                <Setter Property="Padding" Value="4,4"/>
+            </Style>
+
+            <Style TargetType="Menu">
+                <Setter Property="Background" Value="Transparent"/>
+                <Setter Property="Foreground" Value="#F0F6FC"/>
+            </Style>
+
+            <!-- 2. STYLE UNIFIÉ MENU ITEM AVEC SOUS-MENUS SOMBRES -->
+            <Style TargetType="MenuItem">
+                <Setter Property="Background" Value="#161B22"/>
+                <Setter Property="Foreground" Value="#F0F6FC"/>
+                <Setter Property="BorderBrush" Value="Transparent"/>
+                <Setter Property="Padding" Value="8,5"/>
+                <Style.Triggers>
+                    <Trigger Property="IsHighlighted" Value="True">
+                        <Setter Property="Background" Value="#21262D"/>
+                        <Setter Property="Foreground" Value="#FFFFFF"/>
+                    </Trigger>
+                    <Trigger Property="IsEnabled" Value="False">
+                        <Setter Property="Foreground" Value="#6E7681"/>
+                    </Trigger>
+                </Style.Triggers>
+            </Style>
+
+            <!-- 3. STYLE COMBOBOX & LISTES DÉROULANTES TOTALEMENT SOMBRES -->
+            <Style TargetType="ComboBoxItem">
+                <Setter Property="Background" Value="#161B22"/>
+                <Setter Property="Foreground" Value="#F0F6FC"/>
+                <Setter Property="BorderThickness" Value="0"/>
+                <Setter Property="Padding" Value="8,6"/>
+                <Style.Triggers>
+                    <Trigger Property="IsHighlighted" Value="True">
+                        <Setter Property="Background" Value="#21262D"/>
+                        <Setter Property="Foreground" Value="#FFFFFF"/>
+                    </Trigger>
+                    <Trigger Property="IsSelected" Value="True">
+                        <Setter Property="Background" Value="#30363D"/>
+                        <Setter Property="Foreground" Value="#FFFFFF"/>
+                    </Trigger>
+                </Style.Triggers>
+            </Style>
+
+            <Style TargetType="ComboBox">
+                <Setter Property="Background" Value="#0D1117"/>
+                <Setter Property="Foreground" Value="#F0F6FC"/>
+                <Setter Property="BorderBrush" Value="#30363D"/>
+                <Setter Property="BorderThickness" Value="1"/>
+                <Setter Property="Padding" Value="8,5"/>
+            </Style>
+
+            <!-- 4. STYLE INFOBULLES (TOOLTIP) OBS SOMBRE -->
+            <Style TargetType="ToolTip">
+                <Setter Property="Background" Value="#161B22"/>
+                <Setter Property="Foreground" Value="#F0F6FC"/>
+                <Setter Property="BorderBrush" Value="#30363D"/>
+                <Setter Property="BorderThickness" Value="1"/>
+                <Setter Property="Padding" Value="8,5"/>
+                <Setter Property="FontSize" Value="11"/>
+            </Style>
+
+            <!-- 5. STYLE CHAMPS DE TEXTE & MOTS DE PASSE -->
+            <Style TargetType="TextBox">
+                <Setter Property="Background" Value="#0D1117"/>
+                <Setter Property="Foreground" Value="#FFFFFF"/>
+                <Setter Property="BorderBrush" Value="#30363D"/>
+                <Setter Property="BorderThickness" Value="1"/>
+                <Setter Property="Padding" Value="6,4"/>
+                <Setter Property="CaretBrush" Value="#FFFFFF"/>
+                <Style.Triggers>
+                    <Trigger Property="IsFocused" Value="True">
+                        <Setter Property="BorderBrush" Value="#DC2626"/>
+                    </Trigger>
+                </Style.Triggers>
+            </Style>
+
+            <Style TargetType="PasswordBox">
+                <Setter Property="Background" Value="#0D1117"/>
+                <Setter Property="Foreground" Value="#FFFFFF"/>
+                <Setter Property="BorderBrush" Value="#30363D"/>
+                <Setter Property="BorderThickness" Value="1"/>
+                <Setter Property="Padding" Value="6,4"/>
+                <Setter Property="CaretBrush" Value="#FFFFFF"/>
+                <Style.Triggers>
+                    <Trigger Property="IsFocused" Value="True">
+                        <Setter Property="BorderBrush" Value="#DC2626"/>
+                    </Trigger>
+                </Style.Triggers>
+            </Style>
+
+            <!-- 6. STYLE SÉPARATEUR SOMBRE -->
+            <Style TargetType="Separator">
+                <Setter Property="Background" Value="#30363D"/>
+                <Setter Property="Height" Value="1"/>
+                <Setter Property="Margin" Value="4,3"/>
+            </Style>
+        </ResourceDictionary>
     </Application.Resources>
 </Application>

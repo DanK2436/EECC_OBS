@@ -21,14 +21,18 @@ class EeccDataService {
       if (studioEvent != null) return studioEvent;
     }
 
-    // Direct officiel de l'Église Évangélique les Cohéritiers du Christ
+    // Essai sur localhost / IP standard
+    final fallbackStudio = await fetchStudioLiveEvent('192.168.1.100', port: port);
+    if (fallbackStudio != null) return fallbackStudio;
+
+    // Statut réel lorsque la régie est hors ligne
     return ChurchEvent(
-      id: 'live-eecc-current',
+      id: 'live-eecc-standby',
       title: 'Grand Culte d\'Adoration et d\'Enseignement',
-      description: 'Culte en direct officiel — Église Évangélique les Cohéritiers du Christ (EECC).',
+      description: 'Diffusion en attente du démarrage de la régie EECC Studio.',
       startTime: DateTime.now(),
-      status: 'live', // En direct par défaut
-      liveStreamUrl: 'http://192.168.1.100:8089/live/stream',
+      status: 'scheduled', // En attente réelle (zéro faux direct)
+      liveStreamUrl: 'http://${customStudioIp ?? '192.168.1.100'}:$port/live/stream',
       speaker: 'Pasteur Principal',
       theme: 'La Puissance de la Foi Agissante',
     );
@@ -37,21 +41,21 @@ class EeccDataService {
   /// Interroge le serveur local EECC Studio (Port 8089) via HttpClient natif Dart
   Future<ChurchEvent?> fetchStudioLiveEvent(String studioIp, {int port = 8089}) async {
     try {
-      final client = HttpClient()..connectionTimeout = const Duration(seconds: 3);
+      final client = HttpClient()..connectionTimeout = const Duration(seconds: 2);
       final request = await client.getUrl(Uri.parse('http://$studioIp:$port/live/status'));
       final response = await request.close();
       if (response.statusCode == 200) {
         final body = await response.transform(utf8.decoder).join();
         final data = jsonDecode(body) as Map<String, dynamic>;
-        final isLive = data['is_live'] as bool? ?? true;
-        final title = data['title'] as String? ?? 'Culte dominical EECC Studio';
+        final isLive = data['is_live'] as bool? ?? false; // false par défaut pour respecter la réalité
+        final title = data['title'] as String? ?? 'Culte dominical EECC';
         final speaker = data['speaker'] as String? ?? 'Pasteur Principal';
         final streamUrl = data['live_stream_url'] as String? ?? 'http://$studioIp:$port/live/stream';
 
         return ChurchEvent(
           id: 'live-studio-lan',
           title: title,
-          description: 'Flux direct haute fidélité issu de la régie locale EECC Studio.',
+          description: isLive ? 'Flux direct officiel issu de la régie EECC Studio.' : 'Régie connectée — En attente du direct.',
           startTime: DateTime.now(),
           status: isLive ? 'live' : 'scheduled',
           liveStreamUrl: streamUrl,
@@ -60,7 +64,7 @@ class EeccDataService {
         );
       }
     } catch (_) {
-      // Régie locale non joignable sur cette adresse
+      // Régie locale non joignable
     }
     return null;
   }

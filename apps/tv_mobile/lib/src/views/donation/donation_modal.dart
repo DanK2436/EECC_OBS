@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../constants/colors.dart';
+import '../../constants/config.dart';
 
 class DonationModal extends StatefulWidget {
   const DonationModal({super.key});
@@ -173,14 +175,20 @@ class _DonationModalState extends State<DonationModal> {
                   backgroundColor: EeccColors.primary,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
-                onPressed: () {
+                onPressed: () async {
                   Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Initialisation du don de ${_selectedAmount.toStringAsFixed(0)} \$ via Maishapay...'),
-                      backgroundColor: EeccColors.primary,
-                    ),
+                  final amount = _selectedAmount.toStringAsFixed(0);
+                  final phone = Uri.encodeComponent(_phoneController.text.trim());
+                  final paymentUrl = Uri.parse(
+                    'https://maishapay.online/api/checkout?amount=$amount&currency=USD&phone=$phone&merchant_key=${Uri.encodeComponent(EeccConfig.maishapayPublicKey)}'
                   );
+                  try {
+                    await launchUrl(paymentUrl, mode: LaunchMode.externalApplication);
+                  } catch (_) {
+                    try {
+                      await launchUrl(Uri.parse(EeccConfig.churchWebsite), mode: LaunchMode.externalApplication);
+                    } catch (_) {}
+                  }
                 },
                 child: Text(
                   'Faire un don de ${_selectedAmount.toStringAsFixed(0)} \$',

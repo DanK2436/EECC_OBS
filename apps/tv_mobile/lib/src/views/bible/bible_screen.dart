@@ -26,15 +26,18 @@ class _BibleScreenState extends State<BibleScreen> {
 
   Future<void> _loadInitialData() async {
     final books = await _bibleService.getBooks();
+    final lastPosition = await _bibleService.getLastReadingPosition();
+    final savedBookKey = lastPosition['book'] as String? ?? 'Genesis';
+    final savedChapter = lastPosition['chapter'] as int? ?? 1;
+
     if (mounted) {
       setState(() {
         _books = books;
-        // Livre par défaut : Jean (John)
         _selectedBook = books.firstWhere(
-          (b) => b.key == 'John',
+          (b) => b.key == savedBookKey,
           orElse: () => books.first,
         );
-        _selectedChapter = 3;
+        _selectedChapter = savedChapter.clamp(1, _selectedBook?.chapterCount ?? 1);
       });
       _loadVerses();
     }
@@ -43,6 +46,7 @@ class _BibleScreenState extends State<BibleScreen> {
   Future<void> _loadVerses() async {
     if (_selectedBook == null) return;
     final verses = await _bibleService.getVerses(_selectedBook!.key, _selectedChapter);
+    await _bibleService.saveReadingPosition(_selectedBook!.key, _selectedChapter);
     if (mounted) {
       setState(() {
         _verses = verses;

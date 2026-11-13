@@ -20,9 +20,9 @@ class CamHomeScreen extends StatelessWidget {
             ClipRRect(
               borderRadius: BorderRadius.circular(6),
               child: Image.asset(
-                'assets/images/logo.png',
-                width: 26,
-                height: 26,
+                'assets/images/logo_official.png',
+                width: 28,
+                height: 28,
                 fit: BoxFit.contain,
               ),
             ),

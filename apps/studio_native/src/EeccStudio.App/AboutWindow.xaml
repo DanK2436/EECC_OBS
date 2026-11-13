@@ -14,10 +14,10 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <!-- Logo & Titre -->
+        <!-- Logo Officiel & Titre -->
         <StackPanel Grid.Row="0" HorizontalAlignment="Center" Margin="0,0,0,16">
-            <Border Width="56" Height="56" CornerRadius="12" Background="#161B22" BorderBrush="#30363D" BorderThickness="2" HorizontalAlignment="Center" Margin="0,0,0,10">
-                <TextBlock Text="✦" Foreground="#FFFFFF" FontSize="28" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            <Border Width="64" Height="64" CornerRadius="12" Background="#0D1117" BorderBrush="#DC2626" BorderThickness="2" HorizontalAlignment="Center" Margin="0,0,0,10" ClipToBounds="True">
+                <Image Source="Assets/logo_official.png" Stretch="UniformToFill"/>
             </Border>
             <TextBlock Text="EECC STUDIO" FontWeight="Black" FontSize="20" Foreground="#FFFFFF" HorizontalAlignment="Center"/>
             <TextBlock Text="Version 1.0.0 (Build Broadcast Native)" FontSize="12" Foreground="#16A34A" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,2,0,0"/>

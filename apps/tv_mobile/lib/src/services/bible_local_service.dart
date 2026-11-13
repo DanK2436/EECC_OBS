@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class LocalBibleBook {
   final String key; // Ex: 'Genesis', 'John'
@@ -110,6 +111,31 @@ class BibleLocalService {
       // Fallback si le bundle n'est pas encore rechargé
       _bibleData = {};
     }
+  }
+
+  static const String _prefBookKey = 'eecc_bible_last_book';
+  static const String _prefChapterKey = 'eecc_bible_last_chapter';
+
+  /// Sauvegarde la position exacte de lecture de la Bible
+  Future<void> saveReadingPosition(String bookKey, int chapter) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_prefBookKey, bookKey);
+      await prefs.setInt(_prefChapterKey, chapter);
+    } catch (_) {}
+  }
+
+  /// Restaure la dernière position de lecture (évite de réinitialiser systématiquement sur Jean)
+  Future<Map<String, dynamic>> getLastReadingPosition() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final book = prefs.getString(_prefBookKey);
+      final chapter = prefs.getInt(_prefChapterKey);
+      if (book != null && chapter != null) {
+        return {'book': book, 'chapter': chapter};
+      }
+    } catch (_) {}
+    return {'book': 'Genesis', 'chapter': 1};
   }
 
   /// Retourne la liste complète des 66 livres

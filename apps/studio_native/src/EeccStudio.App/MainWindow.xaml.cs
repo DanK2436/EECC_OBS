@@ -22,6 +22,8 @@ namespace EeccStudio
         private StudioScene? _previewScene;
         private StudioScene? _programScene;
         private bool _isStudioMode = true;
+        private string _selectedPreviewSlot = "Cam-1";
+        private string _selectedProgramSlot = "Cam-1";
 
         public MainWindow()
         {
@@ -33,6 +35,7 @@ namespace EeccStudio
 
             _cameraServer.OnCameraConnected += OnCameraConnected;
             _cameraServer.OnCameraDisconnected += OnCameraDisconnected;
+            _cameraServer.OnCameraFrameReceived += OnCameraFrameReceived;
             Loaded += OnLoaded;
 
             // 2. Initialisation des scènes d'église complètes
@@ -147,7 +150,7 @@ namespace EeccStudio
         {
             Dispatcher.Invoke(() =>
             {
-                TxtCameraStatusFooter.Text = $"Serveur Caméra Actif (Port {_cameraServer.Port}) — 1 Caméra Connectée ({camera.StreamName})";
+                TxtCameraStatusFooter.Text = $"Serveur Caméra Actif (Port {_cameraServer.Port}) — {_cameraServer.ConnectedCameras.Count}/15 Caméras ({camera.StreamName})";
             });
         }
 
@@ -155,7 +158,47 @@ namespace EeccStudio
         {
             Dispatcher.Invoke(() =>
             {
-                TxtCameraStatusFooter.Text = $"Serveur Caméra Actif (Port {_cameraServer.Port}) — 0 Caméra";
+                TxtCameraStatusFooter.Text = $"Serveur Caméra Actif (Port {_cameraServer.Port}) — {_cameraServer.ConnectedCameras.Count}/15 Caméras";
+            });
+        }
+
+        private void OnCameraFrameReceived(string slot, byte[] jpegBytes)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                try
+                {
+                    var bitmap = new BitmapImage();
+                    using (var ms = new MemoryStream(jpegBytes))
+                    {
+                        bitmap.BeginInit();
+                        bitmap.CacheOption = BitmapCacheOption.OnLoad;
+                        bitmap.StreamSource = ms;
+                        bitmap.EndInit();
+                        bitmap.Freeze();
+                    }
+
+                    // Aperçu vidéo matériel réel
+                    if (slot == _selectedPreviewSlot || _cameraServer.ConnectedCameras.Count <= 1)
+                    {
+                        ImgPreviewVideo.Source = bitmap;
+                        PanelPreviewSlate.Visibility = Visibility.Collapsed;
+                    }
+
+                    // Programme vidéo matériel réel si à l'antenne sur cette scène
+                    if (_programScene != null && (_programScene.Name.Contains("Orateur") || _programScene.Name.Contains("Chœur") || _programScene.Name.Contains("Plan Large") || _programScene.Name.Contains("Caméra")))
+                    {
+                        if (slot == _selectedProgramSlot || _cameraServer.ConnectedCameras.Count <= 1)
+                        {
+                            ImgProgramVideo.Source = bitmap;
+                            PanelProgramSlate.Visibility = Visibility.Collapsed;
+                            _cameraServer.ActiveProgramFrameBytes = jpegBytes;
+                        }
+                    }
+                }
+                catch
+                {
+                }
             });
         }
 
@@ -168,6 +211,36 @@ namespace EeccStudio
                 _previewScene = selected;
                 ListSources.ItemsSource = selected.Sources;
                 UpdatePreviewDisplay();
+            }
+        }
+
+        private void ListSources_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (ListSources.SelectedItem is StudioSource src)
+            {
+                for (int i = 1; i <= 15; i++)
+                {
+                    if (src.Name.Contains($"Cam-{i}") || src.Name.Contains($"Caméra Mobile {i}"))
+                    {
+                        _selectedPreviewSlot = $"Cam-{i}";
+                        var frame = _cameraServer.GetCameraFrame(_selectedPreviewSlot);
+                        if (frame != null)
+                        {
+                            var bitmap = new BitmapImage();
+                            using (var ms = new MemoryStream(frame))
+                            {
+                                bitmap.BeginInit();
+                                bitmap.CacheOption = BitmapCacheOption.OnLoad;
+                                bitmap.StreamSource = ms;
+                                bitmap.EndInit();
+                                bitmap.Freeze();
+                            }
+                            ImgPreviewVideo.Source = bitmap;
+                            PanelPreviewSlate.Visibility = Visibility.Collapsed;
+                        }
+                        break;
+                    }
+                }
             }
         }
 
@@ -193,6 +266,46 @@ namespace EeccStudio
             TxtProgramSceneName.Text = $"[ {_programScene.Name} ]";
             TxtProgramMain.Text = _programScene.Name;
             _cameraServer.ActiveSceneName = _programScene.Name;
+
+            bool isCameraScene = _programScene.Name.Contains("Orateur") || _programScene.Name.Contains("Chœur") || _programScene.Name.Contains("Plan Large") || _programScene.Name.Contains("Caméra");
+
+            if (isCameraScene)
+            {
+                _selectedProgramSlot = _selectedPreviewSlot;
+                var frame = _cameraServer.GetCameraFrame(_selectedProgramSlot) ?? _cameraServer.LatestCameraFrameBytes;
+                if (frame != null)
+                {
+                    var bitmap = new BitmapImage();
+                    using (var ms = new MemoryStream(frame))
+                    {
+                        bitmap.BeginInit();
+                        bitmap.CacheOption = BitmapCacheOption.OnLoad;
+                        bitmap.StreamSource = ms;
+                        bitmap.EndInit();
+                        bitmap.Freeze();
+                    }
+                    ImgProgramVideo.Source = bitmap;
+                    PanelProgramSlate.Visibility = Visibility.Collapsed;
+                    _cameraServer.ActiveProgramFrameBytes = frame;
+                }
+                else if (ImgPreviewVideo.Source != null)
+                {
+                    ImgProgramVideo.Source = ImgPreviewVideo.Source;
+                    PanelProgramSlate.Visibility = Visibility.Collapsed;
+                    _cameraServer.ActiveProgramFrameBytes = _cameraServer.LatestCameraFrameBytes;
+                }
+                else
+                {
+                    ImgProgramVideo.Source = null;
+                    PanelProgramSlate.Visibility = Visibility.Visible;
+                }
+            }
+            else
+            {
+                ImgProgramVideo.Source = null;
+                PanelProgramSlate.Visibility = Visibility.Visible;
+                _cameraServer.ActiveProgramFrameBytes = null;
+            }
 
             if (_programScene.Sources.Count > 0)
             {
@@ -259,14 +372,47 @@ namespace EeccStudio
 
         private void BtnAddSource_Click(object sender, RoutedEventArgs e)
         {
-            if (ListScenes.SelectedItem is StudioScene selected)
+            if (ListScenes.SelectedItem is not StudioScene selected) return;
+
+            var cm = new ContextMenu();
+            for (int i = 1; i <= 15; i++)
             {
-                selected.Sources.Add(new StudioSource
+                int num = i;
+                var mi = new MenuItem { Header = $"📱 Caméra Mobile {num} (Slot Cam-{num})" };
+                mi.Click += (s, args) =>
                 {
-                    Name = $"Nouvelle Source {selected.Sources.Count + 1}",
-                    Type = SourceType.PresentationSlide,
-                    Details = "Overlay Texte / Diapositive"
-                });
+                    selected.Sources.Add(new StudioSource
+                    {
+                        Name = $"Caméra Mobile {num} (Cam-{num})",
+                        Type = SourceType.MobileCamera,
+                        Details = $"Flux Réseau Smartphone Slot {num}"
+                    });
+                    _selectedPreviewSlot = $"Cam-{num}";
+                };
+                cm.Items.Add(mi);
+            }
+            cm.Items.Add(new Separator());
+
+            var miUsb = new MenuItem { Header = "🎥 Caméra Physique USB / Carte SDI (DirectShow)" };
+            miUsb.Click += (s, args) => selected.Sources.Add(new StudioSource { Name = "Caméra USB / SDI", Type = SourceType.PhysicalCamera, Details = "1080p 60 FPS" });
+            cm.Items.Add(miUsb);
+
+            var miBible = new MenuItem { Header = "📖 Verset Biblique en Direct (Louis Segond)" };
+            miBible.Click += (s, args) => selected.Sources.Add(new StudioSource { Name = "Verset Biblique", Type = SourceType.BibleVerse, Details = "Bandeau Tiers Inférieur" });
+            cm.Items.Add(miBible);
+
+            var miSlide = new MenuItem { Header = "📊 Diapositive / Diaporama de Culte" };
+            miSlide.Click += (s, args) => selected.Sources.Add(new StudioSource { Name = "Diapositive Culte", Type = SourceType.PresentationSlide, Details = "Projection 1920x1080" });
+            cm.Items.Add(miSlide);
+
+            var miMedia = new MenuItem { Header = "🎬 Fichier Vidéo / Média Local" };
+            miMedia.Click += (s, args) => selected.Sources.Add(new StudioSource { Name = "Vidéo Culte MP4", Type = SourceType.MediaVideo, Details = "Lecture Fichier" });
+            cm.Items.Add(miMedia);
+
+            if (sender is FrameworkElement fe)
+            {
+                cm.PlacementTarget = fe;
+                cm.IsOpen = true;
             }
         }
 
@@ -298,6 +444,9 @@ namespace EeccStudio
 
         private void BtnFadeToBlack_Click(object sender, RoutedEventArgs e)
         {
+            ImgProgramVideo.Source = null;
+            PanelProgramSlate.Visibility = Visibility.Visible;
+            _cameraServer.ActiveProgramFrameBytes = null;
             TxtProgramMain.Text = "◼ ÉCRAN NOIR (BLACKOUT)";
             TxtProgramSub.Text = "Signal coupé — Aucune source à l'antenne";
             TxtProgramSceneName.Text = "[ NOIR ]";

@@ -1,11 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'src/constants/colors.dart';
 import 'src/constants/config.dart';
 import 'src/views/main_navigation_shell.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  try {
+    await Supabase.initialize(
+      url: EeccConfig.supabaseUrl,
+      anonKey: EeccConfig.supabaseAnonKey,
+    );
+  } catch (e) {
+    debugPrint('Supabase offline mode: $e');
+  }
 
   // Barre de statut système transparente et moderne
   SystemChrome.setSystemUIOverlayStyle(

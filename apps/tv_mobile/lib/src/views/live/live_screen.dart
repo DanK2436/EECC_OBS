@@ -47,19 +47,25 @@ class _LiveScreenState extends State<LiveScreen> with SingleTickerProviderStateM
 
   Future<void> _loadDataAndStream() async {
     try {
-      final event = await _dataService.getCurrentOrNextEvent();
-      final replays = await _dataService.getReplaysCatalog();
+      final snapshot = await _dataService.loadCatalog();
+      final event = snapshot.event;
 
       if (mounted) {
         setState(() {
           _currentEvent = event;
-          _replays = replays;
+          _replays = snapshot.replays;
           _isLoading = false;
+          if (snapshot.error != null) _videoErrorMessage = snapshot.error;
         });
 
-        // Si un culte est en direct ou programmé avec une URL de flux, on initialise le vrai lecteur
-        if (event != null && event.liveStreamUrl != null && event.liveStreamUrl!.isNotEmpty) {
+        if (event != null && event.isLive && event.liveStreamUrl != null && event.liveStreamUrl!.isNotEmpty) {
           _initLiveVideoPlayer(event.liveStreamUrl!);
+        } else if (event == null && snapshot.error == null) {
+          setState(() => _videoErrorMessage = 'Aucun culte en direct ni culte à venir.');
+        } else if (event != null && !event.isLive) {
+          setState(() => _videoErrorMessage = 'Ce culte n\'est pas en direct. Aucun flux n\'est lancé.');
+        } else if (event != null && event.isLive) {
+          setState(() => _videoErrorMessage = 'Le culte est marqué en direct, mais aucune adresse de flux n\'est enregistrée.');
         }
       }
     } catch (_) {
@@ -77,7 +83,7 @@ class _LiveScreenState extends State<LiveScreen> with SingleTickerProviderStateM
       _chewieController = ChewieController(
         videoPlayerController: _videoPlayerController!,
         autoPlay: true,
-        looping: true,
+        looping: false,
         aspectRatio: 16 / 9,
         allowFullScreen: true,
         allowMuting: true,
@@ -99,7 +105,7 @@ class _LiveScreenState extends State<LiveScreen> with SingleTickerProviderStateM
     } catch (e) {
       if (mounted) {
         setState(() {
-          _videoErrorMessage = 'Flux en direct actuellement hors antenne ou en attente de la régie.';
+          _videoErrorMessage = 'Le lecteur n\'a pas pu ouvrir ce flux.';
         });
       }
     }
@@ -191,7 +197,7 @@ class _LiveScreenState extends State<LiveScreen> with SingleTickerProviderStateM
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 20),
                           child: Text(
-                            _videoErrorMessage ?? (isLive ? 'Connexion au flux direct de la régie...' : 'Prochain culte en direct bientôt'),
+                            _videoErrorMessage ?? (isLive ? 'Ouverture du flux enregistré...' : 'Aucun flux à lire.'),
                             textAlign: TextAlign.center,
                             style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
                           ),
@@ -209,7 +215,7 @@ class _LiveScreenState extends State<LiveScreen> with SingleTickerProviderStateM
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
-                  color: isLive ? EeccColors.liveRed : EeccColors.primary,
+                  color: event == null ? EeccColors.slate : isLive ? EeccColors.liveRed : EeccColors.primary,
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Row(
@@ -221,7 +227,7 @@ class _LiveScreenState extends State<LiveScreen> with SingleTickerProviderStateM
                     ),
                     const SizedBox(width: 6),
                     Text(
-                      isLive ? 'EN DIRECT' : 'PROGRAMMÉ',
+                      event == null ? 'AUCUN CULTE' : isLive ? 'EN DIRECT' : 'PROGRAMMÉ',
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 11,
@@ -234,7 +240,7 @@ class _LiveScreenState extends State<LiveScreen> with SingleTickerProviderStateM
               ),
               const SizedBox(width: 12),
               Text(
-                event?.dateFormatted ?? 'Dimanche',
+                event?.dateFormatted ?? 'Date non enregistrée',
                 style: const TextStyle(color: EeccColors.textSecondary, fontSize: 13, fontWeight: FontWeight.w600),
               ),
             ],
@@ -243,7 +249,7 @@ class _LiveScreenState extends State<LiveScreen> with SingleTickerProviderStateM
           const SizedBox(height: 12),
 
           Text(
-            event?.title ?? 'Culte dominical de célébration',
+            event?.title ?? 'Aucun culte enregistré',
             style: const TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.bold,
@@ -254,7 +260,7 @@ class _LiveScreenState extends State<LiveScreen> with SingleTickerProviderStateM
           const SizedBox(height: 8),
 
           Text(
-            event?.description ?? 'Rejoignez-nous pour notre temps de louange et la prédication de la parole de Dieu.',
+            event?.description ?? 'Aucune description enregistrée.',
             style: const TextStyle(color: EeccColors.textSecondary, fontSize: 14, height: 1.5),
           ),
 
@@ -281,11 +287,11 @@ class _LiveScreenState extends State<LiveScreen> with SingleTickerProviderStateM
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        event?.speaker ?? 'Pasteur Principal',
+                        event?.speaker ?? 'Intervenant non indiqué',
                         style: const TextStyle(fontWeight: FontWeight.bold, color: EeccColors.textMain, fontSize: 15),
                       ),
                       Text(
-                        event?.bibleReference ?? 'Évangile selon Jean',
+                        event?.bibleReference ?? 'Référence biblique non enregistrée',
                         style: const TextStyle(color: EeccColors.primary, fontSize: 13, fontWeight: FontWeight.w600),
                       ),
                     ],
@@ -339,7 +345,7 @@ class _LiveScreenState extends State<LiveScreen> with SingleTickerProviderStateM
               style: const TextStyle(fontWeight: FontWeight.bold, color: EeccColors.textMain, fontSize: 14),
             ),
             subtitle: Text(
-              '${replay.platform} • ${replay.date}',
+              '${replay.platform} • ${replay.date?.toLocal().toString().split('.').first ?? 'date non indiquée'} • ${replay.availabilityStatus}',
               style: const TextStyle(color: EeccColors.textSecondary, fontSize: 12),
             ),
             trailing: const Icon(Icons.open_in_new, color: EeccColors.primary, size: 20),

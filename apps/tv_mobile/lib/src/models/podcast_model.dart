@@ -29,7 +29,7 @@ class PodcastItem {
     return PodcastItem(
       id: json['id'] as String,
       title: json['title'] as String,
-      speaker: json['speaker'] as String? ?? 'Pasteur EECC',
+      speaker: json['speaker'] as String? ?? 'Intervenant non indiqué',
       theme: json['theme'] as String?,
       date: json['date'] != null ? DateTime.parse(json['date'] as String) : DateTime.now(),
       audioUrl: json['audio_url'] as String? ?? '',

@@ -16,6 +16,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\EeccStudio.Core\EeccStudio.Core.csproj" />
+    <ProjectReference Include="..\EeccStudio.Broadcast\EeccStudio.Broadcast.csproj" />
     <Resource Include="Assets\eecc.ico" />
   </ItemGroup>
 

@@ -10,8 +10,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
   const [activeTab, setActiveTab] = useState<"stream" | "video" | "audio" | "storage">("stream");
 
   // Destinations RTMP
-  const [youtubeKey, setYoutubeKey] = useState("xxxx-xxxx-xxxx-xxxx");
-  const [facebookKey, setFacebookKey] = useState("FB-live-token-secret");
+  const [youtubeKey, setYoutubeKey] = useState("");
+  const [facebookKey, setFacebookKey] = useState("");
   const [tiktokKey, setTiktokKey] = useState("");
   const [multistreamEnabled, setMultistreamEnabled] = useState(true);
 
@@ -99,7 +99,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                     <span className="flex items-center text-red-600">
                       <span className="w-2 h-2 rounded-full bg-red-600 mr-2" /> YouTube Live
                     </span>
-                    <span className="text-[10px] text-green-600 bg-green-50 px-2 py-0.5 rounded border border-green-200">Prêt</span>
+                    <span className="text-[10px] text-slate-500 bg-slate-100 px-2 py-0.5 rounded">Non vérifié</span>
                   </div>
                   <input
                     type="password"
@@ -116,7 +116,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                     <span className="flex items-center text-blue-600">
                       <span className="w-2 h-2 rounded-full bg-blue-600 mr-2" /> Facebook Live
                     </span>
-                    <span className="text-[10px] text-green-600 bg-green-50 px-2 py-0.5 rounded border border-green-200">Prêt</span>
+                    <span className="text-[10px] text-slate-500 bg-slate-100 px-2 py-0.5 rounded">Non vérifié</span>
                   </div>
                   <input
                     type="password"

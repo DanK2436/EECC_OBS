@@ -12,6 +12,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using EeccStudio.Broadcast;
 
 namespace EeccStudio.Core.Network
 {
@@ -89,7 +90,8 @@ namespace EeccStudio.Core.Network
         public bool IsRecording { get; private set; }
         public DateTime? StreamingStartedAt { get; private set; }
         public DateTime? RecordingStartedAt { get; private set; }
-        public int ViewersCount { get; set; } = 1;
+        public int ViewersCount { get; set; }
+        private int _activeStreamClients;
 
         public TimeSpan StreamingDuration => IsStreaming && StreamingStartedAt.HasValue
             ? DateTime.UtcNow - StreamingStartedAt.Value
@@ -500,6 +502,7 @@ namespace EeccStudio.Core.Network
                     });
                 }
 
+                ViewersCount = Volatile.Read(ref _activeStreamClients);
                 var statusData = new
                 {
                     service = "EECC Studio Broadcast Server",
@@ -509,11 +512,8 @@ namespace EeccStudio.Core.Network
                     title = ProgramTitle,
                     speaker = Speaker,
                     active_scene = ActiveSceneName,
-                    live_stream_url = $"http://{localIp}:{Port}/live/stream",
-                    resolution = "1920x1080",
-                    fps = 60,
-                    bitrate_kbps = 5850,
-                    audio = "48kHz Stéréo",
+                    live_stream_url = $"http://{localIp}:{Port}{EeccTvContract.StreamPath}",
+                    transport = "mjpeg-http",
                     viewers = ViewersCount,
                     uptime_seconds = (int)StreamingDuration.TotalSeconds,
                     cameras_connected = _connectedCameras.Count,
@@ -530,10 +530,14 @@ namespace EeccStudio.Core.Network
 
             if (cleanPath == "/live/frame.jpg" || cleanPath == "/frame.jpg")
             {
-                var frame = ActiveProgramFrameBytes ?? LatestCameraFrameBytes ?? StaticJpegFrame;
-                var header = $"HTTP/1.1 200 OK\r\nContent-Type: image/jpeg\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: {frame.Length}\r\n\r\n";
-                await stream.WriteAsync(Encoding.UTF8.GetBytes(header), token);
-                await stream.WriteAsync(frame, token);
+                if (!IsStreaming)
+                {
+                    await EeccTvContract.WriteOfflineAsync(stream, token);
+                    return;
+                }
+
+                var frame = ActiveProgramFrameBytes ?? LatestCameraFrameBytes ?? EeccTvFrames.Slate;
+                await EeccTvContract.WriteJpegAsync(stream, frame, token);
                 return;
             }
 
@@ -550,19 +554,19 @@ namespace EeccStudio.Core.Network
 
             if (cleanPath == "/live/stream")
             {
-                var boundary = "eecc_boundary_frame";
-                var mjpegHeader = $"HTTP/1.1 200 OK\r\nContent-Type: multipart/x-mixed-replace; boundary=--{boundary}\r\nAccess-Control-Allow-Origin: *\r\nCache-Control: no-cache, no-store, must-revalidate\r\n\r\n";
-                await stream.WriteAsync(Encoding.UTF8.GetBytes(mjpegHeader), token);
-
-                while (!token.IsCancellationRequested && _isRunning)
+                Interlocked.Increment(ref _activeStreamClients);
+                try
                 {
-                    var frame = ActiveProgramFrameBytes ?? LatestCameraFrameBytes ?? StaticJpegFrame;
-                    var partHeader = $"--{boundary}\r\nContent-Type: image/jpeg\r\nContent-Length: {frame.Length}\r\n\r\n";
-                    await stream.WriteAsync(Encoding.UTF8.GetBytes(partHeader), token);
-                    await stream.WriteAsync(frame, token);
-                    await stream.WriteAsync(Encoding.UTF8.GetBytes("\r\n"), token);
-                    await stream.FlushAsync(token);
-                    await Task.Delay(66, token); // ~15 FPS
+                    await EeccTvContract.WriteMjpegAsync(
+                        stream,
+                        () => IsStreaming,
+                        () => ActiveProgramFrameBytes ?? LatestCameraFrameBytes ?? EeccTvFrames.Slate,
+                        () => _isRunning,
+                        token);
+                }
+                finally
+                {
+                    Interlocked.Decrement(ref _activeStreamClients);
                 }
                 return;
             }
@@ -593,7 +597,7 @@ namespace EeccStudio.Core.Network
     <p class=""sub"">{ProgramTitle} — {Speaker}</p>
     <div style=""display:flex; justify-content:space-around; color:#8B949E; font-size:12px; margin-top:20px;"">
       <div>Scène active : <strong style=""color:#F0F6FC;"">{ActiveSceneName}</strong></div>
-      <div>Résolution : <strong style=""color:#16A34A;"">1080p60</strong></div>
+      <div>Transport : <strong style=""color:#16A34A;"">MJPEG local</strong></div>
       <div>Serveur : <strong style=""color:#38BDF8;"">http://{localIpDefault}:{Port}</strong></div>
     </div>
   </div>

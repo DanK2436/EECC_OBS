@@ -7,6 +7,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
+using EeccStudio.Broadcast;
 using EeccStudio.Core.Audio;
 using EeccStudio.Core.Models;
 using EeccStudio.Core.Network;
@@ -25,6 +26,7 @@ namespace EeccStudio
         private bool _isStudioMode = true;
         private string _selectedPreviewSlot = "Cam-1";
         private string _selectedProgramSlot = "Cam-1";
+        private BroadcastSession? _broadcast;
 
         public MainWindow()
         {
@@ -117,6 +119,13 @@ namespace EeccStudio
         private void OnClockTick(object? sender, EventArgs e)
         {
             // Mise à jour du timer de direct (LIVE)
+            if (_broadcast is { IsActive: true })
+            {
+                var summary = _broadcast.Latest.Summary;
+                if (!string.Equals(TxtLiveBadge.Text, summary, StringComparison.Ordinal))
+                    TxtLiveBadge.Text = summary;
+            }
+
             if (_cameraServer.IsStreaming)
             {
                 var d = _cameraServer.StreamingDuration;
@@ -459,36 +468,48 @@ namespace EeccStudio
 
         #region Contrôles Streaming, Recording & Mode Studio
 
-        private void BtnToggleStream_Click(object sender, RoutedEventArgs e)
+        private async void BtnToggleStream_Click(object sender, RoutedEventArgs e)
         {
-            if (!_cameraServer.IsStreaming)
+            if (_broadcast is { IsActive: true } running)
             {
-                _cameraServer.StartStreaming();
-                BtnToggleStream.Content = "Arrêter le streaming";
+                var stopped = await running.StopAsync();
+                _broadcast = null;
+                ApplyBroadcastChrome(stopped);
+                return;
+            }
+
+            var dialog = new DiffusionWindow(_cameraServer) { Owner = this };
+            dialog.ShowDialog();
+            if (dialog.StartedSession is { IsActive: true } session)
+            {
+                _broadcast = session;
+                ApplyBroadcastChrome(session.Latest);
+            }
+        }
+
+        private void ApplyBroadcastChrome(BroadcastSnapshot snapshot)
+        {
+            if (snapshot.TvIsLive)
+            {
+                BtnToggleStream.Content = "■   Arrêter le streaming";
                 BtnToggleStream.Background = (Brush)new BrushConverter().ConvertFrom("#DC2626");
                 BtnToggleStream.Foreground = Brushes.White;
-
                 BadgeLiveIndicator.Background = (Brush)new BrushConverter().ConvertFrom("#DC2626");
-                TxtLiveBadge.Text = "DIFFUSION EN COURS (1080p60)";
+                TxtLiveBadge.Text = snapshot.Summary;
                 TxtLiveBadge.Foreground = Brushes.White;
-
                 PgmOnAirPill.Visibility = Visibility.Visible;
-                TxtProgramStatusFooter.Text = "Diffusion active vers YouTube, Facebook & EECC TV";
+                TxtProgramStatusFooter.Text = snapshot.Summary;
+                return;
             }
-            else
-            {
-                _cameraServer.StopStreaming();
-                BtnToggleStream.Content = "Démarrer le streaming";
-                BtnToggleStream.Background = (Brush)new BrushConverter().ConvertFrom("#21262D");
-                BtnToggleStream.Foreground = (Brush)new BrushConverter().ConvertFrom("#F0F6FC");
 
-                BadgeLiveIndicator.Background = (Brush)new BrushConverter().ConvertFrom("#21262D");
-                TxtLiveBadge.Text = "HORS LIGNE";
-                TxtLiveBadge.Foreground = (Brush)new BrushConverter().ConvertFrom("#8B949E");
-
-                PgmOnAirPill.Visibility = Visibility.Collapsed;
-                TxtProgramStatusFooter.Text = "Signal en attente — Prêt pour diffusion";
-            }
+            BtnToggleStream.Content = "▶   Démarrer le Streaming";
+            BtnToggleStream.Background = (Brush)new BrushConverter().ConvertFrom("#1877F2");
+            BtnToggleStream.Foreground = Brushes.White;
+            BadgeLiveIndicator.Background = (Brush)new BrushConverter().ConvertFrom("#21262D");
+            TxtLiveBadge.Text = "HORS LIGNE";
+            TxtLiveBadge.Foreground = (Brush)new BrushConverter().ConvertFrom("#8B949E");
+            PgmOnAirPill.Visibility = Visibility.Collapsed;
+            TxtProgramStatusFooter.Text = "Signal en attente";
         }
 
         private void BtnToggleRecord_Click(object sender, RoutedEventArgs e)

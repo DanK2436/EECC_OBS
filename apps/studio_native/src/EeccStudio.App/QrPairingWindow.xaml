@@ -5,7 +5,7 @@
         Height="560" Width="480"
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize"
-        Background="#14151C">
+        Background="#3C4146">
 
     <Grid Margin="24">
         <Grid.RowDefinitions>
@@ -17,39 +17,39 @@
 
         <!-- En-tête avec Logo Officiel -->
         <StackPanel Grid.Row="0" Margin="0,0,0,16" HorizontalAlignment="Center">
-            <Border Width="48" Height="48" CornerRadius="10" Background="#0D1117" BorderBrush="#DC2626" BorderThickness="1.5" HorizontalAlignment="Center" Margin="0,0,0,8" ClipToBounds="True">
+            <Border Width="48" Height="48" CornerRadius="10" Background="#2A2E33" BorderBrush="#DC2626" BorderThickness="1.5" HorizontalAlignment="Center" Margin="0,0,0,8" ClipToBounds="True">
                 <Image Source="Assets/logo_official.png" Stretch="UniformToFill"/>
             </Border>
             <TextBlock Text="APPAIRER EECC CAMÉRA" FontWeight="Black" FontSize="18" Foreground="#FFFFFF" HorizontalAlignment="Center"/>
-            <TextBlock Text="Église Évangélique les Cohéritiers du Christ" FontSize="12" Foreground="#9CA3AF" HorizontalAlignment="Center" Margin="0,4,0,0"/>
+            <TextBlock Text="Église Évangélique les Cohéritiers du Christ" FontSize="12" Foreground="#C5CCD3" HorizontalAlignment="Center" Margin="0,4,0,0"/>
             
             <Border Background="#16A34A" CornerRadius="12" Padding="12,4" Margin="0,10,0,0" HorizontalAlignment="Center">
-                <TextBlock x:Name="TxtServerStatus" Text="● Serveur Caméra Multi-Slots Actif : Port 8089 (Jusqu'à 15 smartphones)" Foreground="#FFFFFF" FontSize="11" FontWeight="SemiBold"/>
+                <TextBlock x:Name="TxtServerStatus" Text="En attente de caméra — port 8089" Foreground="#FFFFFF" FontSize="11" FontWeight="SemiBold"/>
             </Border>
         </StackPanel>
 
         <!-- Cadre QR Code -->
-        <Border Grid.Row="1" Background="#FFFFFF" CornerRadius="16" Padding="16" HorizontalAlignment="Center" VerticalAlignment="Center" BorderBrush="#30363D" BorderThickness="2">
+        <Border Grid.Row="1" Background="#FFFFFF" CornerRadius="16" Padding="16" HorizontalAlignment="Center" VerticalAlignment="Center" BorderBrush="#22262B" BorderThickness="2">
             <Image x:Name="ImgQrCode" Width="260" Height="260" Stretch="Uniform"/>
         </Border>
 
         <!-- Informations Réseau & Token -->
         <StackPanel Grid.Row="2" Margin="0,16,0,16">
-            <Border Background="#161B22" BorderBrush="#30363D" BorderThickness="1" CornerRadius="8" Padding="12,8">
+            <Border Background="#32373C" BorderBrush="#22262B" BorderThickness="1" CornerRadius="8" Padding="12,8">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
                     <StackPanel Grid.Column="0">
-                        <TextBlock Text="ADRESSE RÉSEAU DU STUDIO :" Foreground="#8B949E" FontSize="10" FontWeight="Bold"/>
-                        <TextBlock x:Name="TxtIpPort" Text="192.168.1.100:8089" Foreground="#38BDF8" FontSize="14" FontWeight="Bold" FontFamily="Consolas" Margin="0,2,0,0"/>
+                        <TextBlock Text="ADRESSE RÉSEAU DU STUDIO :" Foreground="#C5CCD3" FontSize="10" FontWeight="Bold"/>
+                        <TextBlock x:Name="TxtIpPort" Text="…" Foreground="#38BDF8" FontSize="14" FontWeight="Bold" FontFamily="Consolas" Margin="0,2,0,0"/>
                     </StackPanel>
-                    <Button Grid.Column="1" Content="Copier" Background="#21262D" Foreground="#F0F6FC" BorderBrush="#30363D" Padding="10,4" Click="BtnCopy_Click" VerticalAlignment="Center"/>
+                    <Button Grid.Column="1" Content="Copier" Background="#4A5056" Foreground="#F4F6F8" BorderBrush="#22262B" Padding="10,4" Click="BtnCopy_Click" VerticalAlignment="Center"/>
                 </Grid>
             </Border>
 
-            <TextBlock Text="Pointez EECC Caméra vers ce code pour vous connecter sans fil." Foreground="#9CA3AF" FontSize="11" TextAlignment="Center" Margin="0,10,0,0" TextWrapping="Wrap"/>
+            <TextBlock Text="Pointez EECC Caméra vers ce code pour vous connecter sans fil." Foreground="#C5CCD3" FontSize="11" TextAlignment="Center" Margin="0,10,0,0" TextWrapping="Wrap"/>
         </StackPanel>
 
         <!-- Bouton Fermer -->

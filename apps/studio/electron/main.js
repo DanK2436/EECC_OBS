@@ -7,7 +7,7 @@ function createWindow() {
     height: 768,
     minWidth: 1024,
     minHeight: 600,
-    title: 'EECC Studio — Régie de Production',
+    title: 'ECC Studio — Radio & Diffusion Pro',
     icon: path.join(__dirname, '../public/icon-512.png'),
     autoHideMenuBar: true,
     webPreferences: {

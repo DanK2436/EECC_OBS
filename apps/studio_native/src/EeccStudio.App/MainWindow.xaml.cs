@@ -27,6 +27,11 @@ namespace EeccStudio
         private bool _isStudioMode = true;
         private string _selectedPreviewSlot = "Cam-1";
         private string _selectedProgramSlot = "Cam-1";
+        private int _framesThisWindow;
+        private DateTime _fpsStamp = DateTime.UtcNow;
+        private TimeSpan _prevCpu = TimeSpan.Zero;
+        private DateTime _prevCpuAt = DateTime.UtcNow;
+        private static readonly int[] DemoMeterHeights = { 70, 66, 78, 74, 48, 50, 64, 64, 52, 50 };
 
         public MainWindow()
         {
@@ -68,6 +73,15 @@ namespace EeccStudio
 
             // Affichage initial du statut réseau
             UpdateNetworkStatusDisplay();
+            if (App.IsDemoMode)
+            {
+                BadgeDemo.Visibility = Visibility.Visible;
+                for (int i = 0; i < DemoMeterHeights.Length; i++)
+                {
+                    if (FindName($"MeterFill{i + 1}") is Border meter)
+                        meter.Height = DemoMeterHeights[i];
+                }
+            }
         }
 
         private void UpdateNetworkStatusDisplay()
@@ -126,35 +140,90 @@ namespace EeccStudio
 
         private void OnClockTick(object? sender, EventArgs e)
         {
-            // Mise à jour du timer de direct (LIVE)
+            if (App.IsDemoMode)
+            {
+                var example = (Brush)new BrushConverter().ConvertFrom("#2FE06A")!;
+                TxtStatusLive.Text = "LIVE  00:12:34";
+                TxtStatusLive.Foreground = Brushes.White;
+                StatusLiveDot.Foreground = example;
+                TxtStatusRec.Text = "REC  00:00:00";
+                TxtStatusCpu.Text = "CPU : 4.8%";
+                TxtStatusFps.Text = "60.00 FPS";
+                TxtStatusFps.Foreground = example;
+                TxtStatusBitrate.Text = "Débit : 6.42 Mbps";
+                TxtLanBroadcastStatus.Text = "LAN : http://192.168.46.78:8080/live";
+                TxtProgramLiveFooter.Text = "DÉMO · Diffusion en cours...";
+                TxtProgramDetails.Text = "00:12:34";
+                PgmOnAirPill.Visibility = Visibility.Visible;
+                return;
+            }
+
+            var liveBrush = (Brush)new BrushConverter().ConvertFrom("#2FE06A")!;
+            var idleBrush = (Brush)new BrushConverter().ConvertFrom("#5C636A")!;
+
             if (_cameraServer.IsStreaming)
             {
                 var d = _cameraServer.StreamingDuration;
-                TxtStatusLive.Text = $"LIVE  {d.Hours:D2}:{d.Minutes:D2}:{d.Seconds:D2}";
-                TxtStatusLive.Foreground = (Brush)new BrushConverter().ConvertFrom("#00E676");
-                TxtProgramDetails.Text = $"{d.Hours:D2}:{d.Minutes:D2}:{d.Seconds:D2}";
+                var clock = $"{d.Hours:D2}:{d.Minutes:D2}:{d.Seconds:D2}";
+                TxtStatusLive.Text = $"LIVE  {clock}";
+                TxtStatusLive.Foreground = Brushes.White;
+                StatusLiveDot.Foreground = liveBrush;
+                TxtProgramDetails.Text = clock;
+                TxtProgramLiveFooter.Text = "Diffusion en cours...";
+                PgmOnAirPill.Visibility = Visibility.Visible;
             }
             else
             {
-                TxtStatusLive.Text = "HORS ANTENNE";
-                TxtStatusLive.Foreground = (Brush)new BrushConverter().ConvertFrom("#FFFFFF");
-                TxtProgramDetails.Text = "hors antenne";
+                TxtStatusLive.Text = "LIVE  00:00:00";
+                TxtStatusLive.Foreground = (Brush)new BrushConverter().ConvertFrom("#C5CCD3")!;
+                StatusLiveDot.Foreground = idleBrush;
+                TxtProgramDetails.Text = "";
+                TxtProgramLiveFooter.Text = "En attente";
+                PgmOnAirPill.Visibility = Visibility.Collapsed;
             }
 
-            // Mise à jour du timer d'enregistrement (REC)
             if (_cameraServer.IsRecording)
             {
                 var d = _cameraServer.RecordingDuration;
-                TxtStatusRec.Text = $"REC: {d.Hours:D2}:{d.Minutes:D2}:{d.Seconds:D2}";
-                TxtStatusRec.Foreground = (Brush)new BrushConverter().ConvertFrom("#EF4444");
+                TxtStatusRec.Text = $"REC  {d.Hours:D2}:{d.Minutes:D2}:{d.Seconds:D2}";
+                TxtStatusRec.Foreground = (Brush)new BrushConverter().ConvertFrom("#FF5A5A")!;
             }
             else
             {
-                TxtStatusRec.Text = "REC: 00:00:00";
-                TxtStatusRec.Foreground = (Brush)new BrushConverter().ConvertFrom("#8B949E");
+                TxtStatusRec.Text = "REC  00:00:00";
+                TxtStatusRec.Foreground = (Brush)new BrushConverter().ConvertFrom("#C5CCD3")!;
             }
 
-            TxtStatusCpu.Text = "CPU: non mesuré";
+            var proc = Process.GetCurrentProcess();
+            var now = DateTime.UtcNow;
+            var cpuTime = proc.TotalProcessorTime;
+            var wallMs = (now - _prevCpuAt).TotalMilliseconds;
+            var usedMs = (cpuTime - _prevCpu).TotalMilliseconds;
+            var cpuPct = wallMs > 0 ? usedMs / wallMs / Environment.ProcessorCount * 100.0 : 0;
+            TxtStatusCpu.Text = $"CPU : {Math.Clamp(cpuPct, 0, 100):F1}%";
+            _prevCpu = cpuTime;
+            _prevCpuAt = now;
+
+            var windowSeconds = (now - _fpsStamp).TotalSeconds;
+            var countedFps = windowSeconds > 0 ? _framesThisWindow / windowSeconds : 0;
+            _framesThisWindow = 0;
+            _fpsStamp = now;
+
+            double telemetryFps = 0;
+            double bitrateKbps = 0;
+            int telemetryCount = 0;
+            foreach (var cam in _cameraServer.ConnectedCameras.Values)
+            {
+                if (cam.LastTelemetryTime <= cam.ConnectedAt.AddMilliseconds(500)) continue;
+                telemetryFps += cam.Fps;
+                if (_cameraServer.IsStreaming) bitrateKbps += Math.Max(0, cam.BitrateKbps);
+                telemetryCount++;
+            }
+            var fps = countedFps;
+            if (fps < 0.05 && telemetryCount > 0) fps = telemetryFps / telemetryCount;
+            TxtStatusFps.Text = $"{Math.Max(0, fps):F2} FPS";
+            TxtStatusFps.Foreground = fps > 0.5 ? liveBrush : idleBrush;
+            TxtStatusBitrate.Text = $"Débit : {bitrateKbps / 1000.0:F2} Mbps";
             TxtCameraStatusFooter.Text =
                 $"Téléphones {_cameraServer.ConnectedPhoneCount}/{CameraServer.MaxPhoneConnections}" +
                 $" · reconnexion {_cameraServer.ReservedPhoneCount}" +
@@ -196,6 +265,7 @@ namespace EeccStudio
         {
             Dispatcher.Invoke(() =>
             {
+                _framesThisWindow++;
                 BitmapImage? bitmap;
                 try
                 {
@@ -213,13 +283,13 @@ namespace EeccStudio
                 }
 
                 if (slot == _selectedPreviewSlot)
-                    ShowJpeg(ImgPreviewVideo, PanelPreviewSlate, bitmap);
+                    ShowJpeg(ImgPreviewVideo, PanelPreviewSlate, bitmap!);
 
                 if (slot == _selectedProgramSlot)
                 {
                     ShowJpeg(ImgProgramVideo, PanelProgramSlate, bitmap);
                     _cameraServer.ActiveProgramFrameBytes = jpegBytes;
-                    TxtProgramBanner.Text = $"Image reçue · {slot}";
+                    TxtProgramLiveFooter.Text = $"Image reçue · {slot}";
                 }
             });
         }
@@ -292,7 +362,7 @@ namespace EeccStudio
             {
                 ShowJpeg(ImgProgramVideo, PanelProgramSlate, bitmap!);
                 _cameraServer.ActiveProgramFrameBytes = frame;
-                TxtProgramBanner.Text = $"Image reçue · {_selectedProgramSlot}";
+                TxtProgramLiveFooter.Text = $"Image reçue · {_selectedProgramSlot}";
             }
             else
             {
@@ -300,13 +370,13 @@ namespace EeccStudio
                 PanelProgramSlate.Visibility = Visibility.Visible;
                 _cameraServer.ActiveProgramFrameBytes = null;
                 TxtProgramEmpty.Text = $"Aucune image à l'antenne pour {_selectedProgramSlot}.";
-                TxtProgramBanner.Text = "Aucune image à l'antenne";
+                TxtProgramLiveFooter.Text = "Aucune image à l'antenne";
             }
 
             if (_programScene.Sources.Count > 0)
             {
                 var first = _programScene.Sources[0];
-                TxtProgramSub.Text = $"{first.Name}";
+                TxtProgramSub.Text = first.Name;
             }
         }
 
@@ -457,7 +527,7 @@ namespace EeccStudio
             PanelProgramSlate.Visibility = Visibility.Visible;
             _cameraServer.ActiveProgramFrameBytes = null;
             TxtProgramEmpty.Text = "Écran noir. Aucune image n'est envoyée.";
-            TxtProgramBanner.Text = "Écran noir";
+            TxtProgramLiveFooter.Text = "Écran noir";
             TxtProgramMain.Text = "Écran noir";
             TxtProgramSub.Text = "Aucune source à l'antenne";
             TxtProgramSceneName.Text = "[ NOIR ]";
@@ -481,6 +551,7 @@ namespace EeccStudio
                 TxtLiveBadge.Foreground = Brushes.White;
 
                 PgmOnAirPill.Visibility = Visibility.Visible;
+                TxtProgramLiveFooter.Text = "Diffusion en cours...";
                 TxtProgramStatusFooter.Text = "Diffusion active vers YouTube, Facebook & EECC TV";
             }
             else
@@ -495,6 +566,7 @@ namespace EeccStudio
                 TxtLiveBadge.Foreground = (Brush)new BrushConverter().ConvertFrom("#8B949E");
 
                 PgmOnAirPill.Visibility = Visibility.Collapsed;
+                TxtProgramLiveFooter.Text = "En attente";
                 TxtProgramStatusFooter.Text = "Signal en attente — Prêt pour diffusion";
             }
         }

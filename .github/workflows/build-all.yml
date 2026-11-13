@@ -265,7 +265,34 @@ jobs:
           if-no-files-found: error
 
   # ========================================================
-  # 5. GITHUB RELEASE AUTOMATIQUE (Tous les binaires réunis)
+  # 5. BUILD EECC STUDIO WEB (régie navigateur)
+  # ========================================================
+  build-studio-web:
+    name: Build EECC Studio (régie web)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        working-directory: apps/studio
+        run: npm install
+
+      - name: Test studio status rules
+        working-directory: apps/studio
+        run: npm test
+
+      - name: Build studio
+        working-directory: apps/studio
+        run: npm run build
+
+  # ========================================================
+  # 6. GITHUB RELEASE AUTOMATIQUE (Tous les binaires réunis)
   # ========================================================
   create-release:
     name: Publier la Release GitHub

@@ -1,90 +1,95 @@
 import React from "react";
-import { Church, Minus, Square, X, Save } from "lucide-react";
+import { Home, Radio, Image as ImageIcon, LayoutGrid, Music, Wrench, Settings, Monitor } from "lucide-react";
+import type { StudioNav } from "./LeftRail";
 
 interface TitleBarProps {
-  projectName: string;
-  isSaved: boolean;
-  onOpenTreasury: () => void;
-  onOpenSettings: () => void;
-  onOpenPairing: () => void;
-  onOpenPostProd: () => void;
+  active: StudioNav;
+  onSelect: (id: StudioNav) => void;
+  screenLabel: string;
+  onScreen: (label: string) => void;
+  recording: boolean;
+  studioMode: boolean;
+  onToggleStudioMode: () => void;
+  demo: boolean;
 }
 
+const TABS: { id: StudioNav; label: string; icon: React.ReactNode }[] = [
+  { id: "accueil", label: "Accueil", icon: <Home size={12} strokeWidth={2} /> },
+  { id: "diffusion", label: "Diffusion", icon: <Radio size={12} strokeWidth={2} /> },
+  { id: "medias", label: "Médias", icon: <ImageIcon size={12} strokeWidth={2} /> },
+  { id: "scenes", label: "Scènes", icon: <LayoutGrid size={12} strokeWidth={2} /> },
+  { id: "playlists", label: "Playlists", icon: <Music size={12} strokeWidth={2} /> },
+  { id: "outils", label: "Outils", icon: <Wrench size={12} strokeWidth={2} /> },
+  { id: "parametres", label: "Paramètres", icon: <Settings size={12} strokeWidth={2} /> },
+];
+
 export const TitleBar: React.FC<TitleBarProps> = ({
-  projectName,
-  isSaved,
-  onOpenTreasury,
-  onOpenSettings,
-  onOpenPairing,
-  onOpenPostProd,
+  active,
+  onSelect,
+  screenLabel,
+  onScreen,
+  recording,
+  studioMode,
+  onToggleStudioMode,
+  demo,
 }) => {
   return (
-    <div className="bg-slate-900 text-white flex flex-col border-b border-slate-800">
-      {/* Barre supérieure style application native Windows */}
-      <div className="h-9 px-3 flex items-center justify-between text-xs select-none">
-        <div className="flex items-center space-x-2">
-          <img src="/logo.png" alt="EECC Logo" className="w-5 h-5 rounded object-contain bg-white/10 p-0.5" />
-          <span className="font-bold tracking-tight">EECC Studio</span>
-          <span className="text-slate-500">•</span>
-          <span className="text-slate-300 font-medium">{projectName}</span>
-          {isSaved ? (
-            <span className="text-[10px] text-green-400 bg-green-950/60 px-1.5 py-0.2 rounded border border-green-800">
-              Enregistré
-            </span>
-          ) : (
-            <span className="text-[10px] text-amber-400 bg-amber-950/60 px-1.5 py-0.2 rounded border border-amber-800">
-              Modifié
-            </span>
-          )}
+    <header className="titlebar" data-demo={demo ? "1" : "0"}>
+      <div className="brand">
+        <div className="brand-mark" aria-hidden>
+          <svg width="14" height="14" viewBox="0 0 14 14">
+            <path d="M6 1h2v4h4v2H8v4H6V7H2V5h4z" fill="#f4f4f4" />
+          </svg>
         </div>
-
-        {/* Boutons fenêtre Windows */}
-        <div className="flex items-center space-x-1 -mr-2">
-          <button className="w-9 h-7 flex items-center justify-center hover:bg-slate-800 text-slate-400 hover:text-white transition-colors">
-            <Minus className="w-3.5 h-3.5" />
-          </button>
-          <button className="w-9 h-7 flex items-center justify-center hover:bg-slate-800 text-slate-400 hover:text-white transition-colors">
-            <Square className="w-3 h-3" />
-          </button>
-          <button className="w-9 h-7 flex items-center justify-center hover:bg-red-600 text-slate-400 hover:text-white transition-colors">
-            <X className="w-3.5 h-3.5" />
-          </button>
+        <div>
+          <div className="brand-name">ECC Studio</div>
+          <div className="brand-sub">Radio &amp; Diffusion Pro</div>
         </div>
       </div>
 
-      {/* Barre de menu classique de régie */}
-      <div className="h-8 px-2 flex items-center space-x-1 text-xs bg-slate-800/80 border-t border-slate-800/60 text-slate-300">
-        <button className="px-2.5 py-1 rounded hover:bg-slate-700/60 hover:text-white transition-colors">Fichier</button>
-        <button className="px-2.5 py-1 rounded hover:bg-slate-700/60 hover:text-white transition-colors">Édition</button>
-        <button className="px-2.5 py-1 rounded hover:bg-slate-700/60 hover:text-white transition-colors">Affichage</button>
-        <button className="px-2.5 py-1 rounded hover:bg-slate-700/60 hover:text-white transition-colors">Collection de Scènes</button>
-        
-        {/* Actions Rapides Métier */}
-        <button
-          onClick={onOpenPairing}
-          className="px-2.5 py-1 rounded bg-primary/20 text-blue-300 hover:bg-primary/30 transition-colors font-semibold"
+      <div className="top-tabs">
+        {TABS.map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            className={`top-tab ${active === tab.id ? "active" : ""}`}
+            onClick={() => onSelect(tab.id)}
+          >
+            {tab.icon}
+            <span className="lbl">{tab.label}</span>
+          </button>
+        ))}
+      </div>
+
+      <div className="title-controls">
+        <select
+          className="screen-select"
+          aria-label="Écran de sortie"
+          value={screenLabel}
+          onChange={(e) => onScreen(e.target.value)}
         >
-          + Appairer Caméra Mobile
+          <option>Écran principal</option>
+          <option>Moniteur régie 2</option>
+          <option>Sortie HDMI / SDI</option>
+        </select>
+        <div className={`rec-badge ${recording ? "on" : ""}`} title={recording ? "Enregistrement en cours" : "Aucun enregistrement"}>
+          <i />
+          {recording ? "REC : ON" : "REC : OFF"}
+        </div>
+        <button type="button" className={`mode-studio-btn ${studioMode ? "" : "off"}`} onClick={onToggleStudioMode}>
+          <Monitor size={12} />
+          Mode Studio
         </button>
-        <button
-          onClick={onOpenPostProd}
-          className="px-2.5 py-1 rounded bg-indigo-900/40 text-indigo-300 hover:bg-indigo-900/60 transition-colors font-semibold"
-        >
-          Postproduction Culte
+        <button type="button" className="win-btn" aria-label="Réduire" title="Réduire">
+          —
         </button>
-        <button
-          onClick={onOpenTreasury}
-          className="px-2.5 py-1 rounded bg-emerald-950 text-emerald-300 border border-emerald-800 hover:bg-emerald-900 transition-colors font-semibold"
-        >
-          Trésorerie & Dons
+        <button type="button" className="win-btn" aria-label="Agrandir" title="Agrandir">
+          ▢
         </button>
-        <button
-          onClick={onOpenSettings}
-          className="px-2.5 py-1 rounded hover:bg-slate-700/60 hover:text-white transition-colors"
-        >
-          Paramètres
+        <button type="button" className="win-btn close" aria-label="Fermer" title="Fermer" onClick={() => window.close()}>
+          ✕
         </button>
       </div>
-    </div>
+    </header>
   );
 };

@@ -18,7 +18,10 @@ public interface IExternalOutput
 {
     string DestinationId { get; }
 
-    Task<OutputStart> StartAsync(Func<byte[]?> currentFrame, CancellationToken cancellationToken);
+    Task<OutputStart> StartAsync(
+        Func<byte[]?> currentFrame,
+        Func<int, byte[]> renderAudio,
+        CancellationToken cancellationToken);
 
     Task StopAsync();
 
@@ -198,6 +201,7 @@ public sealed class BroadcastSession : IAsyncDisposable
         ITvOutput tv,
         IExternalOutputFactory externals,
         Func<byte[]?> currentFrame,
+        Func<int, byte[]> renderAudio,
         CancellationToken cancellationToken = default)
     {
         var secrets = SecretsOf(plan);
@@ -264,7 +268,7 @@ public sealed class BroadcastSession : IAsyncDisposable
             OutputStart started;
             try
             {
-                started = await output.StartAsync(currentFrame, cancellationToken);
+                started = await output.StartAsync(currentFrame, renderAudio, cancellationToken);
             }
             catch (Exception ex)
             {
@@ -374,222 +378,6 @@ public static class FfmpegLocator
         }
 
         return null;
-    }
-}
-
-public sealed class FfmpegRtmpOutput : IExternalOutput
-{
-    private readonly ExternalDestination _destination;
-    private readonly string[] _secrets;
-    private readonly StringBuilder _stderr = new();
-    private Process? _process;
-    private string? _frameFile;
-    private volatile bool _stopping;
-
-    public FfmpegRtmpOutput(ExternalDestination destination)
-    {
-        _destination = destination;
-        _secrets = new[] { destination.StreamKey.Reveal() };
-    }
-
-    public string DestinationId => _destination.Id;
-
-    public event Action<DestinationRunState, string?>? StateChanged;
-
-    public async Task<OutputStart> StartAsync(Func<byte[]?> currentFrame, CancellationToken cancellationToken)
-    {
-        var ffmpeg = FfmpegLocator.Find();
-        if (ffmpeg == null)
-        {
-            const string missing = "Encodeur ffmpeg introuvable (libx264 et AAC requis, variable EECC_FFMPEG). EECC TV n'est pas coupée.";
-            return new OutputStart(DestinationRunState.Error, missing);
-        }
-
-        string url;
-        try
-        {
-            url = PublishUrl.Build(_destination);
-        }
-        catch (Exception ex)
-        {
-            return new OutputStart(DestinationRunState.Error, SecretRedactor.Redact(ex.Message, _secrets));
-        }
-
-        _frameFile = Path.Combine(Path.GetTempPath(), "eecc-frame-" + Guid.NewGuid().ToString("N") + ".jpg");
-        File.WriteAllBytes(_frameFile, ProgramFrame(currentFrame));
-
-        var startInfo = new ProcessStartInfo
-        {
-            FileName = ffmpeg,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true
-        };
-        AddArguments(startInfo, _frameFile);
-        startInfo.ArgumentList.Add(url);
-
-        Process process;
-        try
-        {
-            process = Process.Start(startInfo) ?? throw new InvalidOperationException("ffmpeg n'a pas démarré.");
-        }
-        catch (Exception ex)
-        {
-            DeleteFrame();
-            return new OutputStart(DestinationRunState.Error, SecretRedactor.Redact(ex.Message, _secrets.Append(url)));
-        }
-
-        _process = process;
-        process.OutputDataReceived += (_, _) => { };
-        process.ErrorDataReceived += (_, eventArgs) => AppendStderr(eventArgs.Data);
-        process.BeginOutputReadLine();
-        process.BeginErrorReadLine();
-
-        var deadline = DateTime.UtcNow.AddSeconds(2.5);
-        while (DateTime.UtcNow < deadline)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            if (process.HasExited || HasFatalStderr())
-            {
-                await StopProcessAsync(process);
-                _process = null;
-                DeleteFrame();
-                return new OutputStart(DestinationRunState.Error, FailureMessage());
-            }
-
-            await Task.Delay(100, cancellationToken);
-        }
-
-        if (process.HasExited || HasFatalStderr())
-        {
-            await StopProcessAsync(process);
-            _process = null;
-            DeleteFrame();
-            return new OutputStart(DestinationRunState.Error, FailureMessage());
-        }
-
-        _ = Task.Run(async () =>
-        {
-            try { await process.WaitForExitAsync(); }
-            catch { return; }
-            if (_stopping)
-                return;
-            StateChanged?.Invoke(DestinationRunState.Error, "L'envoi vers cette destination s'est arrêté. EECC TV n'est pas coupée.");
-        });
-
-        return new OutputStart(DestinationRunState.Live, null);
-    }
-
-    public async Task StopAsync()
-    {
-        _stopping = true;
-        var process = _process;
-        if (process == null)
-            return;
-        await StopProcessAsync(process);
-        _process = null;
-        DeleteFrame();
-    }
-
-    private static void AddArguments(ProcessStartInfo startInfo, string frameFile)
-    {
-        // L'image du programme est répétée. Le pipe d'entrée de Process ne livre pas les
-        // octets à ffmpeg sur cette plateforme. Le fichier est l'image courante au démarrage.
-        string[] args =
-        {
-            "-hide_banner", "-loglevel", "warning",
-            "-loop", "1", "-framerate", "10", "-i", frameFile,
-            "-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=44100",
-            "-map", "0:v:0", "-map", "1:a:0",
-            "-c:v", "libx264", "-preset", "ultrafast", "-tune", "zerolatency", "-pix_fmt", "yuv420p",
-            "-g", "10", "-b:v", "250k",
-            "-c:a", "aac", "-b:a", "64k", "-ar", "44100", "-ac", "2",
-            "-flush_packets", "1",
-            "-f", "flv"
-        };
-        foreach (var arg in args)
-            startInfo.ArgumentList.Add(arg);
-    }
-
-    private static byte[] ProgramFrame(Func<byte[]?> currentFrame)
-    {
-        var frame = currentFrame() ?? EeccTvFrames.Slate;
-        if (frame.Length < 4 || frame[0] != 0xFF || frame[1] != 0xD8)
-            return EeccTvFrames.Slate;
-        return frame;
-    }
-
-    private void DeleteFrame()
-    {
-        var path = _frameFile;
-        _frameFile = null;
-        if (string.IsNullOrWhiteSpace(path))
-            return;
-        try { if (File.Exists(path)) File.Delete(path); } catch { }
-    }
-
-    private void AppendStderr(string? line)
-    {
-        if (string.IsNullOrWhiteSpace(line))
-            return;
-        var redacted = SecretRedactor.Redact(line, _secrets);
-        lock (_stderr)
-        {
-            if (_stderr.Length > 4000)
-                return;
-            _stderr.AppendLine(redacted);
-        }
-    }
-
-    private bool HasFatalStderr()
-    {
-        string text;
-        lock (_stderr)
-            text = _stderr.ToString();
-        return text.Contains("Connection refused", StringComparison.OrdinalIgnoreCase)
-            || text.Contains("Error opening output", StringComparison.OrdinalIgnoreCase)
-            || text.Contains("Cannot open connection", StringComparison.OrdinalIgnoreCase)
-            || text.Contains("I/O error", StringComparison.OrdinalIgnoreCase)
-            || text.Contains("timed out", StringComparison.OrdinalIgnoreCase)
-            || text.Contains("Server error", StringComparison.OrdinalIgnoreCase)
-            || text.Contains("Immediate exit", StringComparison.OrdinalIgnoreCase)
-            || text.Contains("Invalid data", StringComparison.OrdinalIgnoreCase)
-            || text.Contains("Could not find codec parameters", StringComparison.OrdinalIgnoreCase);
-    }
-
-    private string FailureMessage()
-    {
-        string text;
-        lock (_stderr)
-            text = _stderr.ToString().Trim();
-        if (string.IsNullOrWhiteSpace(text))
-            return "La destination a refusé la connexion. EECC TV n'est pas coupée.";
-        return "La destination a refusé la connexion. EECC TV n'est pas coupée. " + text;
-    }
-
-    private static async Task StopProcessAsync(Process process)
-    {
-        try
-        {
-            if (!process.HasExited)
-            {
-                var finished = await Task.WhenAny(process.WaitForExitAsync(), Task.Delay(TimeSpan.FromSeconds(3)));
-                if (!process.HasExited)
-                {
-                    try { process.Kill(entireProcessTree: true); } catch { }
-                    await process.WaitForExitAsync();
-                }
-                _ = finished;
-            }
-        }
-        catch
-        {
-        }
-        finally
-        {
-            process.Dispose();
-        }
     }
 }
 

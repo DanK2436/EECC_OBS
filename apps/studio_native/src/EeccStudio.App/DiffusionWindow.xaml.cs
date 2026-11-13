@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using EeccStudio.Broadcast;
+using EeccStudio.Core.Audio;
 using EeccStudio.Core.Broadcast;
 using EeccStudio.Core.Network;
 
@@ -10,14 +11,16 @@ namespace EeccStudio;
 public partial class DiffusionWindow : Window
 {
     private readonly CameraServer _server;
+    private readonly AudioEngine _audio;
     private readonly List<ExternalRow> _rows = new();
     private readonly List<ExternalDestination>? _restored;
     private bool _starting;
 
-    public DiffusionWindow(CameraServer server)
+    public DiffusionWindow(CameraServer server, AudioEngine audio)
     {
         InitializeComponent();
         _server = server;
+        _audio = audio;
         var lan = _server.GetLocalIpAddress();
         TxtTvUrl.Text =
             "Toujours incluse, sans clé de flux.\n" +
@@ -168,7 +171,8 @@ public partial class DiffusionWindow : Window
                 plan,
                 new CameraServerTvOutput(_server),
                 new FfmpegOutputFactory(),
-                () => _server.ActiveProgramFrameBytes ?? _server.LatestCameraFrameBytes ?? EeccTvFrames.Slate);
+                () => _server.ActiveProgramFrameBytes ?? _server.LatestCameraFrameBytes ?? EeccTvFrames.Slate,
+                frames => _audio.RenderMaster(frames));
 
             TxtStatus.Text = Format(snapshot);
             TxtValidation.Text = snapshot.TvIsLive ? validation.Summary : snapshot.Summary;

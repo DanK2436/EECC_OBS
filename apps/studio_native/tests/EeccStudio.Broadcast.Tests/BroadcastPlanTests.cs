@@ -178,7 +178,8 @@ public class BroadcastPlanTests
                 ["mauvais"] = bad,
                 ["arret"] = throwing
             }),
-            () => EeccTvFrames.Slate);
+            () => EeccTvFrames.Slate,
+            static frames => new byte[frames * 4]);
 
         Assert.True(snapshot.TvIsLive);
         Assert.Equal(1, tv.Starts);
@@ -211,7 +212,8 @@ public class BroadcastPlanTests
             Plan(BroadcastMode.TvPlusOne, Local("seul")),
             new ScriptedTv { Fail = true },
             new MapFactory(new Dictionary<string, IExternalOutput> { ["seul"] = external }),
-            () => EeccTvFrames.Slate);
+            () => EeccTvFrames.Slate,
+            static frames => new byte[frames * 4]);
 
         Assert.False(snapshot.TvIsLive);
         Assert.False(external.Started);
@@ -272,7 +274,7 @@ public class BroadcastPlanTests
         public bool ThrowOnStop { get; init; }
         public event Action<DestinationRunState, string?>? StateChanged;
 
-        public Task<OutputStart> StartAsync(Func<byte[]?> currentFrame, CancellationToken cancellationToken)
+        public Task<OutputStart> StartAsync(Func<byte[]?> currentFrame, Func<int, byte[]> renderAudio, CancellationToken cancellationToken)
         {
             Started = true;
             return Task.FromResult(_fail

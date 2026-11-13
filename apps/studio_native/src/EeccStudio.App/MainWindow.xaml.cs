@@ -17,7 +17,7 @@ namespace EeccStudio
     public partial class MainWindow : Window
     {
         private readonly CameraServer _cameraServer;
-        private readonly AudioEngine _audioEngine;
+        private AudioEngine? _audioEngine;
         private readonly DispatcherTimer _clockTimer;
         private readonly ObservableCollection<StudioScene> _scenes;
 
@@ -478,7 +478,7 @@ namespace EeccStudio
                 return;
             }
 
-            var dialog = new DiffusionWindow(_cameraServer) { Owner = this };
+            var dialog = new DiffusionWindow(_cameraServer, _audioEngine ?? new AudioEngine()) { Owner = this };
             dialog.ShowDialog();
             if (dialog.StartedSession is { IsActive: true } session)
             {
@@ -589,7 +589,7 @@ namespace EeccStudio
 
         private void AudioSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
-            // Fader Audio Interactif
+            _audioEngine?.SetVolume("master", (float)(e.NewValue / 100.0));
         }
 
         #endregion

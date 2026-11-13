@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using EeccStudio.Core.Audio;
 using EeccStudio.Core.Broadcast;
 using EeccStudio.Core.Network;
 using Xunit;
@@ -28,7 +29,8 @@ public class LiveTransportTests
             TvOnly(),
             new CameraServerTvOutput(server),
             new FfmpegOutputFactory(),
-            () => server.ActiveProgramFrameBytes);
+            () => server.ActiveProgramFrameBytes,
+            static frames => new byte[frames * 4]);
 
         Assert.True(snapshot.TvIsLive, snapshot.Summary);
         Assert.Equal("EECC TV seule — en direct.", snapshot.Summary);
@@ -57,7 +59,8 @@ public class LiveTransportTests
             },
             ingest,
             new FfmpegOutputFactory(),
-            () => frame);
+            () => frame,
+            static frames => new byte[frames * 4]);
 
         Assert.True(snapshot.TvIsLive, snapshot.Summary);
         Assert.True(ingest.Port > 0);
@@ -75,29 +78,34 @@ public class LiveTransportTests
     {
         Skip.If(FfmpegLocator.Find() == null, "ffmpeg absent");
         await using var sink = await LocalRtmpSink.StartAsync(Key);
+        var red = SolidJpeg("red");
+        var blue = SolidJpeg("blue");
         await using var session = new BroadcastSession();
         using var lease = StartServer();
         var server = lease.Server;
         var port = lease.Port;
-        var frame = EeccTvFrames.WithComment(EeccTvFrames.Slate, Marker);
-        server.ActiveProgramFrameBytes = frame;
+        var feed = new ProgramFeed();
+        server.ActiveProgramFrameBytes = red;
 
         var snapshot = await session.StartAsync(
             Plan(BroadcastMode.TvPlusOne, sink),
             new CameraServerTvOutput(server),
             new FfmpegOutputFactory(),
-            () => server.ActiveProgramFrameBytes);
+            () => server.ActiveProgramFrameBytes,
+            feed.Audio);
 
         Assert.True(snapshot.TvIsLive, snapshot.Summary);
         Assert.True(
             ExternalState(snapshot, "externe") == DestinationRunState.Live,
             string.Join(" | ", snapshot.Destinations));
-        await AssertProgramFrame(port, frame);
+        await AssertProgramFrame(port, red);
+        server.ActiveProgramFrameBytes = blue;
+        await Task.Delay(2000);
+        await AssertProgramFrame(port, blue);
         AssertNoKey(snapshot, session);
 
         await session.StopAsync();
-        var received = await sink.HasVideoAsync();
-        Assert.True(received, "Le récepteur RTMP local n'a pas reçu de vidéo. " + sink.Describe());
+        await AssertSceneChangeAndTone(sink);
         await AssertOffline(port);
     }
 
@@ -108,28 +116,36 @@ public class LiveTransportTests
         await using var first = await LocalRtmpSink.StartAsync(Key);
         await using var second = await LocalRtmpSink.StartAsync(Key + "-b");
         await using var third = await LocalRtmpSink.StartAsync(Key + "-c");
+        var red = SolidJpeg("red");
+        var blue = SolidJpeg("blue");
         await using var session = new BroadcastSession();
         using var lease = StartServer();
         var server = lease.Server;
         var port = lease.Port;
-        var frame = EeccTvFrames.WithComment(EeccTvFrames.Slate, Marker);
-        server.ActiveProgramFrameBytes = frame;
+        var feed = new ProgramFeed();
+        server.ActiveProgramFrameBytes = red;
 
         var snapshot = await session.StartAsync(
             Plan(BroadcastMode.TvPlusThreeOrMore, first, second, third),
             new CameraServerTvOutput(server),
             new FfmpegOutputFactory(),
-            () => server.ActiveProgramFrameBytes);
+            () => server.ActiveProgramFrameBytes,
+            feed.Audio);
 
         Assert.True(snapshot.TvIsLive, snapshot.Summary);
-        Assert.Equal(3, snapshot.Destinations.Count(item => item.Kind == DestinationKind.External && item.State == DestinationRunState.Live));
-        await AssertProgramFrame(port, frame);
+        Assert.True(
+            snapshot.Destinations.Count(item => item.Kind == DestinationKind.External && item.State == DestinationRunState.Live) == 3,
+            string.Join(" | ", snapshot.Destinations));
+        await AssertProgramFrame(port, red);
+        server.ActiveProgramFrameBytes = blue;
+        await Task.Delay(2000);
+        await AssertProgramFrame(port, blue);
         AssertNoKey(snapshot, session);
 
         await session.StopAsync();
-        Assert.True(await first.HasVideoAsync());
-        Assert.True(await second.HasVideoAsync());
-        Assert.True(await third.HasVideoAsync());
+        await AssertSceneChangeAndTone(first);
+        await AssertSceneChangeAndTone(second);
+        await AssertSceneChangeAndTone(third);
         await AssertOffline(port);
     }
 
@@ -140,12 +156,14 @@ public class LiveTransportTests
         await using var first = await LocalRtmpSink.StartAsync(Key);
         await using var second = await LocalRtmpSink.StartAsync(Key + "-b");
         var closed = FreePort();
+        var red = SolidJpeg("red");
+        var blue = SolidJpeg("blue");
+        var feed = new ProgramFeed();
         await using var session = new BroadcastSession();
         using var lease = StartServer();
         var server = lease.Server;
         var port = lease.Port;
-        var frame = EeccTvFrames.WithComment(EeccTvFrames.Slate, Marker);
-        server.ActiveProgramFrameBytes = frame;
+        server.ActiveProgramFrameBytes = red;
 
         var snapshot = await session.StartAsync(
             new BroadcastPlan
@@ -168,20 +186,193 @@ public class LiveTransportTests
             },
             new CameraServerTvOutput(server),
             new FfmpegOutputFactory(),
-            () => server.ActiveProgramFrameBytes);
+            () => server.ActiveProgramFrameBytes,
+            feed.Audio);
 
         Assert.True(snapshot.TvIsLive, snapshot.Summary);
         Assert.Equal(DestinationRunState.Error, snapshot.Destinations.Single(item => item.Id == "c").State);
         Assert.Equal(DestinationRunState.Live, ExternalState(snapshot, "a"));
         Assert.Equal(DestinationRunState.Live, ExternalState(snapshot, "b"));
-        await AssertProgramFrame(port, frame);
+        await AssertProgramFrame(port, red);
+        server.ActiveProgramFrameBytes = blue;
+        await Task.Delay(2000);
+        await AssertProgramFrame(port, blue);
         AssertNoKey(snapshot, session);
         Assert.Contains("EECC TV", snapshot.Summary, StringComparison.Ordinal);
 
         await session.StopAsync();
         await AssertProgramStillAbsent(port);
-        Assert.True(await first.HasVideoAsync());
-        Assert.True(await second.HasVideoAsync());
+        await AssertSceneChangeAndTone(first);
+        await AssertSceneChangeAndTone(second);
+    }
+
+    private static async Task AssertSceneChangeAndTone(LocalRtmpSink sink)
+    {
+        var ready = await sink.HasVideoAsync();
+        Assert.True(ready, "Flux local absent. " + sink.Describe());
+        var duration = ProbeDuration(sink.MediaPath);
+        Assert.True(duration > 1.2, "Le flux reçu est trop court pour contenir deux scènes : " + duration);
+        var samples = new List<string>();
+        (int R, int G, int B)? firstRed = null;
+        (int R, int G, int B)? laterBlue = null;
+        for (var time = 0.25; time < duration - 0.1; time += 0.35)
+        {
+            var color = AverageColor(sink.MediaPath, time);
+            samples.Add($"{time:0.00}=({color.R},{color.G},{color.B})");
+            if (firstRed == null && color.R > 140 && color.B < 90)
+                firstRed = color;
+            if (firstRed != null && color.B > 140 && color.R < 90)
+                laterBlue = color;
+        }
+
+        Assert.True(firstRed != null && laterBlue != null, "Scènes successives absentes : " + string.Join(" ", samples));
+        var tone = MeasureTone(sink.MediaPath);
+        Assert.True(tone.Rms > 1500, "Le son reçu est silencieux ou trop faible : RMS " + tone.Rms);
+        Assert.InRange(tone.Hertz, 800, 1300);
+    }
+
+    private static byte[] SolidJpeg(string color)
+    {
+        var path = Path.Combine(Path.GetTempPath(), "eecc-scene-" + color + ".jpg");
+        if (!File.Exists(path) || new FileInfo(path).Length < 100)
+        {
+            var start = new ProcessStartInfo
+            {
+                FileName = FfmpegLocator.Find() ?? "ffmpeg",
+                UseShellExecute = false,
+                RedirectStandardError = true,
+                RedirectStandardOutput = true
+            };
+            foreach (var arg in new[]
+            {
+                "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", $"color=c={color}:s=160x120",
+                "-frames:v", "1", "-y", path
+            })
+                start.ArgumentList.Add(arg);
+            using var process = Process.Start(start);
+            process!.WaitForExit();
+            Assert.Equal(0, process.ExitCode);
+        }
+
+        return File.ReadAllBytes(path);
+    }
+
+    private static double ProbeDuration(string media)
+    {
+        var start = new ProcessStartInfo
+        {
+            FileName = "ffprobe",
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true
+        };
+        foreach (var arg in new[] { "-v", "error", "-show_entries", "format=duration", "-of", "default=nw=1:nk=1", media })
+            start.ArgumentList.Add(arg);
+        using var process = Process.Start(start);
+        var text = process!.StandardOutput.ReadToEnd();
+        process.WaitForExit();
+        return double.TryParse(text.Trim(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var value)
+            ? value
+            : 0;
+    }
+
+    private static (int R, int G, int B) AverageColor(string media, double seconds)
+    {
+        var raw = Path.Combine(Path.GetTempPath(), "eecc-frame-" + Guid.NewGuid().ToString("N") + ".raw");
+        var start = new ProcessStartInfo
+        {
+            FileName = FfmpegLocator.Find() ?? "ffmpeg",
+            UseShellExecute = false,
+            RedirectStandardError = true,
+            RedirectStandardOutput = true
+        };
+        foreach (var arg in new[]
+        {
+            "-hide_banner", "-loglevel", "error", "-ss", seconds.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture),
+            "-i", media, "-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "rgb24", "-y", raw
+        })
+            start.ArgumentList.Add(arg);
+        using var process = Process.Start(start);
+        process!.WaitForExit();
+        var bytes = File.Exists(raw) ? File.ReadAllBytes(raw) : Array.Empty<byte>();
+        try { File.Delete(raw); } catch { }
+        var pixels = bytes.Length / 3;
+        Assert.True(pixels > 0, "Image décodée vide à " + seconds + " s.");
+        long r = 0, g = 0, b = 0;
+        for (var i = 0; i < pixels; i++)
+        {
+            r += bytes[i * 3];
+            g += bytes[i * 3 + 1];
+            b += bytes[i * 3 + 2];
+        }
+
+        return ((int)(r / pixels), (int)(g / pixels), (int)(b / pixels));
+    }
+
+    private static (double Rms, double Hertz) MeasureTone(string media)
+    {
+        var start = new ProcessStartInfo
+        {
+            FileName = FfmpegLocator.Find() ?? "ffmpeg",
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true
+        };
+        foreach (var arg in new[] { "-hide_banner", "-loglevel", "error", "-i", media, "-vn", "-ac", "1", "-ar", "44100", "-f", "s16le", "pipe:1" })
+            start.ArgumentList.Add(arg);
+        using var process = Process.Start(start);
+        using var buffer = new MemoryStream();
+        process!.StandardOutput.BaseStream.CopyTo(buffer);
+        process.WaitForExit();
+        var raw = buffer.ToArray();
+        var count = raw.Length / 2;
+        Assert.True(count > 4000, "Pas assez d'échantillons audio.");
+        double sum = 0;
+        var previous = 0;
+        var crossings = 0;
+        for (var i = 0; i < count; i++)
+        {
+            var sample = BitConverter.ToInt16(raw, i * 2);
+            sum += sample * (double)sample;
+            if ((previous < 0 && sample >= 0) || (previous >= 0 && sample < 0))
+                crossings++;
+            previous = sample;
+        }
+
+        var seconds = count / 44100.0;
+        return (Math.Sqrt(sum / count), crossings / 2.0 / seconds);
+    }
+
+    private sealed class ProgramFeed
+    {
+        private readonly AudioEngine _audio = new();
+        private readonly object _gate = new();
+        private double _phase;
+
+        public ProgramFeed()
+        {
+            _audio.SetVolume("master", 1f);
+        }
+
+        public byte[] Audio(int frames)
+        {
+            lock (_gate)
+            {
+                var samples = new short[frames * 2];
+                for (var i = 0; i < frames; i++)
+                {
+                    var sample = (short)(10000 * Math.Sin(_phase));
+                    _phase += 2 * Math.PI * 1000.0 / ProgramAudioMix.SampleRate;
+                    if (_phase > Math.PI * 2)
+                        _phase -= Math.PI * 2;
+                    samples[i * 2] = sample;
+                    samples[i * 2 + 1] = sample;
+                }
+
+                _audio.SubmitPcm("programme", samples);
+                return _audio.RenderMaster(frames);
+            }
+        }
     }
 
     private static void AssertNoKey(BroadcastSnapshot snapshot, BroadcastSession session)
@@ -345,6 +536,7 @@ public class LiveTransportTests
 
         public int Port { get; }
         public string Key { get; }
+        public string MediaPath => _output;
 
         public static async Task<LocalRtmpSink> StartAsync(string key)
         {

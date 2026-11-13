@@ -44,7 +44,7 @@
                         <TextBlock Text="Destinations externes" Foreground="#FFFFFF" FontWeight="Bold" VerticalAlignment="Center"/>
                     </DockPanel>
                     <TextBlock TextWrapping="Wrap" Foreground="#8B949E" FontSize="11" Margin="0,0,0,8"
-                               Text="Chaque adresse externe reçoit séparément l'image du programme au moment où cette destination démarre, puis cette image est répétée. EECC TV continue de lire l'image courante. Une panne externe n'arrête pas EECC TV. Le mixage audio n'est pas encore relié : la piste externe est silencieuse. YouTube, Facebook et TikTok ne sont pas déclarés compatibles sans essai chez le fournisseur. TikTok exige en plus un accès Live et une clé délivrée par TikTok."/>
+                               Text="Chaque adresse externe reçoit en continu l'image courante du programme, y compris après un changement de scène, et le bus audio master. Une panne externe n'arrête pas EECC TV. Tant qu'aucune source n'écrit d'échantillons, ce bus est silencieux. YouTube, Facebook et TikTok ne sont pas déclarés compatibles sans essai chez le fournisseur. TikTok exige en plus un accès Live et une clé délivrée par TikTok."/>
                     <StackPanel x:Name="PanelExternals"/>
                     <CheckBox x:Name="ChkPublic" Foreground="#F0F6FC" Margin="0,8,0,0"
                               Content="J'autorise une adresse hors du réseau local. Les tests de cette version ne contactent pas ces services."/>

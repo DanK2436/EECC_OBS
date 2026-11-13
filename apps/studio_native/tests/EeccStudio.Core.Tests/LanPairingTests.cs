@@ -144,13 +144,15 @@ public class LanPairingTests
         Assert.Equal(syntheticFrame, delivered);
         Assert.Equal(syntheticFrame, server.GetCameraFrame("Cam-1"));
 
-        await SendText(socket, """
-            {"type":"telemetry","payload":{"battery_level":42,"is_charging":true,"audio_level":0.25,"fps":12,"bitrate_kbps":800}}
-            """);
+        await SendText(socket, "{\"type\":\"telemetry\",\"payload\":{\"battery_level\":42,\"is_charging\":true,\"audio_level\":0.25,\"fps\":12,\"bitrate_kbps\":800}}");
         var telemetry = await WaitForPhoneAsync(() =>
         {
             var phones = server.ConnectedCameras;
-            return phones.TryGetValue("Cam-1", out var phone) && phone.BatteryLevel == 42 ? phone : null;
+            if (!phones.TryGetValue("Cam-1", out var phone) || phone.LastTelemetryTime == DateTimeOffset.UnixEpoch)
+                return null;
+            return phone.BatteryLevel == 42 && phone.IsCharging && phone.Fps == 12 && phone.BitrateKbps == 800
+                ? phone
+                : null;
         });
         Assert.True(telemetry.IsCharging);
         Assert.Equal(0.25, telemetry.AudioLevel, 2);

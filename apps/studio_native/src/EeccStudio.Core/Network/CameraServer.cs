@@ -783,17 +783,25 @@ public sealed class CameraServer : IDisposable
     {
         if (!root.TryGetProperty("payload", out var payload) || payload.ValueKind != JsonValueKind.Object)
             return;
-        if (TryReadInt(payload, out var battery, "batteryLevel", "battery_level"))
-            client.BatteryLevel = battery;
-        if (TryReadBool(payload, out var charging, "isCharging", "is_charging"))
-            client.IsCharging = charging;
-        if (TryReadInt(payload, out var fps, "fps"))
-            client.Fps = fps;
-        if (TryReadInt(payload, out var bitrate, "currentBitrateKbps", "bitrate_kbps"))
-            client.BitrateKbps = bitrate;
-        if (TryReadDouble(payload, out var audio, "audioLevel", "audio_level", "audioLevelNormalized"))
-            client.AudioLevel = Math.Clamp(audio, 0, 1);
-        client.LastTelemetryTime = Clock();
+        var hasBattery = TryReadInt(payload, out var battery, "batteryLevel", "battery_level");
+        var hasCharging = TryReadBool(payload, out var charging, "isCharging", "is_charging");
+        var hasFps = TryReadInt(payload, out var fps, "fps");
+        var hasBitrate = TryReadInt(payload, out var bitrate, "currentBitrateKbps", "bitrate_kbps");
+        var hasAudio = TryReadDouble(payload, out var audio, "audioLevel", "audio_level", "audioLevelNormalized");
+        lock (_gate)
+        {
+            if (hasBattery)
+                client.BatteryLevel = battery;
+            if (hasCharging)
+                client.IsCharging = charging;
+            if (hasFps)
+                client.Fps = fps;
+            if (hasBitrate)
+                client.BitrateKbps = bitrate;
+            if (hasAudio)
+                client.AudioLevel = Math.Clamp(audio, 0, 1);
+            client.LastTelemetryTime = Clock();
+        }
     }
 
     private async Task HandleHttpAsync(Stream stream, string method, string path, CancellationToken cancellationToken)

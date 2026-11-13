@@ -69,6 +69,7 @@ public sealed class LanMediaSession : IDisposable
     public int FrameHeight { get; private set; }
     public bool PlaybackMuted => _muted;
     public event Action<string>? StatusChanged;
+    public event Action<short[]>? PcmDecoded;
     public event Action<DecodedVideoFrame>? VideoFrameDecoded;
     public event Action<string>? LocalIceCandidateJson;
 
@@ -193,6 +194,7 @@ public sealed class LanMediaSession : IDisposable
             var pcm = _audioEncoder.DecodeAudio(frame.EncodedAudio, frame.AudioFormat);
             if (pcm == null || pcm.Length == 0) return;
             AudioPackets++;
+            PcmDecoded?.Invoke(pcm);
             if (_muted) return;
             Play(pcm, frame.AudioFormat);
         }

@@ -17,7 +17,7 @@
 
         <!-- En-tête -->
         <StackPanel Grid.Row="0" Margin="0,0,0,16" HorizontalAlignment="Center">
-            <TextBlock Text="APPAIRER EECC CAMÉRA" FontWeight="Black" FontSize="18" Foreground="#FFFFFF" HorizontalAlignment="Center" CharacterSpacing="100"/>
+            <TextBlock Text="APPAIRER EECC CAMÉRA" FontWeight="Black" FontSize="18" Foreground="#FFFFFF" HorizontalAlignment="Center"/>
             <TextBlock Text="Église Évangélique les Cohéritiers du Christ" FontSize="12" Foreground="#9CA3AF" HorizontalAlignment="Center" Margin="0,4,0,0"/>
             
             <Border Background="#16A34A" CornerRadius="12" Padding="10,4" Margin="0,10,0,0" HorizontalAlignment="Center">

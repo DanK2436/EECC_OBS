@@ -44,7 +44,7 @@
                     </Border>
                     
                     <StackPanel VerticalAlignment="Center">
-                        <TextBlock Text="EECC STUDIO" FontWeight="Black" FontSize="14" Foreground="#FFFFFF" CharacterSpacing="120"/>
+                        <TextBlock Text="EECC STUDIO" FontWeight="Black" FontSize="14" Foreground="#FFFFFF"/>
                         <TextBlock Text="Église Évangélique les Cohéritiers du Christ" FontSize="9" Foreground="#8B949E"/>
                     </StackPanel>
 
@@ -147,12 +147,12 @@
                     
                     <!-- Badge Direct dynamique -->
                     <Border x:Name="BadgeLiveIndicator" Background="#21262D" CornerRadius="4" Padding="8,4" Margin="0,0,8,0">
-                        <TextBlock x:Name="TxtLiveBadge" Text="HORS LIGNE" Foreground="#8B949E" FontSize="11" FontWeight="Black" CharacterSpacing="100"/>
+                        <TextBlock x:Name="TxtLiveBadge" Text="HORS LIGNE" Foreground="#8B949E" FontSize="11" FontWeight="Black"/>
                     </Border>
 
                     <!-- Badge REC dynamique -->
                     <Border x:Name="BadgeRecIndicator" Background="#21262D" CornerRadius="4" Padding="8,4">
-                        <TextBlock x:Name="TxtRecBadge" Text="REC : OFF" Foreground="#8B949E" FontSize="11" FontWeight="Black" CharacterSpacing="100"/>
+                        <TextBlock x:Name="TxtRecBadge" Text="REC : OFF" Foreground="#8B949E" FontSize="11" FontWeight="Black"/>
                     </Border>
                 </StackPanel>
             </DockPanel>

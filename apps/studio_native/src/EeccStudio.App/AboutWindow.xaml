@@ -19,7 +19,7 @@
             <Border Width="56" Height="56" CornerRadius="12" Background="#161B22" BorderBrush="#30363D" BorderThickness="2" HorizontalAlignment="Center" Margin="0,0,0,10">
                 <TextBlock Text="✦" Foreground="#FFFFFF" FontSize="28" HorizontalAlignment="Center" VerticalAlignment="Center"/>
             </Border>
-            <TextBlock Text="EECC STUDIO" FontWeight="Black" FontSize="20" Foreground="#FFFFFF" HorizontalAlignment="Center" CharacterSpacing="120"/>
+            <TextBlock Text="EECC STUDIO" FontWeight="Black" FontSize="20" Foreground="#FFFFFF" HorizontalAlignment="Center"/>
             <TextBlock Text="Version 1.0.0 (Build Broadcast Native)" FontSize="12" Foreground="#16A34A" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,2,0,0"/>
             <TextBlock Text="Régie de production audiovisuelle officielle" FontSize="12" Foreground="#9CA3AF" HorizontalAlignment="Center" Margin="0,4,0,0"/>
         </StackPanel>

@@ -16,7 +16,7 @@
 
         <!-- Titre -->
         <DockPanel Grid.Row="0" Margin="0,0,0,16">
-            <TextBlock Text="PARAMÈTRES EECC STUDIO" FontWeight="Black" FontSize="16" Foreground="#FFFFFF" CharacterSpacing="100"/>
+            <TextBlock Text="PARAMÈTRES EECC STUDIO" FontWeight="Black" FontSize="16" Foreground="#FFFFFF"/>
             <TextBlock Text="Régie Broadcast & Réseau Culte" Foreground="#8B949E" FontSize="12" HorizontalAlignment="Right" VerticalAlignment="Center"/>
         </DockPanel>
 

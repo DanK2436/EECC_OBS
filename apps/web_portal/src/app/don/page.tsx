@@ -8,22 +8,32 @@ import { Heart, ShieldCheck, Smartphone, CreditCard } from "lucide-react";
 export default function DonationPage() {
   const [selectedAmount, setSelectedAmount] = useState<number>(20);
   const [customAmount, setCustomAmount] = useState<string>("");
-  const [paymentMethod, setPaymentMethod] = useState<string>("mobile_money");
+  const [provider, setProvider] = useState<string>("AIRTEL");
   const [donorName, setDonorName] = useState<string>("");
   const [donorPhone, setDonorPhone] = useState<string>("");
   const [donorEmail, setDonorEmail] = useState<string>("");
   const [notice, setNotice] = useState<string>("");
 
   const predefinedAmounts = [5, 10, 20, 50, 100, 200];
-
-  const handleDonate = (e: React.FormEvent) => {
-    e.preventDefault();
-    setNotice(
-      "Aucun paiement n'a été envoyé. MaishaPay n'est pas branché : il manque les clés sandbox serveur et un callback vérifié. Ce formulaire n'encaisse rien.",
-    );
-  };
-
   const finalAmount = customAmount ? parseFloat(customAmount) || 0 : selectedAmount;
+
+  const handleDonate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setNotice("Demande envoyée au serveur. Aucun paiement n'est confirmé tant que le callback signé n'a pas vérifié le montant.");
+    const response = await fetch("/api/don", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        amount: finalAmount,
+        provider,
+        wallet: donorPhone,
+        name: donorName,
+        email: donorEmail,
+      }),
+    });
+    const data = await response.json();
+    setNotice(typeof data.message === "string" ? data.message : "Le serveur n'a pas confirmé de paiement.");
+  };
 
   return (
     <>
@@ -85,41 +95,27 @@ export default function DonationPage() {
                 {/* 2. Mode de paiement */}
                 <div>
                   <label className="block text-sm font-bold text-textMain mb-3">
-                    2. Sélectionnez le mode de paiement :
+                    2. Opérateur Mobile Money :
                   </label>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <button
-                      type="button"
-                      onClick={() => setPaymentMethod("mobile_money")}
-                      className={`p-4 rounded-2xl border text-left flex items-start space-x-3 transition-all ${
-                        paymentMethod === "mobile_money"
-                          ? "border-primary bg-primary/5 ring-2 ring-primary/20"
-                          : "border-slate-200 bg-white"
-                      }`}
-                    >
-                      <Smartphone className="w-6 h-6 text-primary flex-shrink-0 mt-0.5" />
-                      <div>
-                        <strong className="block text-sm font-bold text-textMain">Mobile Money (RDC)</strong>
-                        <span className="text-xs text-slate">Airtel Money, M-Pesa, Orange Money</span>
-                      </div>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setPaymentMethod("card")}
-                      className={`p-4 rounded-2xl border text-left flex items-start space-x-3 transition-all ${
-                        paymentMethod === "card"
-                          ? "border-primary bg-primary/5 ring-2 ring-primary/20"
-                          : "border-slate-200 bg-white"
-                      }`}
-                    >
-                      <CreditCard className="w-6 h-6 text-primary flex-shrink-0 mt-0.5" />
-                      <div>
-                        <strong className="block text-sm font-bold text-textMain">Carte Bancaire</strong>
-                        <span className="text-xs text-slate">Visa, Mastercard internationale</span>
-                      </div>
-                    </button>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    {["AIRTEL", "MPESA", "ORANGE"].map((item) => (
+                      <button
+                        key={item}
+                        type="button"
+                        onClick={() => setProvider(item)}
+                        className={`p-4 rounded-2xl border text-left transition-all ${
+                          provider === item ? "border-primary bg-primary/5 ring-2 ring-primary/20" : "border-slate-200 bg-white"
+                        }`}
+                      >
+                        <Smartphone className="w-5 h-5 text-primary mb-2" />
+                        <strong className="block text-sm font-bold text-textMain">{item}</strong>
+                      </button>
+                    ))}
                   </div>
+                  <p className="mt-3 text-xs text-slate-500 flex items-center gap-2">
+                    <CreditCard className="w-4 h-4" />
+                    La carte bancaire n'est pas couverte par l'API REST Mobile Money.
+                  </p>
                 </div>
 
                 {/* 3. Coordonnées */}
@@ -168,14 +164,14 @@ export default function DonationPage() {
                     className="w-full py-4 rounded-xl font-bold text-white bg-primary hover:bg-primary-dark transition-all shadow-lg shadow-primary/25 disabled:opacity-50 text-base flex items-center justify-center"
                   >
                     <Heart className="w-5 h-5 mr-2 fill-current" />
-                    {`Le paiement de ${finalAmount} $ n'est pas disponible`}
+                    {`Demander ${finalAmount} $ au serveur`}
                   </button>
                   {notice ? (
                     <p className="mt-4 text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-xl p-3">{notice}</p>
                   ) : null}
                   <div className="flex items-center justify-center space-x-2 text-xs text-slate-400 mt-4">
                     <ShieldCheck className="w-4 h-4 text-slate-400" />
-                    <span>MaishaPay n'est pas relié. Aucun débit n'est lancé depuis cette page.</span>
+                    <span>Le navigateur ne confirme jamais le paiement. Seul un callback signé, avec le même montant, peut le faire.</span>
                   </div>
                 </div>
               </form>

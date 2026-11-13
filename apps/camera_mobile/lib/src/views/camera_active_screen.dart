@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:camera/camera.dart';
 import '../constants/colors.dart';
 import '../models/session_config.dart';
@@ -50,12 +51,24 @@ class _CameraActiveScreenState extends State<CameraActiveScreen> with WidgetsBin
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    // Verrouille l'application en mode horizontal (paysage 16:9) pour le broadcast
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.landscapeRight,
+      DeviceOrientation.landscapeLeft,
+    ]);
     _initHardwareCamera();
     _initStudioConnection();
   }
 
   @override
   void dispose() {
+    // Restaure toutes les orientations lors de la sortie
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.portraitDown,
+      DeviceOrientation.landscapeRight,
+      DeviceOrientation.landscapeLeft,
+    ]);
     _stopContinuousStreaming();
     WidgetsBinding.instance.removeObserver(this);
     _cameraController?.dispose();
@@ -99,15 +112,18 @@ class _CameraActiveScreenState extends State<CameraActiveScreen> with WidgetsBin
 
     final controller = CameraController(
       description,
-      ResolutionPreset.high, // 1080p broadcast
+      ResolutionPreset.medium, // 720p 16:9 HD broadcast : ultra basse latence réseau (<80ms)
       enableAudio: !_isMuted,
-      imageFormatGroup: ImageFormatGroup.yuv420,
+      imageFormatGroup: ImageFormatGroup.jpeg,
     );
 
     _cameraController = controller;
 
     try {
       await controller.initialize();
+      try {
+        await controller.lockCaptureOrientation(DeviceOrientation.landscapeRight);
+      } catch (_) {}
       _minZoom = await controller.getMinZoomLevel();
       _maxZoom = (await controller.getMaxZoomLevel()).clamp(1.0, 5.0);
 
@@ -209,7 +225,7 @@ class _CameraActiveScreenState extends State<CameraActiveScreen> with WidgetsBin
           _isCapturing = false;
         }
       }
-      await Future.delayed(const Duration(milliseconds: 66)); // ~15 FPS
+      await Future.delayed(const Duration(milliseconds: 33)); // ~30 FPS fluide
     }
   }
 
@@ -277,8 +293,14 @@ class _CameraActiveScreenState extends State<CameraActiveScreen> with WidgetsBin
                 child: FittedBox(
                   fit: BoxFit.cover,
                   child: SizedBox(
-                    width: _cameraController!.value.previewSize?.height ?? 1080,
-                    height: _cameraController!.value.previewSize?.width ?? 1920,
+                    width: (_cameraController!.value.previewSize?.width ?? 1280) >
+                            (_cameraController!.value.previewSize?.height ?? 720)
+                        ? (_cameraController!.value.previewSize?.width ?? 1280)
+                        : (_cameraController!.value.previewSize?.height ?? 1280),
+                    height: (_cameraController!.value.previewSize?.width ?? 1280) >
+                            (_cameraController!.value.previewSize?.height ?? 720)
+                        ? (_cameraController!.value.previewSize?.height ?? 720)
+                        : (_cameraController!.value.previewSize?.width ?? 720),
                     child: CameraPreview(_cameraController!),
                   ),
                 ),

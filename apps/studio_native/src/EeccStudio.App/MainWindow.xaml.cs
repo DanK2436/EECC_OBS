@@ -33,6 +33,9 @@ namespace EeccStudio
         private DateTime _fpsStamp = DateTime.UtcNow;
         private TimeSpan _prevCpu = TimeSpan.Zero;
         private DateTime _prevCpuAt = DateTime.UtcNow;
+        private readonly object _frameLock = new();
+        private readonly Dictionary<string, byte[]> _pendingFrames = new(StringComparer.OrdinalIgnoreCase);
+        private bool _renderScheduled;
         private static readonly int[] DemoMeterHeights = { 70, 66, 78, 74, 48, 50, 64, 64, 52, 50 };
 
         public MainWindow()
@@ -272,33 +275,45 @@ namespace EeccStudio
 
         private void OnCameraFrameReceived(string slot, byte[] jpegBytes)
         {
-            Dispatcher.Invoke(() =>
+            _framesThisWindow++;
+            lock (_frameLock)
             {
-                _framesThisWindow++;
-                BitmapImage? bitmap;
-                try
-                {
-                    bitmap = new BitmapImage();
-                    using var ms = new MemoryStream(jpegBytes);
-                    bitmap.BeginInit();
-                    bitmap.CacheOption = BitmapCacheOption.OnLoad;
-                    bitmap.StreamSource = ms;
-                    bitmap.EndInit();
-                    bitmap.Freeze();
-                }
-                catch
-                {
+                _pendingFrames[slot] = jpegBytes;
+                if (_renderScheduled)
                     return;
+                _renderScheduled = true;
+            }
+
+            Dispatcher.BeginInvoke(DispatcherPriority.Render, () =>
+            {
+                Dictionary<string, byte[]> batch;
+                lock (_frameLock)
+                {
+                    batch = new Dictionary<string, byte[]>(_pendingFrames, StringComparer.OrdinalIgnoreCase);
+                    _pendingFrames.Clear();
+                    _renderScheduled = false;
                 }
 
-                if (slot == _selectedPreviewSlot)
-                    ShowJpeg(ImgPreviewVideo, PanelPreviewSlate, bitmap!);
-
-                if (slot == _selectedProgramSlot)
+                foreach (var pair in batch)
                 {
-                    ShowJpeg(ImgProgramVideo, PanelProgramSlate, bitmap);
-                    _cameraServer.ActiveProgramFrameBytes = jpegBytes;
-                    TxtProgramLiveFooter.Text = $"Image reçue · {slot}";
+                    var streamSlot = pair.Key;
+                    var bytes = pair.Value;
+
+                    if (streamSlot != _selectedPreviewSlot && streamSlot != _selectedProgramSlot)
+                        continue;
+
+                    if (!TryDecodeJpeg(bytes, out var bitmap) || bitmap == null)
+                        continue;
+
+                    if (streamSlot == _selectedPreviewSlot)
+                        ShowJpeg(ImgPreviewVideo, PanelPreviewSlate, bitmap);
+
+                    if (streamSlot == _selectedProgramSlot)
+                    {
+                        ShowJpeg(ImgProgramVideo, PanelProgramSlate, bitmap);
+                        _cameraServer.ActiveProgramFrameBytes = bytes;
+                        TxtProgramLiveFooter.Text = $"Image reçue · {streamSlot}";
+                    }
                 }
             });
         }
@@ -849,23 +864,38 @@ namespace EeccStudio
             }
         }
 
-        private static void ShowJpeg(System.Windows.Controls.Image target, System.Windows.Controls.Grid slate, BitmapImage bitmap)
+        private static void ShowJpeg(System.Windows.Controls.Image target, System.Windows.Controls.Grid slate, BitmapSource bitmap)
         {
             target.Source = bitmap;
             slate.Visibility = Visibility.Collapsed;
         }
 
-        private static bool TryDecodeJpeg(byte[] jpeg, out BitmapImage? bitmap)
+        private static bool TryDecodeJpeg(byte[] jpeg, out BitmapSource? bitmap)
         {
             try
             {
-                bitmap = new BitmapImage();
+                var bi = new BitmapImage();
                 using var ms = new MemoryStream(jpeg);
-                bitmap.BeginInit();
-                bitmap.CacheOption = BitmapCacheOption.OnLoad;
-                bitmap.StreamSource = ms;
-                bitmap.EndInit();
-                bitmap.Freeze();
+                bi.BeginInit();
+                bi.CacheOption = BitmapCacheOption.OnLoad;
+                bi.StreamSource = ms;
+                bi.EndInit();
+                bi.Freeze();
+
+                if (bi.PixelHeight > bi.PixelWidth)
+                {
+                    var rotated = new TransformedBitmap();
+                    rotated.BeginInit();
+                    rotated.Source = bi;
+                    rotated.Transform = new RotateTransform(90);
+                    rotated.EndInit();
+                    rotated.Freeze();
+                    bitmap = rotated;
+                }
+                else
+                {
+                    bitmap = bi;
+                }
                 return true;
             }
             catch

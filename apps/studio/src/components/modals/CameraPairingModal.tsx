@@ -1,31 +1,13 @@
 import React from "react";
-import { QRCodeSVG } from "qrcode.react";
 import { X, Smartphone } from "lucide-react";
 
 interface CameraPairingModalProps {
   isOpen: boolean;
   onClose: () => void;
-  localIp: string;
-  port: number;
 }
 
-export const CameraPairingModal: React.FC<CameraPairingModalProps> = ({
-  isOpen,
-  onClose,
-  localIp,
-  port,
-}) => {
+export const CameraPairingModal: React.FC<CameraPairingModalProps> = ({ isOpen, onClose }) => {
   if (!isOpen) return null;
-
-  const addressKnown = Boolean(localIp) && !/non détect/i.test(localIp);
-  const pairingPayload = JSON.stringify({
-    studio_ip: addressKnown ? localIp : "",
-    port: port,
-    token: `sess_${Date.now()}`,
-    stream_name: "Caméra Smartphone 1",
-    codec: "h264",
-    bitrate_kbps: 4500,
-  });
 
   return (
     <div className="sheet-back">
@@ -38,26 +20,15 @@ export const CameraPairingModal: React.FC<CameraPairingModalProps> = ({
             <X size={14} />
           </button>
         </header>
-        <div className="sheet-body" style={{ textAlign: "center" }}>
-          <div style={{ marginBottom: 8 }}>
-            <span className={`sheet-badge ${addressKnown ? "" : "warn"}`}>
-              {addressKnown ? `${localIp}:${port}` : "Adresse non détectée"}
-            </span>
-          </div>
-          <div className="qr-plate">
-            <QRCodeSVG value={pairingPayload} size={180} level="H" fgColor="#111111" bgColor="#FFFFFF" includeMargin />
-          </div>
-          <p style={{ color: "#c5ccd3", margin: "10px auto 0", maxWidth: 320, lineHeight: 1.4 }}>
-            Ouvrez EECC Caméra et scannez ce code. Le QR reste clair pour rester lisible. Aucune caméra n'est connectée tant qu'un appareil ne répond pas.
+        <div className="sheet-body">
+          <p>
+            Cette fenêtre Electron n’écoute pas le réseau et n’affiche pas de QR. L’appairage des téléphones
+            est dans EECC Studio natif (Windows) : « Connecter un téléphone ».
           </p>
-          <div className="sheet-kv" style={{ marginTop: 12 }}>
-            <span>Protocole</span>
-            <b>SRT / WebRTC LAN</b>
-          </div>
-          <div className="sheet-kv">
-            <span>État</span>
-            <span className="sheet-badge">En attente</span>
-          </div>
+          <p style={{ marginTop: 12 }}>
+            Le serveur y limite les téléphones à 15, en plus des caméras physiques. Aucune adresse ni aucun
+            jeton n’est inventé ici.
+          </p>
         </div>
         <footer className="sheet-foot">
           <button type="button" className="sheet-btn" onClick={onClose}>Fermer</button>

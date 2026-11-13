@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import '../constants/colors.dart';
 import '../models/session_config.dart';
+import '../pairing/studio_link_phase.dart';
 import '../services/studio_connection_service.dart';
 
 /// Écran de captation vidéo 100% MATÉRIEL et FONCTIONNEL
@@ -19,13 +20,15 @@ class CameraActiveScreen extends StatefulWidget {
 class _CameraActiveScreenState extends State<CameraActiveScreen> with WidgetsBindingObserver {
   late StudioConnectionService _connectionService;
   TallyState _tally = TallyState.standby;
+  StudioLinkPhase _phase = StudioLinkPhase.disconnected;
   bool _isConnected = false;
   bool _isStreamingFrames = false;
   bool _isCapturing = false;
-  String _activeSlotName = 'Cam-1';
-  int _activeSlotNumber = 1;
+  String _activeSlotName = '';
+  int _activeSlotNumber = 0;
   int _measuredFps = 0;
   int _measuredBitrate = 0;
+  String? _linkMessage;
 
   // Contrôleur matériel de la caméra
   CameraController? _cameraController;
@@ -161,6 +164,18 @@ class _CameraActiveScreenState extends State<CameraActiveScreen> with WidgetsBin
           _toggleTorch();
         }
       },
+      onRejected: (code, message) {
+        if (!mounted) return;
+        setState(() => _linkMessage = message);
+      },
+      onStatus: (message) {
+        if (!mounted) return;
+        setState(() => _linkMessage = message);
+      },
+      onPhaseChanged: (phase) {
+        if (!mounted) return;
+        setState(() => _phase = phase);
+      },
     );
     _connectionService.connect();
   }
@@ -219,29 +234,22 @@ class _CameraActiveScreenState extends State<CameraActiveScreen> with WidgetsBin
   }
 
   Color _getTallyColor() {
-    if (!_isConnected) return EeccCamColors.tallyStandby;
+    if (_phase != StudioLinkPhase.connected) return EeccCamColors.tallyStandby;
     switch (_tally) {
       case TallyState.program:
-        return EeccCamColors.tallyProgram; // Rouge solide
+        return EeccCamColors.tallyProgram;
       case TallyState.preview:
-        return EeccCamColors.tallyPreview; // Vert solide
+        return EeccCamColors.tallyPreview;
       case TallyState.standby:
-        return EeccCamColors.tallyStandby; // Gris solide
+        return EeccCamColors.tallyStandby;
     }
   }
 
   String _getTallyLabel() {
-    if (!_isConnected) {
-      return '🔴 HORS LIGNE (RÉGIE INTROUVABLE)';
-    }
-    switch (_tally) {
-      case TallyState.program:
-        return '● À L\'ANTENNE : $_activeSlotName';
-      case TallyState.preview:
-        return '○ EN APERÇU : $_activeSlotName';
-      case TallyState.standby:
-        return 'CONNECTÉ : $_activeSlotName (STANDBY)';
-    }
+    final video = StudioLinkLabels.video(_phase, _tally);
+    if (video == null) return StudioLinkLabels.badge(_phase);
+    final slot = _activeSlotName.isEmpty ? '' : ' · $_activeSlotName';
+    return '${StudioLinkLabels.badge(_phase)} · $video$slot';
   }
 
   @override
@@ -335,14 +343,15 @@ class _CameraActiveScreenState extends State<CameraActiveScreen> with WidgetsBin
                       ),
                     ),
                     const SizedBox(width: 12),
-                    Text(
-                      widget.config.streamName,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
+                    if (_phase == StudioLinkPhase.connected && _activeSlotName.isNotEmpty)
+                      Text(
+                        '${widget.config.displayName} · n°$_activeSlotNumber',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
-                    ),
                   ],
                 ),
               ),
@@ -378,6 +387,7 @@ class _CameraActiveScreenState extends State<CameraActiveScreen> with WidgetsBin
                     isActive: !_isMuted,
                     onTap: () {
                       setState(() => _isMuted = !_isMuted);
+                      if (_isMuted) _connectionService.updateAudioLevel(0);
                     },
                   ),
                   const SizedBox(height: 16),
@@ -406,24 +416,39 @@ class _CameraActiveScreenState extends State<CameraActiveScreen> with WidgetsBin
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Row(
-                      children: [
-                        const Icon(Icons.wifi, color: Colors.white, size: 18),
-                        const SizedBox(width: 6),
-                        Text(
-                          _isConnected ? '$_activeSlotName (${widget.config.studioIp})' : '🔴 Régie Déconnectée',
-                          style: TextStyle(
-                            color: _isConnected ? Colors.white : Colors.redAccent,
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
+                    Expanded(
+                      child: Row(
+                        children: [
+                          Icon(
+                            _phase == StudioLinkPhase.connected ? Icons.link : Icons.link_off,
+                            color: Colors.white,
+                            size: 18,
                           ),
-                        ),
-                      ],
+                          const SizedBox(width: 6),
+                          Flexible(
+                            child: Text(
+                              _phase == StudioLinkPhase.connected
+                                  ? '${StudioLinkLabels.connected}${_activeSlotName.isEmpty ? '' : ' · $_activeSlotName'}'
+                                  : '${StudioLinkLabels.badge(_phase)}${_linkMessage == null ? '' : ' — $_linkMessage'}',
+                              style: TextStyle(
+                                color: _phase == StudioLinkPhase.connected ? Colors.white : Colors.white70,
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                          if (_phase != StudioLinkPhase.connected && _connectionService.canReconnect)
+                            TextButton(
+                              onPressed: () => _connectionService.reconnect(),
+                              child: const Text('Reconnecter'),
+                            ),
+                        ],
+                      ),
                     ),
                     Row(
                       children: [
                         Text(
-                          _measuredFps > 0 ? '$_measuredFps FPS' : '${widget.config.fps} FPS',
+                          _measuredFps > 0 ? '$_measuredFps FPS' : 'FPS non mesuré',
                           style: const TextStyle(
                             color: EeccCamColors.telemetryGauge,
                             fontSize: 12,
@@ -432,7 +457,7 @@ class _CameraActiveScreenState extends State<CameraActiveScreen> with WidgetsBin
                         ),
                         const SizedBox(width: 14),
                         Text(
-                          _measuredBitrate > 0 ? '$_measuredBitrate kbps' : '${widget.config.bitrateKbps} kbps',
+                          _measuredBitrate > 0 ? '$_measuredBitrate kbps' : 'débit non mesuré',
                           style: const TextStyle(
                             color: EeccCamColors.telemetryGauge,
                             fontSize: 12,

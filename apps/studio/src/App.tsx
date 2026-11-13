@@ -357,7 +357,7 @@ export default function App() {
               )}
             </div>
           )}
-          <CameraPairingModal isOpen={isPairingOpen} onClose={() => setIsPairingOpen(false)} localIp="non détectée" port={8554} />
+          <CameraPairingModal isOpen={isPairingOpen} onClose={() => setIsPairingOpen(false)} />
           <TreasuryWithdrawalModal isOpen={isTreasuryOpen} onClose={() => setIsTreasuryOpen(false)} />
           <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
           <PostProductionModal isOpen={isPostProdOpen} onClose={() => setIsPostProdOpen(false)} />

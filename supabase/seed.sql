@@ -32,7 +32,7 @@ INSERT INTO public.churches (
     schedules
 ) VALUES (
     'a0000000-0000-0000-0000-000000000001',
-    'Église Évangélique du Congo Central (EECC) — Siège Principal',
+    'Église Évangélique les Cohéritiers du Christ (EECC) — Siège Principal',
     'Communauté vivante d''adoration, d''enseignement et d''impact.',
     'Avenue de la Paix, Quartier Résidentiel',
     'Matadi',

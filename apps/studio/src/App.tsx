@@ -68,6 +68,24 @@ export default function App() {
         { id: "src-back-cam", name: "Arrière-plan Flou", type: "physical_camera", visible: true, locked: true },
       ],
     },
+    {
+      id: "sc-annonces",
+      name: "Annonces & Dîmes (MaishaPay)",
+      sources: [
+        { id: "src-maisha", name: "QR Code & Dons MaishaPay / M-Pesa", type: "presentation_slide", visible: true, locked: true },
+        { id: "src-ann-cam", name: "Caméra Présentateur", type: "physical_camera", visible: true, locked: true },
+        { id: "src-ann-mus", name: "Fond Musical Doux", type: "audio_input", visible: true, locked: false },
+      ],
+    },
+    {
+      id: "sc-blessing",
+      name: "Sainte-Cène & Bénédiction",
+      sources: [
+        { id: "src-communion", name: "Caméra Table de Communion", type: "physical_camera", visible: true, locked: true },
+        { id: "src-pastor-bless", name: "Micro Pasteur Principal", type: "audio_input", visible: true, locked: true },
+        { id: "src-closing-choir", name: "Chœur Assemblée", type: "audio_input", visible: true, locked: true },
+      ],
+    },
   ]);
 
   const [previewSceneId, setPreviewSceneId] = useState<SceneId>("sc-louange");

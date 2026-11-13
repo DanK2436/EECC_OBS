@@ -51,8 +51,8 @@ export const CameraPairingModal: React.FC<CameraPairingModalProps> = ({
           </div>
 
           {/* QR Code */}
-          <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 inline-block shadow-inner mb-4">
-            <QRCodeSVG value={pairingPayload} size={200} level="H" />
+          <div className="bg-white p-4 rounded-2xl border-2 border-slate-300 inline-block shadow-lg mb-4">
+            <QRCodeSVG value={pairingPayload} size={220} level="H" fgColor="#000000" bgColor="#FFFFFF" includeMargin={true} />
           </div>
 
           <p className="text-xs text-slate-600 max-w-xs mx-auto leading-relaxed">

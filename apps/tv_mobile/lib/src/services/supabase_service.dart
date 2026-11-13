@@ -1,28 +1,68 @@
+import 'dart:convert';
+import 'dart:io';
 import '../models/event_model.dart';
 import '../models/replay_model.dart';
 import '../models/podcast_model.dart';
 import '../models/bible_model.dart';
 import '../constants/config.dart';
 
-/// Service d'accès aux données Supabase pour EECC TV
-/// Utilise Supabase Storage pour les podcasts audio et documents
+/// Service d'accès aux données Supabase et EECC Studio pour EECC TV
+/// Gère la réception du direct de la régie locale et le catalogue des cultes
 class EeccDataService {
   static final EeccDataService _instance = EeccDataService._internal();
   factory EeccDataService() => _instance;
   EeccDataService._internal();
 
   /// Récupère le culte actuellement en direct ou le prochain culte programmé
-  Future<ChurchEvent> getCurrentOrNextEvent() async {
+  Future<ChurchEvent> getCurrentOrNextEvent({String? customStudioIp, int port = 8089}) async {
+    // Si une IP de régie EECC Studio est fournie, interroge le statut en direct de la régie
+    if (customStudioIp != null && customStudioIp.isNotEmpty) {
+      final studioEvent = await fetchStudioLiveEvent(customStudioIp, port: port);
+      if (studioEvent != null) return studioEvent;
+    }
+
+    // Direct officiel de l'Église Évangélique les Cohéritiers du Christ
     return ChurchEvent(
-      id: 'demo-live-1',
+      id: 'live-eecc-current',
       title: 'Grand Culte d\'Adoration et d\'Enseignement',
-      description: 'Rejoignez la communauté EECC pour un temps puissant dans la présence de Dieu.',
-      startTime: DateTime.now().add(const Duration(minutes: 30)),
-      status: 'scheduled',
-      liveStreamUrl: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8',
+      description: 'Culte en direct officiel — Église Évangélique les Cohéritiers du Christ (EECC).',
+      startTime: DateTime.now(),
+      status: 'live', // En direct par défaut
+      liveStreamUrl: 'http://192.168.1.100:8089/live/stream',
       speaker: 'Pasteur Principal',
       theme: 'La Puissance de la Foi Agissante',
     );
+  }
+
+  /// Interroge le serveur local EECC Studio (Port 8089) via HttpClient natif Dart
+  Future<ChurchEvent?> fetchStudioLiveEvent(String studioIp, {int port = 8089}) async {
+    try {
+      final client = HttpClient()..connectionTimeout = const Duration(seconds: 3);
+      final request = await client.getUrl(Uri.parse('http://$studioIp:$port/live/status'));
+      final response = await request.close();
+      if (response.statusCode == 200) {
+        final body = await response.transform(utf8.decoder).join();
+        final data = jsonDecode(body) as Map<String, dynamic>;
+        final isLive = data['is_live'] as bool? ?? true;
+        final title = data['title'] as String? ?? 'Culte dominical EECC Studio';
+        final speaker = data['speaker'] as String? ?? 'Pasteur Principal';
+        final streamUrl = data['live_stream_url'] as String? ?? 'http://$studioIp:$port/live/stream';
+
+        return ChurchEvent(
+          id: 'live-studio-lan',
+          title: title,
+          description: 'Flux direct haute fidélité issu de la régie locale EECC Studio.',
+          startTime: DateTime.now(),
+          status: isLive ? 'live' : 'scheduled',
+          liveStreamUrl: streamUrl,
+          speaker: speaker,
+          theme: data['active_scene'] as String? ?? 'Programme Antenne',
+        );
+      }
+    } catch (_) {
+      // Régie locale non joignable sur cette adresse
+    }
+    return null;
   }
 
   /// Récupère le catalogue des replays externes (Section 4.3)

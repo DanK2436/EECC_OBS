@@ -459,7 +459,7 @@ ON CONFLICT (id) DO UPDATE SET
 INSERT INTO public.churches (id, name, description, address, city, country, phone, email, is_main_campus, schedules)
 VALUES (
     'a0000000-0000-0000-0000-000000000001',
-    'Église Évangélique du Congo Central (EECC) — Siège Principal',
+    'Église Évangélique les Cohéritiers du Christ (EECC) — Siège Principal',
     'Communauté vivante d''adoration, d''enseignement et d''impact.',
     'Avenue de la Paix, Quartier Résidentiel',
     'Matadi',

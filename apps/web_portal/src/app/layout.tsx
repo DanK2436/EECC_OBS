@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "EECC — Église Évangélique du Congo Central",
+  title: "EECC — Église Évangélique les Cohéritiers du Christ",
   description: "Portail officiel de l'EECC. Cultes en direct, replays, prédications, podcasts bibliques et communauté chrétienne.",
   icons: {
     icon: "/favicon.ico",

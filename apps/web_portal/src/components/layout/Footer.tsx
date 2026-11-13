@@ -18,7 +18,7 @@ export const Footer = () => {
               <span className="text-xl font-bold tracking-tight">EECC</span>
             </div>
             <p className="text-slate-400 text-sm leading-relaxed mb-6">
-              Église Évangélique du Congo Central. Une communauté vivante dédiée à l’adoration, l’édification et le salut par Jésus-Christ.
+              Église Évangélique les Cohéritiers du Christ (EECC). Une communauté vivante dédiée à l’adoration, l’édification et le salut par Jésus-Christ.
             </p>
             <Link
               href="/don"

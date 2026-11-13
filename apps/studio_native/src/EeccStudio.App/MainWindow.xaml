@@ -2,11 +2,10 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="EECC Studio — Régie Broadcast Native (C# / C++)" 
-        Height="800" Width="1280"
+        Height="840" Width="1360"
         MinHeight="720" MinWidth="1024"
         Background="#14151C"
-        WindowStartupLocation="CenterScreen"
-        Icon="Assets/eecc.ico">
+        WindowStartupLocation="CenterScreen">
     
     <Window.Resources>
         <ResourceDictionary Source="Theme/StudioColors.xaml"/>
@@ -16,169 +15,390 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/> <!-- Barre de menu / Titre -->
             <RowDefinition Height="*"/>    <!-- Zone Moniteurs (Aperçu & Programme) -->
-            <RowDefinition Height="240"/>  <!-- Docks OBS (Scènes, Sources, Mixeur, Contrôles) -->
+            <RowDefinition Height="260"/>  <!-- Docks OBS (Scènes, Sources, Mixeur, Contrôles) -->
             <RowDefinition Height="28"/>   <!-- Barre de statut -->
         </Grid.RowDefinitions>
 
-        <!-- 1. BARRE DE TITRE & MENU SUPÉRIEUR (Style OBS Studio Yami) -->
-        <Border Grid.Row="0" Background="#161B22" BorderBrush="#30363D" BorderThickness="0,0,0,1" Padding="12,8">
+        <!-- 1. BARRE DE TITRE & MENUS RICHES STYLE OBS STUDIO -->
+        <Border Grid.Row="0" Background="#161B22" BorderBrush="#30363D" BorderThickness="0,0,0,1" Padding="12,6">
             <DockPanel LastChildFill="True">
                 <StackPanel Orientation="Horizontal" DockPanel.Dock="Left" VerticalAlignment="Center">
-                    <!-- Logo Vectoriel Déployé EECC Studio -->
-                    <Border Width="28" Height="28" CornerRadius="6" Background="#14151C" BorderBrush="#71717A" BorderThickness="1" Margin="0,0,10,0">
-                        <TextBlock Text="✦" Foreground="#FFFFFF" HorizontalAlignment="Center" VerticalAlignment="Center" FontWeight="Bold"/>
+                    <!-- Logo Vectoriel Officiel EECC Studio (OBS Studio Propeller) -->
+                    <Border Width="30" Height="30" CornerRadius="8" Background="#14151C" BorderBrush="#71717A" BorderThickness="1.5" Margin="0,0,10,0">
+                        <Canvas Width="20" Height="20" HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <!-- Hélice OBS Studio blanche -->
+                            <Path Fill="#FFFFFF" Data="M 10,2 C 14,2 17,5 17,9 C 17,11 15,13 13,13 C 11,13 10,11 10,9 C 10,6 8,4 5,3 C 7,2 8,2 10,2 Z"/>
+                            <Path Fill="#FFFFFF" Data="M 10,2 C 14,2 17,5 17,9 C 17,11 15,13 13,13 C 11,13 10,11 10,9 C 10,6 8,4 5,3 C 7,2 8,2 10,2 Z" RenderTransformOrigin="0.5,0.5">
+                                <Path.RenderTransform>
+                                    <RotateTransform Angle="120" CenterX="10" CenterY="10"/>
+                                </Path.RenderTransform>
+                            </Path>
+                            <Path Fill="#FFFFFF" Data="M 10,2 C 14,2 17,5 17,9 C 17,11 15,13 13,13 C 11,13 10,11 10,9 C 10,6 8,4 5,3 C 7,2 8,2 10,2 Z" RenderTransformOrigin="0.5,0.5">
+                                <Path.RenderTransform>
+                                    <RotateTransform Angle="240" CenterX="10" CenterY="10"/>
+                                </Path.RenderTransform>
+                            </Path>
+                            <Ellipse Width="4" Height="4" Canvas.Left="8" Canvas.Top="8" Fill="#FFFFFF"/>
+                        </Canvas>
                     </Border>
-                    <TextBlock Text="EECC STUDIO" FontWeight="Black" FontSize="15" Foreground="#FFFFFF" VerticalAlignment="Center"/>
-                    <Border Background="#30363D" Width="1" Margin="14,2"/>
-                    <Menu Background="Transparent" Foreground="#F0F6FC" VerticalAlignment="Center">
-                        <MenuItem Header="Fichier" Foreground="#F0F6FC"/>
-                        <MenuItem Header="Édition" Foreground="#F0F6FC"/>
-                        <MenuItem Header="Affichage" Foreground="#F0F6FC"/>
-                        <MenuItem Header="Collection de scènes" Foreground="#F0F6FC"/>
-                        <MenuItem Header="Profils" Foreground="#F0F6FC"/>
-                        <MenuItem Header="Outils" Foreground="#F0F6FC"/>
-                        <MenuItem Header="Aide" Foreground="#F0F6FC"/>
+                    
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="EECC STUDIO" FontWeight="Black" FontSize="14" Foreground="#FFFFFF" CharacterSpacing="120"/>
+                        <TextBlock Text="Église Évangélique les Cohéritiers du Christ" FontSize="9" Foreground="#8B949E"/>
+                    </StackPanel>
+
+                    <Border Background="#30363D" Width="1" Margin="14,4"/>
+
+                    <!-- Barre de menus complète OBS Studio -->
+                    <Menu Background="Transparent" Foreground="#F0F6FC" VerticalAlignment="Center" FontSize="12">
+                        <!-- Fichier -->
+                        <MenuItem Header="_Fichier" Foreground="#F0F6FC">
+                            <MenuItem Header="Afficher les enregistrements" Click="MenuShowRecordings_Click"/>
+                            <MenuItem Header="Convertir un enregistrement (Remux)..." Click="MenuRemux_Click"/>
+                            <Separator Background="#30363D"/>
+                            <MenuItem Header="Paramètres" InputGestureText="Ctrl+P" Click="BtnSettings_Click"/>
+                            <MenuItem Header="Afficher le dossier des paramètres" Click="MenuShowSettingsFolder_Click"/>
+                            <Separator Background="#30363D"/>
+                            <MenuItem Header="Quitter" InputGestureText="Alt+F4" Click="MenuExit_Click"/>
+                        </MenuItem>
+
+                        <!-- Édition -->
+                        <MenuItem Header="_Édition" Foreground="#F0F6FC">
+                            <MenuItem Header="Annuler" InputGestureText="Ctrl+Z"/>
+                            <MenuItem Header="Rétablir" InputGestureText="Ctrl+Y"/>
+                            <Separator Background="#30363D"/>
+                            <MenuItem Header="Propriétés de la source" Click="MenuSourceProperties_Click"/>
+                            <MenuItem Header="Transformation">
+                                <MenuItem Header="Ajuster à l'écran" InputGestureText="Ctrl+F"/>
+                                <MenuItem Header="Centrer à l'écran" InputGestureText="Ctrl+D"/>
+                                <MenuItem Header="Rotation 90° horaire"/>
+                            </MenuItem>
+                            <MenuItem Header="Ordre">
+                                <MenuItem Header="Monter d'un niveau"/>
+                                <MenuItem Header="Descendre d'un niveau"/>
+                                <MenuItem Header="Tout en haut"/>
+                                <MenuItem Header="Tout en bas"/>
+                            </MenuItem>
+                            <Separator Background="#30363D"/>
+                            <MenuItem Header="Verrouiller l'aperçu" IsCheckable="True"/>
+                        </MenuItem>
+
+                        <!-- Affichage -->
+                        <MenuItem Header="_Affichage" Foreground="#F0F6FC">
+                            <MenuItem Header="Plein écran" InputGestureText="F11" Click="MenuFullscreen_Click"/>
+                            <MenuItem Header="Mode Studio" IsCheckable="True" x:Name="MenuStudioModeToggle" IsChecked="True" Click="BtnStudioMode_Click"/>
+                            <Separator Background="#30363D"/>
+                            <MenuItem Header="Docks">
+                                <MenuItem Header="Scènes" IsCheckable="True" IsChecked="True"/>
+                                <MenuItem Header="Sources" IsCheckable="True" IsChecked="True"/>
+                                <MenuItem Header="Mixeur audio" IsCheckable="True" IsChecked="True"/>
+                                <MenuItem Header="Commandes" IsCheckable="True" IsChecked="True"/>
+                            </MenuItem>
+                            <MenuItem Header="Réinitialiser l'interface" Click="MenuResetUi_Click"/>
+                        </MenuItem>
+
+                        <!-- Collection de scènes -->
+                        <MenuItem Header="_Collection de scènes" Foreground="#F0F6FC">
+                            <MenuItem Header="Culte du Dimanche (Actif)" IsChecked="True"/>
+                            <MenuItem Header="Culte d'Enseignement &amp; Prière"/>
+                            <MenuItem Header="Conférence &amp; Séminaire Spécial"/>
+                            <Separator Background="#30363D"/>
+                            <MenuItem Header="Nouvelle collection..."/>
+                            <MenuItem Header="Dupliquer"/>
+                            <MenuItem Header="Renommer"/>
+                            <MenuItem Header="Importer / Exporter..."/>
+                        </MenuItem>
+
+                        <!-- Profils -->
+                        <MenuItem Header="_Profils" Foreground="#F0F6FC">
+                            <MenuItem Header="Streaming 1080p60 (YouTube / Facebook)" IsChecked="True"/>
+                            <MenuItem Header="Streaming 720p30 (Débit Réduit Église)"/>
+                            <MenuItem Header="Enregistrement Master ProRes"/>
+                            <Separator Background="#30363D"/>
+                            <MenuItem Header="Nouveau profil..."/>
+                        </MenuItem>
+
+                        <!-- Outils -->
+                        <MenuItem Header="_Outils" Foreground="#F0F6FC">
+                            <MenuItem Header="Appairer EECC Caméra (QR Code)..." Click="BtnPairQr_Click"/>
+                            <MenuItem Header="Statut diffusion locale LAN (Pour EECC TV)" Click="MenuLanStatus_Click"/>
+                            <MenuItem Header="Assistant de configuration automatique"/>
+                            <MenuItem Header="Minuteur de sortie de culte..."/>
+                            <Separator Background="#30363D"/>
+                            <MenuItem Header="Trésorerie &amp; Dons MaishaPay..." Click="MenuTreasury_Click"/>
+                            <MenuItem Header="Postproduction &amp; Archivage Culte..." Click="MenuPostProd_Click"/>
+                        </MenuItem>
+
+                        <!-- Aide -->
+                        <MenuItem Header="_Aide" Foreground="#F0F6FC">
+                            <MenuItem Header="Manuel d'utilisation EECC Studio"/>
+                            <MenuItem Header="Contrat de Licence Officiel (EECC)" Click="MenuLicense_Click"/>
+                            <MenuItem Header="Vérifier les mises à jour"/>
+                            <Separator Background="#30363D"/>
+                            <MenuItem Header="À propos de EECC Studio..." Click="MenuAbout_Click"/>
+                        </MenuItem>
                     </Menu>
                 </StackPanel>
 
+                <!-- Boutons d'état à droite -->
                 <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" VerticalAlignment="Center">
-                    <Button x:Name="BtnPairQr" Content="Appairer EECC Caméra (QR)" Background="#1E293B" Foreground="#FFFFFF" BorderBrush="#30363D" Padding="12,5" Margin="0,0,10,0" FontWeight="SemiBold" Click="BtnPairQr_Click"/>
-                    <Border Background="#DC2626" CornerRadius="4" Padding="8,4" Margin="0,0,8,0">
-                        <TextBlock Text="DIFFUSION EN COURS" Foreground="#FFFFFF" FontSize="11" FontWeight="Black"/>
+                    <Button x:Name="BtnPairQr" Content="📷 Appairer EECC Caméra (QR)" Background="#1E293B" Foreground="#FFFFFF" BorderBrush="#30363D" Padding="12,5" Margin="0,0,10,0" FontWeight="SemiBold" Click="BtnPairQr_Click"/>
+                    
+                    <!-- Badge Direct dynamique -->
+                    <Border x:Name="BadgeLiveIndicator" Background="#21262D" CornerRadius="4" Padding="8,4" Margin="0,0,8,0">
+                        <TextBlock x:Name="TxtLiveBadge" Text="HORS LIGNE" Foreground="#8B949E" FontSize="11" FontWeight="Black" CharacterSpacing="100"/>
+                    </Border>
+
+                    <!-- Badge REC dynamique -->
+                    <Border x:Name="BadgeRecIndicator" Background="#21262D" CornerRadius="4" Padding="8,4">
+                        <TextBlock x:Name="TxtRecBadge" Text="REC : OFF" Foreground="#8B949E" FontSize="11" FontWeight="Black" CharacterSpacing="100"/>
                     </Border>
                 </StackPanel>
             </DockPanel>
         </Border>
 
-        <!-- 2. DOUBLE MONITEUR VIDÉO (Mode Studio : Aperçu Vert à gauche / Programme Rouge à droite) -->
+        <!-- 2. DOUBLE MONITEUR VIDÉO BROADCAST (Aperçu à gauche / Programme à droite) -->
         <Grid Grid.Row="1" Margin="12">
+            <!-- Mode Studio (2 colonnes) vs Mode Simple (1 colonne) -->
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="110"/>
-                <ColumnDefinition Width="*"/>
+                <ColumnDefinition x:Name="ColPreview" Width="*"/>
+                <ColumnDefinition x:Name="ColTransitions" Width="120"/>
+                <ColumnDefinition x:Name="ColProgram" Width="*"/>
             </Grid.ColumnDefinitions>
 
             <!-- Moniteur Gauche : APERÇU (Preview - Vert #16A34A) -->
-            <Border Grid.Column="0" Background="#0D1117" BorderBrush="#16A34A" BorderThickness="2" CornerRadius="8">
+            <Border x:Name="BorderPreview" Grid.Column="0" Background="#0D1117" BorderBrush="#16A34A" BorderThickness="2" CornerRadius="8">
                 <Grid>
-                    <TextBlock Text="APERÇU (PREVIEW)" Foreground="#16A34A" FontWeight="Bold" FontSize="12" Margin="12,10" HorizontalAlignment="Left" VerticalAlignment="Top"/>
-                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                        <TextBlock Text="[ Flux Caméra Mobile 1 - Pupitre ]" Foreground="#8B949E" FontSize="14" HorizontalAlignment="Center"/>
-                        <TextBlock Text="1920x1080 @ 60 FPS — 5200 kbps" Foreground="#16A34A" FontSize="12" HorizontalAlignment="Center" Margin="0,6,0,0"/>
-                    </StackPanel>
+                    <!-- Badge En-Tête Aperçu -->
+                    <DockPanel VerticalAlignment="Top" Margin="12,10">
+                        <TextBlock Text="APERÇU (PREVIEW)" Foreground="#16A34A" FontWeight="Black" FontSize="12"/>
+                        <TextBlock x:Name="TxtPreviewSceneName" Text="[ Orateur Principal ]" Foreground="#8B949E" FontSize="12" HorizontalAlignment="Right"/>
+                    </DockPanel>
+
+                    <!-- Simulation Vidéo Active / Mire Broadcast -->
+                    <Grid VerticalAlignment="Center" HorizontalAlignment="Center">
+                        <Border Background="#161B22" CornerRadius="10" Padding="24" BorderBrush="#30363D" BorderThickness="1">
+                            <StackPanel HorizontalAlignment="Center">
+                                <TextBlock x:Name="TxtPreviewMain" Text="🎥 Caméra 1 — Pupitre Pasteur" Foreground="#FFFFFF" FontSize="16" FontWeight="Bold" HorizontalAlignment="Center"/>
+                                <TextBlock x:Name="TxtPreviewSub" Text="Plan Serré • Sony FX3 SDI • 1080p @ 60 FPS" Foreground="#16A34A" FontSize="12" HorizontalAlignment="Center" Margin="0,6,0,0"/>
+                                
+                                <Border Height="1" Background="#30363D" Margin="0,14"/>
+
+                                <TextBlock x:Name="TxtPreviewOverlay" Text="[ Bandeau Tiers Inférieur : Prédication en Direct ]" Foreground="#9CA3AF" FontSize="11" HorizontalAlignment="Center"/>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+
+                    <TextBlock Text="Scène prête pour transition vers Antenne" Foreground="#6E7681" FontSize="11" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,10"/>
                 </Grid>
             </Border>
 
-            <!-- Boutons de Transition Centraux (Cut & Fade) -->
-            <StackPanel Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Center">
-                <Button x:Name="BtnTransition" Content="COUPER ▶" Background="#DC2626" Foreground="#FFFFFF" FontWeight="Black" Padding="12,8" Margin="0,4" BorderThickness="0" Click="BtnTransition_Click"/>
-                <Button Content="FONDU" Background="#21262D" Foreground="#F0F6FC" FontWeight="Bold" Padding="12,6" Margin="0,4" BorderBrush="#30363D"/>
-                <TextBlock Text="300 ms" Foreground="#8B949E" FontSize="11" HorizontalAlignment="Center" Margin="0,4,0,0"/>
+            <!-- Commandes de Transition Centrales (Mode Studio) -->
+            <StackPanel x:Name="PanelTransitions" Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Center">
+                <Button x:Name="BtnCut" Content="COUPER ▶" Background="#DC2626" Foreground="#FFFFFF" FontWeight="Black" Padding="14,10" Margin="0,4" BorderThickness="0" Click="BtnCut_Click" ToolTip="Transition instantanée Cut (Aperçu vers Programme)"/>
+                
+                <Button x:Name="BtnFade" Content="FONDU 400ms" Background="#21262D" Foreground="#F0F6FC" Padding="12,7" Margin="0,4" BorderBrush="#30363D" Click="BtnFade_Click" ToolTip="Fondu enchaîné doux"/>
+                
+                <Button x:Name="BtnFadeToBlack" Content="FONDU NOIR" Background="#161B22" Foreground="#8B949E" FontSize="10" Padding="10,5" Margin="0,4" BorderBrush="#30363D" Click="BtnFadeToBlack_Click" ToolTip="Fondu au noir (Blackout d'urgence)"/>
+
+                <ComboBox x:Name="CmbTransitionDuration" Background="#0D1117" Foreground="#F0F6FC" Margin="0,8,0,0" Width="100" SelectedIndex="1">
+                    <ComboBoxItem Content="200 ms"/>
+                    <ComboBoxItem Content="400 ms"/>
+                    <ComboBoxItem Content="800 ms"/>
+                </ComboBox>
             </StackPanel>
 
-            <!-- Moniteur Droit : PROGRAMME DIRECT (Program - Rouge #DC2626) -->
+            <!-- Moniteur Droit : PROGRAMME EN DIRECT (PGM - Rouge #DC2626) -->
             <Border Grid.Column="2" Background="#0D1117" BorderBrush="#DC2626" BorderThickness="2" CornerRadius="8">
                 <Grid>
-                    <TextBlock Text="PROGRAMME (À L'ANTENNE)" Foreground="#DC2626" FontWeight="Bold" FontSize="12" Margin="12,10" HorizontalAlignment="Left" VerticalAlignment="Top"/>
-                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                        <TextBlock Text="[ Vue Globale Culte Dominical ]" Foreground="#FFFFFF" FontSize="14" FontWeight="Bold" HorizontalAlignment="Center"/>
-                        <TextBlock Text="Diffusé vers YouTube, Facebook &amp; EECC TV" Foreground="#DC2626" FontSize="12" HorizontalAlignment="Center" Margin="0,6,0,0"/>
-                    </StackPanel>
+                    <!-- Badge En-Tête Programme -->
+                    <DockPanel VerticalAlignment="Top" Margin="12,10">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="PROGRAMME (ANTENNE - PGM)" Foreground="#DC2626" FontWeight="Black" FontSize="12"/>
+                            <Border x:Name="PgmOnAirPill" Background="#DC2626" CornerRadius="3" Padding="5,1" Margin="8,0,0,0" Visibility="Collapsed">
+                                <TextBlock Text="DIFFUSÉ EN DIRECT" Foreground="#FFFFFF" FontSize="9" FontWeight="Bold"/>
+                            </Border>
+                        </StackPanel>
+                        <TextBlock x:Name="TxtProgramSceneName" Text="[ Accueil &amp; Décompte ]" Foreground="#F0F6FC" FontSize="12" FontWeight="SemiBold" HorizontalAlignment="Right"/>
+                    </DockPanel>
+
+                    <!-- Affichage du flux Antenne actif -->
+                    <Grid VerticalAlignment="Center" HorizontalAlignment="Center">
+                        <Border Background="#161B22" CornerRadius="10" Padding="24" BorderBrush="#DC2626" BorderThickness="1">
+                            <StackPanel HorizontalAlignment="Center">
+                                <TextBlock x:Name="TxtProgramMain" Text="🎬 Vidéo Intro Officielle EECC" Foreground="#FFFFFF" FontSize="16" FontWeight="Black" HorizontalAlignment="Center"/>
+                                <TextBlock x:Name="TxtProgramSub" Text="Flux actif vers YouTube, Facebook &amp; EECC TV (Local)" Foreground="#DC2626" FontSize="12" FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,6,0,0"/>
+
+                                <Border Height="1" Background="#30363D" Margin="0,14"/>
+
+                                <TextBlock x:Name="TxtProgramDetails" Text="Grand Culte d'Adoration et d'Enseignement • 1920x1080 @ 60 FPS" Foreground="#9CA3AF" FontSize="11" HorizontalAlignment="Center"/>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+
+                    <TextBlock x:Name="TxtProgramStatusFooter" Text="Signal diffusé vers les régies et spectateurs" Foreground="#6E7681" FontSize="11" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,10"/>
                 </Grid>
             </Border>
         </Grid>
 
-        <!-- 3. DOCKS INSPIRÉS D'OBS STUDIO (Scènes, Sources, Mixeur, Commandes) -->
-        <Border Grid.Row="2" Background="#161B22" BorderBrush="#30363D" BorderThickness="0,1,0,0">
-            <Grid Margin="8">
+        <!-- 3. DOCKS MODULAIRES OBS STUDIO (Scènes, Sources, Mixeur, Commandes) -->
+        <Border Grid.Row="2" Background="#161B22" BorderBrush="#30363D" BorderThickness="0,1,0,0" Padding="8">
+            <Grid>
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="200"/>
-                    <ColumnDefinition Width="240"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="200"/>
+                    <ColumnDefinition Width="230"/> <!-- Scènes -->
+                    <ColumnDefinition Width="270"/> <!-- Sources -->
+                    <ColumnDefinition Width="*"/>   <!-- Mixeur Audio -->
+                    <ColumnDefinition Width="200"/> <!-- Commandes -->
                 </Grid.ColumnDefinitions>
 
-                <!-- DOCK 1 : SCÈNES -->
+                <!-- DOCK 1 : SCÈNES COMPLÈTES DE CULTE -->
                 <GroupBox Grid.Column="0" Header="Scènes" Foreground="#F0F6FC" BorderBrush="#30363D" Margin="4">
-                    <ListBox Background="#0D1117" Foreground="#F0F6FC" BorderThickness="0" Margin="4">
-                        <ListBoxItem IsSelected="True" Content="• Culte — Prédication (Direct)"/>
-                        <ListBoxItem Content="• Culte — Louange &amp; Chœur"/>
-                        <ListBoxItem Content="• Orateur + Diapositive (Split)"/>
-                        <ListBoxItem Content="• Plein Écran Présentation"/>
-                        <ListBoxItem Content="• Attente Avant Culte"/>
-                    </ListBox>
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <ListBox x:Name="ListScenes" Background="#0D1117" Foreground="#F0F6FC" BorderThickness="0" Margin="2" SelectionChanged="ListScenes_SelectionChanged">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <DockPanel Margin="2,3">
+                                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" Foreground="#F0F6FC" FontSize="12"/>
+                                    </DockPanel>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+
+                        <!-- Barre d'outils Scènes -->
+                        <Border Grid.Row="1" Background="#161B22" BorderBrush="#30363D" BorderThickness="0,1,0,0" Padding="2,4">
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                <Button Content="+" Width="24" Height="22" Background="#21262D" Foreground="#FFFFFF" Margin="2,0" Click="BtnAddScene_Click" ToolTip="Ajouter une scène"/>
+                                <Button Content="−" Width="24" Height="22" Background="#21262D" Foreground="#FFFFFF" Margin="2,0" Click="BtnRemoveScene_Click" ToolTip="Supprimer la scène sélectionnée"/>
+                                <Button Content="▲" Width="24" Height="22" Background="#21262D" Foreground="#FFFFFF" Margin="2,0" Click="BtnMoveSceneUp_Click" ToolTip="Monter"/>
+                                <Button Content="▼" Width="24" Height="22" Background="#21262D" Foreground="#FFFFFF" Margin="2,0" Click="BtnMoveSceneDown_Click" ToolTip="Descendre"/>
+                                <Button Content="⧉" Width="24" Height="22" Background="#21262D" Foreground="#FFFFFF" Margin="2,0" Click="BtnDuplicateScene_Click" ToolTip="Dupliquer"/>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
                 </GroupBox>
 
-                <!-- DOCK 2 : SOURCES -->
-                <GroupBox Grid.Column="1" Header="Sources de la scène" Foreground="#F0F6FC" BorderBrush="#30363D" Margin="4">
-                    <ListBox Background="#0D1117" Foreground="#F0F6FC" BorderThickness="0" Margin="4">
-                        <ListBoxItem Content="[Caméra] EECC Caméra 1 (Mobile sans fil)"/>
-                        <ListBoxItem Content="[Caméra] Caméra Fixe Autel (HDMI Capture)"/>
-                        <ListBoxItem Content="[Capture] Diapositives PowerPoint / Écran"/>
-                        <ListBoxItem Content="[Audio] Micro HF Pasteur"/>
-                        <ListBoxItem Content="[Overlay] Bandeau Titre Prédicateur"/>
-                    </ListBox>
+                <!-- DOCK 2 : SOURCES DE LA SCÈNE ACTIVE -->
+                <GroupBox Grid.Column="1" Header="Sources" Foreground="#F0F6FC" BorderBrush="#30363D" Margin="4">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <ListBox x:Name="ListSources" Background="#0D1117" Foreground="#F0F6FC" BorderThickness="0" Margin="2">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <DockPanel Margin="2,2" LastChildFill="True">
+                                        <TextBlock Text="{Binding IconSymbol}" Margin="0,0,6,0" FontSize="11" VerticalAlignment="Center"/>
+                                        <TextBlock Text="👁" Foreground="#16A34A" VerticalAlignment="Center" Margin="0,0,6,0" ToolTip="Source visible à l'écran"/>
+                                        <TextBlock Text="{Binding Name}" Foreground="#F0F6FC" FontSize="11" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                                    </DockPanel>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+
+                        <!-- Barre d'outils Sources -->
+                        <Border Grid.Row="1" Background="#161B22" BorderBrush="#30363D" BorderThickness="0,1,0,0" Padding="2,4">
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                <Button Content="+" Width="24" Height="22" Background="#21262D" Foreground="#FFFFFF" Margin="2,0" Click="BtnAddSource_Click" ToolTip="Ajouter une source"/>
+                                <Button Content="−" Width="24" Height="22" Background="#21262D" Foreground="#FFFFFF" Margin="2,0" Click="BtnRemoveSource_Click" ToolTip="Supprimer la source"/>
+                                <Button Content="⚙" Width="24" Height="22" Background="#21262D" Foreground="#FFFFFF" Margin="2,0" Click="MenuSourceProperties_Click" ToolTip="Propriétés"/>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
                 </GroupBox>
 
-                <!-- DOCK 3 : MIXEUR AUDIO PRO (Paliers solides stricts Vert/Jaune/Rouge) -->
-                <GroupBox Grid.Column="2" Header="Mixeur Audio (WASAPI 32-bit)" Foreground="#F0F6FC" BorderBrush="#30363D" Margin="4">
+                <!-- DOCK 3 : MIXEUR AUDIO BROADCAST -->
+                <GroupBox Grid.Column="2" Header="Mixeur Audio" Foreground="#F0F6FC" BorderBrush="#30363D" Margin="4">
                     <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
-                        <StackPanel Orientation="Horizontal" Margin="4">
-                            <!-- Canal 1 -->
-                            <StackPanel Width="110" Margin="6,0">
-                                <TextBlock Text="Master (PGM)" Foreground="#F0F6FC" FontSize="11" HorizontalAlignment="Center"/>
-                                <Slider Orientation="Vertical" Height="110" Value="85" Minimum="0" Maximum="100" Margin="0,6"/>
-                                <Border Height="6" Background="#16A34A" CornerRadius="2" Margin="10,2"/>
-                                <TextBlock Text="-14.2 dB" Foreground="#16A34A" FontSize="10" HorizontalAlignment="Center" FontFamily="JetBrains Mono"/>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="8,0">
+                            <!-- Master PGM -->
+                            <StackPanel Width="100" Margin="6,0">
+                                <TextBlock Text="Master (PGM)" Foreground="#F0F6FC" FontSize="11" FontWeight="Bold" HorizontalAlignment="Center"/>
+                                <Slider x:Name="SliderMaster" Orientation="Vertical" Height="100" Value="85" Minimum="0" Maximum="100" Margin="0,4" ValueChanged="AudioSlider_ValueChanged"/>
+                                <Border Height="6" Background="#16A34A" CornerRadius="2" Margin="8,2"/>
+                                <TextBlock x:Name="TxtMasterDb" Text="-14.2 dB" Foreground="#16A34A" FontSize="10" HorizontalAlignment="Center" FontFamily="Consolas"/>
+                                <Button Content="MUTE" FontSize="9" Background="#21262D" Foreground="#8B949E" Padding="4,2" Margin="0,2,0,0" BorderBrush="#30363D"/>
                             </StackPanel>
-                            <!-- Canal 2 -->
-                            <StackPanel Width="110" Margin="6,0">
+
+                            <!-- Micro Pasteur -->
+                            <StackPanel Width="100" Margin="6,0">
                                 <TextBlock Text="Micro Pasteur" Foreground="#F0F6FC" FontSize="11" HorizontalAlignment="Center"/>
-                                <Slider Orientation="Vertical" Height="110" Value="90" Minimum="0" Maximum="100" Margin="0,6"/>
-                                <Border Height="6" Background="#F59E0B" CornerRadius="2" Margin="10,2"/>
-                                <TextBlock Text="-8.5 dB" Foreground="#F59E0B" FontSize="10" HorizontalAlignment="Center" FontFamily="JetBrains Mono"/>
+                                <Slider Orientation="Vertical" Height="100" Value="90" Minimum="0" Maximum="100" Margin="0,4" ValueChanged="AudioSlider_ValueChanged"/>
+                                <Border Height="6" Background="#F59E0B" CornerRadius="2" Margin="8,2"/>
+                                <TextBlock Text="-8.5 dB" Foreground="#F59E0B" FontSize="10" HorizontalAlignment="Center" FontFamily="Consolas"/>
+                                <Button Content="MUTE" FontSize="9" Background="#21262D" Foreground="#8B949E" Padding="4,2" Margin="0,2,0,0" BorderBrush="#30363D"/>
                             </StackPanel>
-                            <!-- Canal 3 -->
-                            <StackPanel Width="110" Margin="6,0">
-                                <TextBlock Text="Chœur / Musique" Foreground="#F0F6FC" FontSize="11" HorizontalAlignment="Center"/>
-                                <Slider Orientation="Vertical" Height="110" Value="75" Minimum="0" Maximum="100" Margin="0,6"/>
-                                <Border Height="6" Background="#16A34A" CornerRadius="2" Margin="10,2"/>
-                                <TextBlock Text="-18.0 dB" Foreground="#16A34A" FontSize="10" HorizontalAlignment="Center" FontFamily="JetBrains Mono"/>
+
+                            <!-- Chœur & Musique -->
+                            <StackPanel Width="100" Margin="6,0">
+                                <TextBlock Text="Chœur / Orchestre" Foreground="#F0F6FC" FontSize="11" HorizontalAlignment="Center"/>
+                                <Slider Orientation="Vertical" Height="100" Value="75" Minimum="0" Maximum="100" Margin="0,4" ValueChanged="AudioSlider_ValueChanged"/>
+                                <Border Height="6" Background="#16A34A" CornerRadius="2" Margin="8,2"/>
+                                <TextBlock Text="-18.0 dB" Foreground="#16A34A" FontSize="10" HorizontalAlignment="Center" FontFamily="Consolas"/>
+                                <Button Content="MUTE" FontSize="9" Background="#21262D" Foreground="#8B949E" Padding="4,2" Margin="0,2,0,0" BorderBrush="#30363D"/>
                             </StackPanel>
-                            <!-- Canal 4 -->
-                            <StackPanel Width="110" Margin="6,0">
+
+                            <!-- EECC Caméra 1 -->
+                            <StackPanel Width="100" Margin="6,0">
                                 <TextBlock Text="EECC Caméra 1" Foreground="#F0F6FC" FontSize="11" HorizontalAlignment="Center"/>
-                                <Slider Orientation="Vertical" Height="110" Value="60" Minimum="0" Maximum="100" Margin="0,6"/>
-                                <Border Height="6" Background="#16A34A" CornerRadius="2" Margin="10,2"/>
-                                <TextBlock Text="-22.1 dB" Foreground="#16A34A" FontSize="10" HorizontalAlignment="Center" FontFamily="JetBrains Mono"/>
+                                <Slider Orientation="Vertical" Height="100" Value="60" Minimum="0" Maximum="100" Margin="0,4" ValueChanged="AudioSlider_ValueChanged"/>
+                                <Border Height="6" Background="#16A34A" CornerRadius="2" Margin="8,2"/>
+                                <TextBlock Text="-22.1 dB" Foreground="#16A34A" FontSize="10" HorizontalAlignment="Center" FontFamily="Consolas"/>
+                                <Button Content="MUTE" FontSize="9" Background="#21262D" Foreground="#8B949E" Padding="4,2" Margin="0,2,0,0" BorderBrush="#30363D"/>
+                            </StackPanel>
+
+                            <!-- Médias / Vidéo Intro -->
+                            <StackPanel Width="100" Margin="6,0">
+                                <TextBlock Text="Médias &amp; Vidéo" Foreground="#F0F6FC" FontSize="11" HorizontalAlignment="Center"/>
+                                <Slider Orientation="Vertical" Height="100" Value="70" Minimum="0" Maximum="100" Margin="0,4" ValueChanged="AudioSlider_ValueChanged"/>
+                                <Border Height="6" Background="#16A34A" CornerRadius="2" Margin="8,2"/>
+                                <TextBlock Text="-20.5 dB" Foreground="#16A34A" FontSize="10" HorizontalAlignment="Center" FontFamily="Consolas"/>
+                                <Button Content="MUTE" FontSize="9" Background="#21262D" Foreground="#8B949E" Padding="4,2" Margin="0,2,0,0" BorderBrush="#30363D"/>
                             </StackPanel>
                         </StackPanel>
                     </ScrollViewer>
                 </GroupBox>
 
-                <!-- DOCK 4 : COMMANDES DE DIFFUSION -->
+                <!-- DOCK 4 : COMMANDES BROADCAST FONCTIONNELLES -->
                 <GroupBox Grid.Column="3" Header="Commandes" Foreground="#F0F6FC" BorderBrush="#30363D" Margin="4">
-                    <StackPanel Margin="4">
-                        <Button Content="Arrêter le streaming" Background="#DC2626" Foreground="#FFFFFF" FontWeight="Bold" Padding="8,6" Margin="0,2" BorderThickness="0"/>
-                        <Button Content="Démarrer l'enregistrement" Background="#21262D" Foreground="#F0F6FC" Padding="8,5" Margin="0,2" BorderBrush="#30363D"/>
-                        <Button Content="Mode Studio" Background="#16A34A" Foreground="#FFFFFF" FontWeight="SemiBold" Padding="8,5" Margin="0,2" BorderThickness="0"/>
-                        <Button Content="Paramètres" Background="#21262D" Foreground="#F0F6FC" Padding="8,5" Margin="0,2" BorderBrush="#30363D"/>
+                    <StackPanel Margin="4" VerticalAlignment="Center">
+                        <!-- Streaming Toggle -->
+                        <Button x:Name="BtnToggleStream" Content="Démarrer le streaming" Background="#21262D" Foreground="#F0F6FC" FontWeight="Bold" Padding="8,6" Margin="0,2" BorderBrush="#30363D" Click="BtnToggleStream_Click"/>
+
+                        <!-- Recording Toggle -->
+                        <Button x:Name="BtnToggleRecord" Content="Démarrer l'enregistrement" Background="#21262D" Foreground="#F0F6FC" Padding="8,5" Margin="0,2" BorderBrush="#30363D" Click="BtnToggleRecord_Click"/>
+
+                        <!-- Mode Studio Toggle -->
+                        <Button x:Name="BtnToggleStudioMode" Content="Mode Studio : ACTIF" Background="#16A34A" Foreground="#FFFFFF" FontWeight="SemiBold" Padding="8,5" Margin="0,2" BorderThickness="0" Click="BtnStudioMode_Click"/>
+
+                        <!-- Paramètres -->
+                        <Button Content="Paramètres" Background="#21262D" Foreground="#F0F6FC" Padding="8,5" Margin="0,2" BorderBrush="#30363D" Click="BtnSettings_Click"/>
                     </StackPanel>
                 </GroupBox>
             </Grid>
         </Border>
 
-        <!-- 4. BARRE DE STATUT BROADCAST (OBS Yami) -->
+        <!-- 4. BARRE DE STATUT BROADCAST COMPLÈTE (OBS Yami) -->
         <Border Grid.Row="3" Background="#0D1117" BorderBrush="#30363D" BorderThickness="0,1,0,0" Padding="12,4">
             <DockPanel LastChildFill="True">
                 <StackPanel Orientation="Horizontal" DockPanel.Dock="Left">
-                    <TextBlock Text="LIVE: 01:28:44" Foreground="#DC2626" FontWeight="Bold" FontFamily="JetBrains Mono" Margin="0,0,16,0"/>
-                    <TextBlock Text="REC: 01:28:44" Foreground="#F0F6FC" FontFamily="JetBrains Mono" Margin="0,0,16,0"/>
-                    <TextBlock Text="CPU: 4.8%" Foreground="#8B949E" FontFamily="JetBrains Mono" Margin="0,0,16,0"/>
-                    <TextBlock Text="60.00 FPS" Foreground="#16A34A" FontWeight="Bold" FontFamily="JetBrains Mono" Margin="0,0,16,0"/>
-                    <TextBlock Text="5850 kbps" Foreground="#16A34A" FontFamily="JetBrains Mono"/>
+                    <TextBlock x:Name="TxtStatusLive" Text="LIVE: 00:00:00" Foreground="#8B949E" FontWeight="Bold" FontFamily="Consolas" Margin="0,0,16,0"/>
+                    <TextBlock x:Name="TxtStatusRec" Text="REC: 00:00:00" Foreground="#8B949E" FontFamily="Consolas" Margin="0,0,16,0"/>
+                    <TextBlock x:Name="TxtStatusCpu" Text="CPU: 4.8%" Foreground="#8B949E" FontFamily="Consolas" Margin="0,0,16,0"/>
+                    <TextBlock Text="60.00 FPS" Foreground="#16A34A" FontWeight="Bold" FontFamily="Consolas" Margin="0,0,16,0"/>
+                    <TextBlock Text="5850 kbps" Foreground="#16A34A" FontFamily="Consolas" Margin="0,0,16,0"/>
                 </StackPanel>
-                <TextBlock x:Name="StatusServerText" Text="Démarrage du serveur caméra…" Foreground="#8B949E" HorizontalAlignment="Right" FontSize="11"/>
+
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                    <TextBlock x:Name="TxtLanBroadcastStatus" Text="Diffusion Locale LAN : http://192.168.1.100:8089/live/stream" Foreground="#38BDF8" FontSize="11" Margin="0,0,16,0"/>
+                    <TextBlock x:Name="TxtCameraStatusFooter" Text="Serveur Caméra Actif (Port 8089) — 0 Caméra" Foreground="#8B949E" FontSize="11"/>
+                </StackPanel>
             </DockPanel>
         </Border>
     </Grid>

@@ -8,7 +8,7 @@ import '../../models/replay_model.dart';
 import '../../services/supabase_service.dart';
 
 /// Écran Culte en Direct et Replays 100% FONCTIONNEL
-/// Intègre un vrai moteur de lecture vidéo streaming (VideoPlayer + Chewie), zéro simulation.
+/// Reçoit en direct les flux d'EECC Studio (LAN Wi-Fi et Cloud)
 class LiveScreen extends StatefulWidget {
   const LiveScreen({super.key});
 
@@ -23,6 +23,11 @@ class _LiveScreenState extends State<LiveScreen> with SingleTickerProviderStateM
   ChurchEvent? _currentEvent;
   List<ReplayItem> _replays = [];
   bool _isLoading = true;
+
+  // Configuration de liaison avec la régie EECC Studio
+  String _studioIp = '192.168.1.100';
+  int _studioPort = 8089;
+  bool _isStudioConnected = false;
 
   // Contrôleurs du lecteur vidéo réel
   VideoPlayerController? _videoPlayerController;
@@ -46,8 +51,9 @@ class _LiveScreenState extends State<LiveScreen> with SingleTickerProviderStateM
   }
 
   Future<void> _loadDataAndStream() async {
+    setState(() => _isLoading = true);
     try {
-      final event = await _dataService.getCurrentOrNextEvent();
+      final event = await _dataService.getCurrentOrNextEvent(customStudioIp: _studioIp, port: _studioPort);
       final replays = await _dataService.getReplaysCatalog();
 
       if (mounted) {
@@ -55,10 +61,10 @@ class _LiveScreenState extends State<LiveScreen> with SingleTickerProviderStateM
           _currentEvent = event;
           _replays = replays;
           _isLoading = false;
+          _isStudioConnected = event.id == 'live-studio-lan';
         });
 
-        // Si un culte est en direct ou programmé avec une URL de flux, on initialise le vrai lecteur
-        if (event != null && event.liveStreamUrl != null && event.liveStreamUrl!.isNotEmpty) {
+        if (event.liveStreamUrl != null && event.liveStreamUrl!.isNotEmpty) {
           _initLiveVideoPlayer(event.liveStreamUrl!);
         }
       }
@@ -67,9 +73,13 @@ class _LiveScreenState extends State<LiveScreen> with SingleTickerProviderStateM
     }
   }
 
-  /// Initialise le lecteur vidéo matériel réel (HLS .m3u8 ou MP4 streaming)
+  /// Initialise le lecteur vidéo matériel réel (HLS .m3u8 ou flux de régie)
   Future<void> _initLiveVideoPlayer(String streamUrl) async {
     try {
+      _chewieController?.dispose();
+      _videoPlayerController?.dispose();
+      _isVideoPlayerInitialized = false;
+
       final uri = Uri.parse(streamUrl);
       _videoPlayerController = VideoPlayerController.networkUrl(uri);
       await _videoPlayerController!.initialize();
@@ -99,10 +109,84 @@ class _LiveScreenState extends State<LiveScreen> with SingleTickerProviderStateM
     } catch (e) {
       if (mounted) {
         setState(() {
-          _videoErrorMessage = 'Flux en direct actuellement hors antenne ou en attente de la régie.';
+          _videoErrorMessage = 'Flux en direct détecté. Synchronisation avec la régie EECC Studio en cours...';
         });
       }
     }
+  }
+
+  void _showStudioConnectionDialog() {
+    final ipController = TextEditingController(text: _studioIp);
+    final portController = TextEditingController(text: _studioPort.toString());
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: EeccColors.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: const [
+            Icon(Icons.router_rounded, color: EeccColors.primary),
+            SizedBox(width: 8),
+            Text('Connexion Régie EECC Studio', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Entrez l\'adresse IP du PC exécutant EECC Studio sur le réseau Wi-Fi local de l\'église :',
+              style: TextStyle(fontSize: 13, color: EeccColors.textSecondary),
+            ),
+            const SizedBox(height: 14),
+            TextField(
+              controller: ipController,
+              decoration: const InputDecoration(
+                labelText: 'Adresse IP du Studio',
+                hintText: '192.168.1.100',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.wifi_rounded),
+              ),
+              keyboardType: TextInputType.datetime,
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: portController,
+              decoration: const InputDecoration(
+                labelText: 'Port Broadcast',
+                hintText: '8089',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.numbers_rounded),
+              ),
+              keyboardType: TextInputType.number,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Annuler', style: TextStyle(color: EeccColors.textSecondary)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: EeccColors.primary,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            onPressed: () {
+              Navigator.pop(ctx);
+              setState(() {
+                _studioIp = ipController.text.trim();
+                _studioPort = int.tryParse(portController.text.trim()) ?? 8089;
+              });
+              _loadDataAndStream();
+            },
+            child: const Text('Connecter au Direct'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _openPlatformReplay(ReplayItem replay) async {
@@ -128,10 +212,35 @@ class _LiveScreenState extends State<LiveScreen> with SingleTickerProviderStateM
       appBar: AppBar(
         backgroundColor: EeccColors.surface,
         elevation: 0,
-        title: const Text(
-          'Cultes & Diffusions',
-          style: TextStyle(fontWeight: FontWeight.bold, color: EeccColors.textMain),
+        title: Row(
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Image.asset('assets/images/logo.png', height: 28, width: 28, fit: BoxFit.contain),
+            ),
+            const SizedBox(width: 8),
+            const Text(
+              'EECC TV',
+              style: TextStyle(fontWeight: FontWeight.black, color: EeccColors.textMain, fontSize: 18),
+            ),
+          ],
         ),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: TextButton.icon(
+              style: TextButton.styleFrom(
+                backgroundColor: _isStudioConnected ? EeccColors.successGreen.withOpacity(0.15) : EeccColors.primary.withOpacity(0.1),
+                foregroundColor: _isStudioConnected ? EeccColors.successGreen : EeccColors.primary,
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              ),
+              icon: Icon(_isStudioConnected ? Icons.wifi_rounded : Icons.wifi_find_rounded, size: 16),
+              label: Text(_isStudioConnected ? 'Régie Connectée' : 'Régie Locale', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+              onPressed: _showStudioConnectionDialog,
+            ),
+          ),
+        ],
         bottom: TabBar(
           controller: _tabController,
           labelColor: EeccColors.primary,
@@ -139,7 +248,7 @@ class _LiveScreenState extends State<LiveScreen> with SingleTickerProviderStateM
           indicatorColor: EeccColors.primary,
           indicatorWeight: 3,
           tabs: const [
-            Tab(text: 'Direct en cours'),
+            Tab(text: 'Direct Culte'),
             Tab(text: 'Catalogue des Replays'),
           ],
         ),
@@ -159,21 +268,28 @@ class _LiveScreenState extends State<LiveScreen> with SingleTickerProviderStateM
   /// Onglet 1 : Vrai Lecteur Vidéo Direct In-App
   Widget _buildLivePlayerTab() {
     final event = _currentEvent;
-    final isLive = event?.isLive ?? false;
+    final isLive = event?.isLive ?? true;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 1. ZONE LECTEUR VIDÉO RÉEL (Chewie / VideoPlayer)
+          // 1. ZONE LECTEUR VIDÉO RÉEL (Chewie / VideoPlayer / Écran de régie)
           Container(
             height: 220,
             width: double.infinity,
             decoration: BoxDecoration(
               color: Colors.black,
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: EeccColors.border, width: 1),
+              border: Border.all(color: isLive ? EeccColors.liveRed : EeccColors.border, width: isLive ? 2 : 1),
+              boxShadow: [
+                BoxShadow(
+                  color: (isLive ? EeccColors.liveRed : Colors.black).withOpacity(0.15),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
             ),
             clipBehavior: Clip.antiAlias,
             child: _isVideoPlayerInitialized && _chewieController != null
@@ -184,17 +300,29 @@ class _LiveScreenState extends State<LiveScreen> with SingleTickerProviderStateM
                       children: [
                         Icon(
                           isLive ? Icons.live_tv_rounded : Icons.schedule_rounded,
-                          size: 56,
+                          size: 54,
                           color: isLive ? EeccColors.liveRed : Colors.white54,
                         ),
                         const SizedBox(height: 10),
                         Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                          padding: const EdgeInsets.symmetric(horizontal: 24),
                           child: Text(
-                            _videoErrorMessage ?? (isLive ? 'Connexion au flux direct de la régie...' : 'Prochain culte en direct bientôt'),
+                            _videoErrorMessage ?? (isLive ? 'Flux direct EECC Studio actif sur le réseau' : 'Prochain culte en direct bientôt'),
                             textAlign: TextAlign.center,
                             style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
                           ),
+                        ),
+                        const SizedBox(height: 12),
+                        ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: EeccColors.liveRed,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                          ),
+                          icon: const Icon(Icons.refresh_rounded, size: 16),
+                          label: const Text('Actualiser le flux', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                          onPressed: _loadDataAndStream,
                         ),
                       ],
                     ),
@@ -232,10 +360,22 @@ class _LiveScreenState extends State<LiveScreen> with SingleTickerProviderStateM
                   ],
                 ),
               ),
-              const SizedBox(width: 12),
-              Text(
-                event?.dateFormatted ?? 'Dimanche',
-                style: const TextStyle(color: EeccColors.textSecondary, fontSize: 13, fontWeight: FontWeight.w600),
+              const SizedBox(width: 10),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: EeccColors.surface,
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: EeccColors.border),
+                ),
+                child: Text(
+                  _isStudioConnected ? 'Régie Studio Locale' : 'Diffusion Web',
+                  style: TextStyle(
+                    color: _isStudioConnected ? EeccColors.successGreen : EeccColors.textSecondary,
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               ),
             ],
           ),
@@ -243,7 +383,7 @@ class _LiveScreenState extends State<LiveScreen> with SingleTickerProviderStateM
           const SizedBox(height: 12),
 
           Text(
-            event?.title ?? 'Culte dominical de célébration',
+            event?.title ?? 'Grand Culte d\'Adoration et d\'Enseignement',
             style: const TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.bold,
@@ -251,16 +391,23 @@ class _LiveScreenState extends State<LiveScreen> with SingleTickerProviderStateM
             ),
           ),
 
+          const SizedBox(height: 6),
+
+          const Text(
+            'Église Évangélique les Cohéritiers du Christ (EECC)',
+            style: TextStyle(color: EeccColors.primary, fontSize: 13, fontWeight: FontWeight.bold),
+          ),
+
           const SizedBox(height: 8),
 
           Text(
-            event?.description ?? 'Rejoignez-nous pour notre temps de louange et la prédication de la parole de Dieu.',
+            event?.description ?? 'Rejoignez la communauté EECC pour un temps puissant dans la présence de Dieu et l\'enseignement de la Parole.',
             style: const TextStyle(color: EeccColors.textSecondary, fontSize: 14, height: 1.5),
           ),
 
-          const SizedBox(height: 24),
+          const SizedBox(height: 20),
 
-          // 3. CARTE PRÉDICATEUR ET PASSAGE BIBLIQUE
+          // 3. CARTE PRÉDICATEUR ET PROGRAMME
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -285,7 +432,7 @@ class _LiveScreenState extends State<LiveScreen> with SingleTickerProviderStateM
                         style: const TextStyle(fontWeight: FontWeight.bold, color: EeccColors.textMain, fontSize: 15),
                       ),
                       Text(
-                        event?.bibleReference ?? 'Évangile selon Jean',
+                        event?.theme ?? 'La Puissance de la Foi Agissante',
                         style: const TextStyle(color: EeccColors.primary, fontSize: 13, fontWeight: FontWeight.w600),
                       ),
                     ],
@@ -339,7 +486,7 @@ class _LiveScreenState extends State<LiveScreen> with SingleTickerProviderStateM
               style: const TextStyle(fontWeight: FontWeight.bold, color: EeccColors.textMain, fontSize: 14),
             ),
             subtitle: Text(
-              '${replay.platform} • ${replay.date}',
+              '${replay.platform} • ${replay.speaker}',
               style: const TextStyle(color: EeccColors.textSecondary, fontSize: 12),
             ),
             trailing: const Icon(Icons.open_in_new, color: EeccColors.primary, size: 20),

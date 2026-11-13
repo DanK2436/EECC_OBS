@@ -28,8 +28,8 @@ export default function AdminDashboardPage() {
     },
     {
       label: "Dons collectés (Mois)",
-      value: "4 850 $",
-      sub: "+12% vs mois dernier",
+      value: "non mesuré",
+      sub: "Aucun total confirmé par MaishaPay",
       icon: DollarSign,
       color: "text-green-600",
       bg: "bg-green-50",
@@ -52,11 +52,7 @@ export default function AdminDashboardPage() {
     },
   ];
 
-  const recentTransactions = [
-    { id: "DON-001", donor: "Fidèle Anonyme", amount: "50 $", method: "Airtel Money", status: "Confirmé", date: "Aujourd'hui, 11:20" },
-    { id: "DON-002", donor: "M. Kankonde", amount: "100 $", method: "M-Pesa", status: "Confirmé", date: "Hier, 16:45" },
-    { id: "DON-003", donor: "Mme Kabila", amount: "25 $", method: "Orange Money", status: "Confirmé", date: "Hier, 09:12" },
-  ];
+  const recentTransactions: Array<{ id: string; donor: string; amount: string; method: string; status: string; date: string }> = [];
 
   return (
     <div className="space-y-8">
@@ -110,7 +106,7 @@ export default function AdminDashboardPage() {
           <div className="flex items-center justify-between mb-5">
             <div>
               <h3 className="font-bold text-textMain text-base">Dons Récents (Passerelle Maishapay)</h3>
-              <p className="text-xs text-slate-500">Collectes directes en ligne et mobile money</p>
+              <p className="text-xs text-slate-500">Seuls les dons confirmés par MaishaPay apparaîtront ici. Aucun n'est chargé.</p>
             </div>
             <Link href="/admin/tresorerie" className="text-xs font-bold text-primary hover:underline flex items-center">
               Voir tout <ArrowUpRight className="w-3.5 h-3.5 ml-1" />
@@ -130,6 +126,11 @@ export default function AdminDashboardPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
+                {recentTransactions.length === 0 ? (
+                  <tr>
+                    <td className="py-4 px-3 text-slate-500" colSpan={6}>Aucun don confirmé par le prestataire.</td>
+                  </tr>
+                ) : null}
                 {recentTransactions.map((tx) => (
                   <tr key={tx.id} className="hover:bg-slate-50/80">
                     <td className="py-3 px-3 font-mono font-medium text-slate-600">{tx.id}</td>
@@ -175,7 +176,7 @@ export default function AdminDashboardPage() {
                 <strong className="block text-xs text-textMain font-bold">Maishapay API</strong>
                 <span className="text-[10px] text-slate-500">Passerelle de paiement RDC</span>
               </div>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-green-100 text-green-700">Prêt</span>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-800">Non branché</span>
             </div>
 
             <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-200/60">
@@ -183,7 +184,7 @@ export default function AdminDashboardPage() {
                 <strong className="block text-xs text-textMain font-bold">Brevo E-mails (OTP)</strong>
                 <span className="text-[10px] text-slate-500">Codes 5 car. Trésorerie</span>
               </div>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-green-100 text-green-700">Configuré</span>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-800">Non branché</span>
             </div>
           </div>
 
@@ -192,7 +193,7 @@ export default function AdminDashboardPage() {
               <ShieldAlert className="w-4 h-4 text-amber-600" />
               <span>Règle de Sécurité Retrait</span>
             </div>
-            Tout retrait de fonds de la trésorerie exige la double confirmation avec le code OTP 5 caractères expédié par Brevo.
+            Aucun retrait n'est exécuté : le code OTP n'est pas envoyé et MaishaPay n'est pas appelé.
           </div>
         </div>
       </div>

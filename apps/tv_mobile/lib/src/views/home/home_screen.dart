@@ -253,7 +253,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: EeccColors.textMain),
                 ),
                 Text(
-                  'Dîmes et offrandes via Maishapay',
+                  'Le paiement n\'est pas encore branché',
                   style: TextStyle(fontSize: 12, color: EeccColors.textSecondary),
                 ),
               ],

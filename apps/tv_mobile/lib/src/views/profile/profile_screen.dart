@@ -64,7 +64,7 @@ class ProfileScreen extends StatelessWidget {
             _buildMenuTile(
               icon: Icons.volunteer_activism_rounded,
               title: 'Faire un don ou payer sa dîme',
-              subtitle: 'Soutien sécurisé par Maishapay',
+              subtitle: 'Paiement non branché',
               onTap: () => DonationModal.show(context),
             ),
             _buildMenuTile(

@@ -77,7 +77,7 @@ class _DonationModalState extends State<DonationModal> {
                       ),
                     ),
                     Text(
-                      'Don sécurisé via Maishapay',
+                      'Paiement MaishaPay non branché',
                       style: TextStyle(fontSize: 13, color: EeccColors.textSecondary),
                     ),
                   ],
@@ -174,16 +174,14 @@ class _DonationModalState extends State<DonationModal> {
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
                 onPressed: () {
-                  Navigator.pop(context);
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Initialisation du don de ${_selectedAmount.toStringAsFixed(0)} \$ via Maishapay...'),
-                      backgroundColor: EeccColors.primary,
+                    const SnackBar(
+                      content: Text('Aucun don n\'a été envoyé. MaishaPay n\'est pas configuré sur ce téléphone.'),
                     ),
                   );
                 },
                 child: Text(
-                  'Faire un don de ${_selectedAmount.toStringAsFixed(0)} \$',
+                  'Don de ${_selectedAmount.toStringAsFixed(0)} \$ non disponible',
                   style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
                 ),
               ),

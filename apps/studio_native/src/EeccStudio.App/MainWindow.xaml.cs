@@ -91,6 +91,19 @@ namespace EeccStudio
 
         private void BtnTallyStandby_Click(object sender, RoutedEventArgs e) => _link.TrySetTally("standby");
 
+        private void MenuQuit_Click(object sender, RoutedEventArgs e) => Close();
+
+        private void MenuHelp_Click(object sender, RoutedEventArgs e)
+        {
+            if (App.IsSmokeTest) return;
+            MessageBox.Show(
+                "EECC Studio affiche le QR d'appairage, reçoit l'image et le son du téléphone sur le réseau local, et envoie le tally.\n\n" +
+                "Le mixage, les scènes, les profils, l'enregistrement et la diffusion externe ne sont pas branchés. Les entrées de menu correspondantes le disent.",
+                "À propos d'EECC Studio",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+        }
+
         private void BtnUnwired_Click(object sender, RoutedEventArgs e)
         {
             if (sender is Button button && button.Tag is string message)

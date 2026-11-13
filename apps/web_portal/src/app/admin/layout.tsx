@@ -80,7 +80,7 @@ export default function AdminLayout({
         <header className="h-16 bg-white border-b border-slate-200 px-6 flex items-center justify-between">
           <div className="flex items-center space-x-2">
             <span className="w-2.5 h-2.5 rounded-full bg-green-500" />
-            <span className="text-xs font-semibold text-slate-600">Système opérationnel (Supabase + Maishapay)</span>
+            <span className="text-xs font-semibold text-slate-600">MaishaPay non confirmé sur ce portail</span>
           </div>
 
           <div className="flex items-center space-x-4">

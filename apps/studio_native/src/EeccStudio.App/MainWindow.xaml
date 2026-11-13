@@ -4,7 +4,7 @@
         Title="ECC Studio — Radio &amp; Diffusion Pro (EECC Officiel)" 
         Height="880" Width="1440"
         MinHeight="760" MinWidth="1100"
-        Background="#0A0E17"
+        Background="#3C4146"
         Icon="Assets/eecc.ico"
         WindowStartupLocation="CenterScreen">
     
@@ -133,10 +133,10 @@
         <!-- ======================================================== -->
         <!-- VOLET DE NAVIGATION VERTICAL GAUCHE                      -->
         <!-- ======================================================== -->
-        <Border Grid.Column="0" Background="#0A0E17" BorderBrush="#1B2433" BorderThickness="0,0,1,0">
+        <Border Grid.Column="0" Background="#3C4146" BorderBrush="#22262B" BorderThickness="0,0,1,0">
             <StackPanel Margin="0,10,0,0">
                 <!-- 1. Accueil (ACTIF - Fond Bleu Rectangulaire Arrondi) -->
-                <Button Margin="6,3" Height="52" Background="#1877F2" BorderThickness="0" Cursor="Hand">
+                <Button Margin="6,3" Height="52" Background="#5A6168" BorderThickness="0" Cursor="Hand">
                     <Button.Template>
                         <ControlTemplate TargetType="Button">
                             <Border Background="{TemplateBinding Background}" CornerRadius="10">
@@ -219,7 +219,7 @@
             </Grid.RowDefinitions>
 
             <!-- 1. EN-TÊTE SUPÉRIEUR & ONGLETS HORIZONTAUX -->
-            <Border Grid.Row="0" Background="#0C111C" BorderBrush="#1B2433" BorderThickness="0,0,0,1" Padding="14,6">
+            <Border Grid.Row="0" Background="#62686F" BorderBrush="#22262B" BorderThickness="0,0,0,1" Padding="14,6">
                 <DockPanel LastChildFill="True">
                     <!-- A. LOGO & TITRE OFFICIEL GAUCHE -->
                     <StackPanel Orientation="Horizontal" DockPanel.Dock="Left" VerticalAlignment="Center">
@@ -235,13 +235,14 @@
                         <StackPanel VerticalAlignment="Center" Margin="0,0,20,0">
                             <TextBlock Text="ECC Studio" FontWeight="Black" FontSize="16" Foreground="#FFFFFF"/>
                             <TextBlock Text="Radio &amp; Diffusion Pro" FontSize="10" Foreground="#8B949E" FontWeight="Medium"/>
+                            <TextBlock x:Name="BadgeDemo" Text="MODE DÉMO — données d'exemple" Visibility="Collapsed" FontSize="9" FontWeight="Bold" Foreground="#7A1D1D" Margin="0,2,0,0"/>
                         </StackPanel>
                     </StackPanel>
 
                     <!-- C. CONTRÔLES SUPÉRIEURS DROITE -->
                     <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" VerticalAlignment="Center">
                         <!-- Sélecteur d'écran -->
-                        <ComboBox Width="135" Height="30" Background="#141C2B" Foreground="#F0F6FC" BorderBrush="#253248" SelectedIndex="0" VerticalContentAlignment="Center" Margin="0,0,8,0">
+                        <ComboBox Width="135" Height="30" Background="#4A5057" Foreground="#F0F6FC" BorderBrush="#2A2E33" SelectedIndex="0" VerticalContentAlignment="Center" Margin="0,0,8,0">
                             <ComboBoxItem Content="🖥 Écran principal"/>
                             <ComboBoxItem Content="🖥 Moniteur Régie 2"/>
                             <ComboBoxItem Content="📺 Sortie HDMI / SDI"/>
@@ -253,7 +254,7 @@
                         </Border>
 
                         <!-- Bouton Mode Studio -->
-                        <Button Content="🖥 Mode Studio" Background="#141C2B" Foreground="#38BDF8" BorderBrush="#253248" BorderThickness="1" Padding="10,5" Margin="0,0,10,0" FontWeight="Bold" FontSize="11" Click="BtnStudioMode_Click">
+                        <Button Content="🖥 Mode Studio" Background="#4A5057" Foreground="#38BDF8" BorderBrush="#2A2E33" BorderThickness="1" Padding="10,5" Margin="0,0,10,0" FontWeight="Bold" FontSize="11" Click="BtnStudioMode_Click">
                             <Button.Template>
                                 <ControlTemplate TargetType="Button">
                                     <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="6" Padding="{TemplateBinding Padding}">
@@ -274,7 +275,7 @@
                     <!-- B. ONGLETS HORIZONTAUX DU CENTRE (PILLS) -->
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Left">
                         <!-- Accueil (Actif) -->
-                        <Button Content="🏠 Accueil" Background="#1877F2" Foreground="#FFFFFF" Style="{StaticResource TopNavPillStyle}">
+                        <Button Content="🏠 Accueil" Background="#E6E8EB" Foreground="#1C2126" Style="{StaticResource TopNavPillStyle}">
                             <Button.Template>
                                 <ControlTemplate TargetType="Button">
                                     <Border Background="{TemplateBinding Background}" CornerRadius="6" Padding="14,6">
@@ -305,13 +306,12 @@
                 <Border x:Name="BorderPreview" Grid.Column="0" Background="#000000" BorderBrush="#00E676" BorderThickness="2" CornerRadius="10" ClipToBounds="True">
                     <Grid>
                         <!-- Image Sanctuaire Église Réelle (Arrière-Plan Haute Définition) -->
-                        <Image Source="Assets/church_stage.jpg" Stretch="UniformToFill" HorizontalAlignment="Center" VerticalAlignment="Center" Opacity="0.95"/>
+                        <Grid Background="#07080A"><TextBlock Text="Aucun signal" Foreground="#8B9198" FontSize="13" HorizontalAlignment="Center" VerticalAlignment="Center"/></Grid>
 
-                        <!-- Flux Vidéo Matériel Réel Caméra Smartphone / USB -->
                         <Image x:Name="ImgPreviewVideo" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"/>
 
-                        <!-- Mire Slate de Secours -->
-                        <Grid x:Name="PanelPreviewSlate" Visibility="Collapsed">
+                        <Grid x:Name="PanelPreviewSlate">
+                            <TextBlock x:Name="TxtPreviewEmpty" Text="Aucune image de téléphone reçue." Foreground="#9CA3AF" FontSize="16" HorizontalAlignment="Center" VerticalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap" Margin="24"/>
                             <TextBlock x:Name="TxtPreviewMain" Visibility="Collapsed"/>
                             <TextBlock x:Name="TxtPreviewOverlay" Visibility="Collapsed"/>
                         </Grid>
@@ -331,7 +331,7 @@
                         </Border>
 
                         <!-- Bandeau Tiers Inférieur Transparent dans l'Aperçu -->
-                        <Border Background="#D00A0E17" VerticalAlignment="Bottom" HorizontalAlignment="Center" CornerRadius="8" Padding="16,8" Margin="0,0,0,16" BorderBrush="#253248" BorderThickness="1">
+                        <Border Background="#D00A0E17" VerticalAlignment="Bottom" HorizontalAlignment="Center" CornerRadius="8" Padding="16,8" Margin="0,0,0,16" BorderBrush="#2A2E33" BorderThickness="1">
                             <StackPanel HorizontalAlignment="Center">
                                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
                                     <TextBlock Text="👁 " Foreground="#00E676" FontSize="12"/>
@@ -367,7 +367,7 @@
                     <!-- Durée de Transition -->
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,6,0,2">
                         <TextBlock Text="⏱ Durée : " Foreground="#94A3B8" FontSize="11" VerticalAlignment="Center"/>
-                        <Border Background="#141C2B" BorderBrush="#253248" BorderThickness="1" CornerRadius="4" Padding="6,2">
+                        <Border Background="#4A5057" BorderBrush="#2A2E33" BorderThickness="1" CornerRadius="4" Padding="6,2">
                             <TextBlock Text="C  400 ms" Foreground="#38BDF8" FontSize="11" FontWeight="Bold" FontFamily="Consolas"/>
                         </Border>
                     </StackPanel>
@@ -383,13 +383,12 @@
                 <Border Grid.Column="2" Background="#000000" BorderBrush="#FF1744" BorderThickness="2" CornerRadius="10" ClipToBounds="True">
                     <Grid>
                         <!-- Image Sanctuaire Église Réelle (Arrière-Plan Haute Définition) -->
-                        <Image Source="Assets/church_stage.jpg" Stretch="UniformToFill" HorizontalAlignment="Center" VerticalAlignment="Center" Opacity="0.95"/>
+                        <Grid Background="#07080A"><TextBlock Text="Aucun signal" Foreground="#8B9198" FontSize="13" HorizontalAlignment="Center" VerticalAlignment="Center"/></Grid>
 
-                        <!-- Flux Vidéo Matériel Réel Programme Diffusé -->
                         <Image x:Name="ImgProgramVideo" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"/>
 
-                        <!-- Mire Slate Programme de Secours -->
-                        <Grid x:Name="PanelProgramSlate" Visibility="Collapsed">
+                        <Grid x:Name="PanelProgramSlate">
+                            <TextBlock x:Name="TxtProgramEmpty" Text="Aucune image à l'antenne." Foreground="#9CA3AF" FontSize="16" HorizontalAlignment="Center" VerticalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap" Margin="24"/>
                             <TextBlock x:Name="TxtProgramSceneName" Visibility="Collapsed"/>
                             <TextBlock x:Name="TxtProgramMain" Visibility="Collapsed"/>
                             <TextBlock x:Name="TxtProgramSub" Visibility="Collapsed"/>
@@ -402,7 +401,7 @@
                                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                     <TextBlock Text="🔴  PROGRAMME (ON AIR)" Foreground="#FF1744" FontWeight="Black" FontSize="12"/>
                                 </StackPanel>
-                                <Border x:Name="PgmOnAirPill" Background="#FF1744" CornerRadius="4" Padding="8,2" HorizontalAlignment="Right">
+                                <Border x:Name="PgmOnAirPill" Visibility="Collapsed" Background="#FF1744" CornerRadius="4" Padding="8,2" HorizontalAlignment="Right">
                                     <TextBlock Text="((📡)) ON AIR" Foreground="#FFFFFF" FontSize="10" FontWeight="Black"/>
                                 </Border>
                             </DockPanel>
@@ -412,9 +411,9 @@
                         <Border Background="#D00A0E17" VerticalAlignment="Bottom" HorizontalAlignment="Stretch" Margin="12,0,12,14" CornerRadius="8" Padding="14,8" BorderBrush="#3B1820" BorderThickness="1">
                             <DockPanel LastChildFill="True">
                                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                    <TextBlock Text="((📡)) Diffusion en cours..." Foreground="#FFFFFF" FontWeight="Bold" FontSize="12"/>
+                                    <TextBlock x:Name="TxtProgramLiveFooter" Text="Aucune image à l'antenne" Foreground="#FFFFFF" FontWeight="Bold" FontSize="12"/>
                                 </StackPanel>
-                                <TextBlock x:Name="TxtProgramDetails" Text="00:12:34" Foreground="#FFFFFF" FontSize="13" FontWeight="Black" FontFamily="Consolas" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                                <TextBlock x:Name="TxtProgramDetails" Text="" Foreground="#FFFFFF" FontSize="13" FontWeight="Black" FontFamily="Consolas" HorizontalAlignment="Right" VerticalAlignment="Center"/>
                             </DockPanel>
                         </Border>
                     </Grid>
@@ -422,7 +421,7 @@
             </Grid>
 
             <!-- 3. DOCKS MODULAIRES OBS STUDIO (4 COLONNES) -->
-            <Border Grid.Row="2" Background="#0A0E17" BorderBrush="#1B2433" BorderThickness="0,1,0,0" Padding="10,6">
+            <Border Grid.Row="2" Background="#3C4146" BorderBrush="#22262B" BorderThickness="0,1,0,0" Padding="10,6">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="210"/> <!-- Dock 1 : Scènes -->
@@ -432,7 +431,7 @@
                     </Grid.ColumnDefinitions>
 
                     <!-- DOCK 1 : SCÈNES -->
-                    <Border Grid.Column="0" Background="#0E1420" BorderBrush="#1E2838" BorderThickness="1" CornerRadius="8" Margin="3">
+                    <Border Grid.Column="0" Background="#3A3F45" BorderBrush="#22262B" BorderThickness="1" CornerRadius="8" Margin="3">
                         <Grid>
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="32"/>
@@ -456,7 +455,7 @@
                                         <Border CornerRadius="6" Padding="6,4" Margin="2,1">
                                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                                 <Border Width="38" Height="24" CornerRadius="4" ClipToBounds="True" Background="#1E293B" Margin="0,0,8,0">
-                                                    <Image Source="Assets/church_stage.jpg" Stretch="UniformToFill"/>
+                                                    <TextBlock Text="+" Foreground="#8B9198" FontSize="11" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                                 </Border>
                                                 <TextBlock Text="{Binding Name}" Foreground="#F0F6FC" FontWeight="SemiBold" FontSize="12" VerticalAlignment="Center"/>
                                             </StackPanel>
@@ -466,7 +465,7 @@
                             </ListBox>
 
                             <!-- Barre d'outils Scènes -->
-                            <Border Grid.Row="2" Background="#0B101A" BorderBrush="#1E2838" BorderThickness="0,1,0,0" Padding="4">
+                            <Border Grid.Row="2" Background="#32373C" BorderBrush="#22262B" BorderThickness="0,1,0,0" Padding="4">
                                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
                                     <Button Content="▲" Style="{StaticResource DockMiniBtn}" Click="BtnMoveSceneUp_Click" ToolTip="Monter"/>
                                     <Button Content="▼" Style="{StaticResource DockMiniBtn}" Click="BtnMoveSceneDown_Click" ToolTip="Descendre"/>
@@ -478,7 +477,7 @@
                     </Border>
 
                     <!-- DOCK 2 : SOURCES -->
-                    <Border Grid.Column="1" Background="#0E1420" BorderBrush="#1E2838" BorderThickness="1" CornerRadius="8" Margin="3">
+                    <Border Grid.Column="1" Background="#3A3F45" BorderBrush="#22262B" BorderThickness="1" CornerRadius="8" Margin="3">
                         <Grid>
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="32"/>
@@ -513,7 +512,7 @@
                             </ListBox>
 
                             <!-- Barre d'outils Sources -->
-                            <Border Grid.Row="2" Background="#0B101A" BorderBrush="#1E2838" BorderThickness="0,1,0,0" Padding="4">
+                            <Border Grid.Row="2" Background="#32373C" BorderBrush="#22262B" BorderThickness="0,1,0,0" Padding="4">
                                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
                                     <Button Content="+" Style="{StaticResource DockMiniBtn}" Click="BtnAddSource_Click" ToolTip="Ajouter"/>
                                     <Button Content="📁" Style="{StaticResource DockMiniBtn}" ToolTip="Dossier"/>
@@ -525,7 +524,7 @@
                     </Border>
 
                     <!-- DOCK 3 : MIXEUR AUDIO MULTI-CANAUX VU-MÈTRES LED RÉELS -->
-                    <Border Grid.Column="2" Background="#0E1420" BorderBrush="#1E2838" BorderThickness="1" CornerRadius="8" Margin="3">
+                    <Border Grid.Column="2" Background="#3A3F45" BorderBrush="#22262B" BorderThickness="1" CornerRadius="8" Margin="3">
                         <Grid>
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="32"/>
@@ -539,7 +538,7 @@
                             <!-- 5 Tranches de Canaux Audio Stéréo Stables et Fidèles à la Capture -->
                             <UniformGrid Grid.Row="1" Columns="5" Margin="4,0,4,4">
                                 <!-- Canal 1 : Master (PGM) -->
-                                <Border Background="#0B101A" CornerRadius="6" Margin="2" Padding="4">
+                                <Border Background="#32373C" CornerRadius="6" Margin="2" Padding="4">
                                     <Grid>
                                         <Grid.RowDefinitions>
                                             <RowDefinition Height="20"/>
@@ -557,24 +556,24 @@
                                                 <ColumnDefinition Width="32"/>
                                             </Grid.ColumnDefinitions>
                                             <!-- Barre Gauche L -->
-                                            <Border Grid.Column="0" Background="#161B22" CornerRadius="2" Margin="1">
-                                                <Border Height="80" VerticalAlignment="Bottom" Background="#00E676" CornerRadius="2"/>
+                                            <Border Grid.Column="0" Background="#2A2E33" CornerRadius="2" Margin="1">
+                                                <Border x:Name="MeterFill1" Height="4" VerticalAlignment="Bottom" Background="#00E676" CornerRadius="2"/>
                                             </Border>
                                             <!-- Barre Droite R -->
-                                            <Border Grid.Column="1" Background="#161B22" CornerRadius="2" Margin="1">
-                                                <Border Height="75" VerticalAlignment="Bottom" Background="#00E676" CornerRadius="2"/>
+                                            <Border Grid.Column="1" Background="#2A2E33" CornerRadius="2" Margin="1">
+                                                <Border x:Name="MeterFill2" Height="4" VerticalAlignment="Bottom" Background="#00E676" CornerRadius="2"/>
                                             </Border>
                                             <!-- Fader Slider -->
                                             <Slider Grid.Column="2" x:Name="SliderMaster" Orientation="Vertical" Value="85" Minimum="0" Maximum="100" ValueChanged="AudioSlider_ValueChanged"/>
                                         </Grid>
 
                                         <TextBlock Grid.Row="2" x:Name="TxtMasterDb" Text="0.0 dB" Foreground="#FFFFFF" FontSize="10" FontWeight="Bold" HorizontalAlignment="Center" FontFamily="Consolas"/>
-                                        <Button Grid.Row="3" Content="MUTE" Background="#161F2E" Foreground="#94A3B8" BorderBrush="#253248" FontSize="9" FontWeight="Bold" Margin="4,1"/>
+                                        <Button Grid.Row="3" Content="MUTE" Background="#454B52" Foreground="#94A3B8" BorderBrush="#2A2E33" FontSize="9" FontWeight="Bold" Margin="4,1"/>
                                     </Grid>
                                 </Border>
 
                                 <!-- Canal 2 : Micro Pasteur -->
-                                <Border Background="#0B101A" CornerRadius="6" Margin="2" Padding="4">
+                                <Border Background="#32373C" CornerRadius="6" Margin="2" Padding="4">
                                     <Grid>
                                         <Grid.RowDefinitions>
                                             <RowDefinition Height="20"/>
@@ -590,22 +589,22 @@
                                                 <ColumnDefinition Width="6"/>
                                                 <ColumnDefinition Width="32"/>
                                             </Grid.ColumnDefinitions>
-                                            <Border Grid.Column="0" Background="#161B22" CornerRadius="2" Margin="1">
-                                                <Border Height="68" VerticalAlignment="Bottom" Background="#00E676" CornerRadius="2"/>
+                                            <Border Grid.Column="0" Background="#2A2E33" CornerRadius="2" Margin="1">
+                                                <Border x:Name="MeterFill3" Height="4" VerticalAlignment="Bottom" Background="#00E676" CornerRadius="2"/>
                                             </Border>
-                                            <Border Grid.Column="1" Background="#161B22" CornerRadius="2" Margin="1">
-                                                <Border Height="64" VerticalAlignment="Bottom" Background="#00E676" CornerRadius="2"/>
+                                            <Border Grid.Column="1" Background="#2A2E33" CornerRadius="2" Margin="1">
+                                                <Border x:Name="MeterFill4" Height="4" VerticalAlignment="Bottom" Background="#00E676" CornerRadius="2"/>
                                             </Border>
                                             <Slider Grid.Column="2" Orientation="Vertical" Value="75" Minimum="0" Maximum="100" ValueChanged="AudioSlider_ValueChanged"/>
                                         </Grid>
 
                                         <TextBlock Grid.Row="2" Text="-6.0 dB" Foreground="#94A3B8" FontSize="10" HorizontalAlignment="Center" FontFamily="Consolas"/>
-                                        <Button Grid.Row="3" Content="MUTE" Background="#161F2E" Foreground="#94A3B8" BorderBrush="#253248" FontSize="9" FontWeight="Bold" Margin="4,1"/>
+                                        <Button Grid.Row="3" Content="MUTE" Background="#454B52" Foreground="#94A3B8" BorderBrush="#2A2E33" FontSize="9" FontWeight="Bold" Margin="4,1"/>
                                     </Grid>
                                 </Border>
 
                                 <!-- Canal 3 : Chœur / Orchestre -->
-                                <Border Background="#0B101A" CornerRadius="6" Margin="2" Padding="4">
+                                <Border Background="#32373C" CornerRadius="6" Margin="2" Padding="4">
                                     <Grid>
                                         <Grid.RowDefinitions>
                                             <RowDefinition Height="20"/>
@@ -621,22 +620,22 @@
                                                 <ColumnDefinition Width="6"/>
                                                 <ColumnDefinition Width="32"/>
                                             </Grid.ColumnDefinitions>
-                                            <Border Grid.Column="0" Background="#161B22" CornerRadius="2" Margin="1">
-                                                <Border Height="55" VerticalAlignment="Bottom" Background="#F59E0B" CornerRadius="2"/>
+                                            <Border Grid.Column="0" Background="#2A2E33" CornerRadius="2" Margin="1">
+                                                <Border x:Name="MeterFill5" Height="4" VerticalAlignment="Bottom" Background="#F59E0B" CornerRadius="2"/>
                                             </Border>
-                                            <Border Grid.Column="1" Background="#161B22" CornerRadius="2" Margin="1">
-                                                <Border Height="58" VerticalAlignment="Bottom" Background="#F59E0B" CornerRadius="2"/>
+                                            <Border Grid.Column="1" Background="#2A2E33" CornerRadius="2" Margin="1">
+                                                <Border x:Name="MeterFill6" Height="4" VerticalAlignment="Bottom" Background="#F59E0B" CornerRadius="2"/>
                                             </Border>
                                             <Slider Grid.Column="2" Orientation="Vertical" Value="60" Minimum="0" Maximum="100" ValueChanged="AudioSlider_ValueChanged"/>
                                         </Grid>
 
                                         <TextBlock Grid.Row="2" Text="-12.0 dB" Foreground="#94A3B8" FontSize="10" HorizontalAlignment="Center" FontFamily="Consolas"/>
-                                        <Button Grid.Row="3" Content="MUTE" Background="#161F2E" Foreground="#94A3B8" BorderBrush="#253248" FontSize="9" FontWeight="Bold" Margin="4,1"/>
+                                        <Button Grid.Row="3" Content="MUTE" Background="#454B52" Foreground="#94A3B8" BorderBrush="#2A2E33" FontSize="9" FontWeight="Bold" Margin="4,1"/>
                                     </Grid>
                                 </Border>
 
                                 <!-- Canal 4 : ECC Caméra 1 -->
-                                <Border Background="#0B101A" CornerRadius="6" Margin="2" Padding="4">
+                                <Border Background="#32373C" CornerRadius="6" Margin="2" Padding="4">
                                     <Grid>
                                         <Grid.RowDefinitions>
                                             <RowDefinition Height="20"/>
@@ -652,22 +651,22 @@
                                                 <ColumnDefinition Width="6"/>
                                                 <ColumnDefinition Width="32"/>
                                             </Grid.ColumnDefinitions>
-                                            <Border Grid.Column="0" Background="#161B22" CornerRadius="2" Margin="1">
-                                                <Border Height="70" VerticalAlignment="Bottom" Background="#00E676" CornerRadius="2"/>
+                                            <Border Grid.Column="0" Background="#2A2E33" CornerRadius="2" Margin="1">
+                                                <Border x:Name="MeterFill7" Height="4" VerticalAlignment="Bottom" Background="#00E676" CornerRadius="2"/>
                                             </Border>
-                                            <Border Grid.Column="1" Background="#161B22" CornerRadius="2" Margin="1">
-                                                <Border Height="70" VerticalAlignment="Bottom" Background="#00E676" CornerRadius="2"/>
+                                            <Border Grid.Column="1" Background="#2A2E33" CornerRadius="2" Margin="1">
+                                                <Border x:Name="MeterFill8" Height="4" VerticalAlignment="Bottom" Background="#00E676" CornerRadius="2"/>
                                             </Border>
                                             <Slider Grid.Column="2" Orientation="Vertical" Value="70" Minimum="0" Maximum="100" ValueChanged="AudioSlider_ValueChanged"/>
                                         </Grid>
 
                                         <TextBlock Grid.Row="2" Text="-8.0 dB" Foreground="#94A3B8" FontSize="10" HorizontalAlignment="Center" FontFamily="Consolas"/>
-                                        <Button Grid.Row="3" Content="MUTE" Background="#161F2E" Foreground="#94A3B8" BorderBrush="#253248" FontSize="9" FontWeight="Bold" Margin="4,1"/>
+                                        <Button Grid.Row="3" Content="MUTE" Background="#454B52" Foreground="#94A3B8" BorderBrush="#2A2E33" FontSize="9" FontWeight="Bold" Margin="4,1"/>
                                     </Grid>
                                 </Border>
 
                                 <!-- Canal 5 : Médias & Vidéo -->
-                                <Border Background="#0B101A" CornerRadius="6" Margin="2" Padding="4">
+                                <Border Background="#32373C" CornerRadius="6" Margin="2" Padding="4">
                                     <Grid>
                                         <Grid.RowDefinitions>
                                             <RowDefinition Height="20"/>
@@ -683,17 +682,17 @@
                                                 <ColumnDefinition Width="6"/>
                                                 <ColumnDefinition Width="32"/>
                                             </Grid.ColumnDefinitions>
-                                            <Border Grid.Column="0" Background="#161B22" CornerRadius="2" Margin="1">
-                                                <Border Height="62" VerticalAlignment="Bottom" Background="#00E676" CornerRadius="2"/>
+                                            <Border Grid.Column="0" Background="#2A2E33" CornerRadius="2" Margin="1">
+                                                <Border x:Name="MeterFill9" Height="4" VerticalAlignment="Bottom" Background="#00E676" CornerRadius="2"/>
                                             </Border>
-                                            <Border Grid.Column="1" Background="#161B22" CornerRadius="2" Margin="1">
-                                                <Border Height="60" VerticalAlignment="Bottom" Background="#00E676" CornerRadius="2"/>
+                                            <Border Grid.Column="1" Background="#2A2E33" CornerRadius="2" Margin="1">
+                                                <Border x:Name="MeterFill10" Height="4" VerticalAlignment="Bottom" Background="#00E676" CornerRadius="2"/>
                                             </Border>
                                             <Slider Grid.Column="2" Orientation="Vertical" Value="65" Minimum="0" Maximum="100" ValueChanged="AudioSlider_ValueChanged"/>
                                         </Grid>
 
                                         <TextBlock Grid.Row="2" Text="-10.0 dB" Foreground="#94A3B8" FontSize="10" HorizontalAlignment="Center" FontFamily="Consolas"/>
-                                        <Button Grid.Row="3" Content="MUTE" Background="#161F2E" Foreground="#94A3B8" BorderBrush="#253248" FontSize="9" FontWeight="Bold" Margin="4,1"/>
+                                        <Button Grid.Row="3" Content="MUTE" Background="#454B52" Foreground="#94A3B8" BorderBrush="#2A2E33" FontSize="9" FontWeight="Bold" Margin="4,1"/>
                                     </Grid>
                                 </Border>
                             </UniformGrid>
@@ -701,7 +700,7 @@
                     </Border>
 
                     <!-- DOCK 4 : COMMANDES BROADCAST OFFICIELLES -->
-                    <Border Grid.Column="3" Background="#0E1420" BorderBrush="#1E2838" BorderThickness="1" CornerRadius="8" Margin="3">
+                    <Border Grid.Column="3" Background="#3A3F45" BorderBrush="#22262B" BorderThickness="1" CornerRadius="8" Margin="3">
                         <Grid>
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="32"/>
@@ -747,7 +746,7 @@
                                 </Button>
 
                                 <!-- 4. Instantané -->
-                                <Button Content="📷   Instantané" Background="#141C2B" Foreground="#F0F6FC" BorderBrush="#253248" BorderThickness="1" Height="28" Margin="0,3" FontWeight="SemiBold" FontSize="11" Click="BtnPairQr_Click" Cursor="Hand">
+                                <Button Content="📷   Instantané" Background="#4A5057" Foreground="#F0F6FC" BorderBrush="#2A2E33" BorderThickness="1" Height="28" Margin="0,3" FontWeight="SemiBold" FontSize="11" Click="BtnPairQr_Click" Cursor="Hand">
                                     <Button.Template>
                                         <ControlTemplate TargetType="Button">
                                             <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="6">
@@ -758,7 +757,7 @@
                                 </Button>
 
                                 <!-- 5. Paramètres rapides -->
-                                <Button Content="⚡   Paramètres rapides" Background="#141C2B" Foreground="#F0F6FC" BorderBrush="#253248" BorderThickness="1" Height="28" Margin="0,3" FontWeight="SemiBold" FontSize="11" Click="BtnSettings_Click" Cursor="Hand">
+                                <Button Content="⚡   Paramètres rapides" Background="#4A5057" Foreground="#F0F6FC" BorderBrush="#2A2E33" BorderThickness="1" Height="28" Margin="0,3" FontWeight="SemiBold" FontSize="11" Click="BtnSettings_Click" Cursor="Hand">
                                     <Button.Template>
                                         <ControlTemplate TargetType="Button">
                                             <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="6">
@@ -774,14 +773,14 @@
             </Border>
 
             <!-- 4. BARRE DE STATUT BROADCAST INFÉRIEURE -->
-            <Border Grid.Row="3" Background="#06090F" BorderBrush="#141C2B" BorderThickness="0,1,0,0" Padding="14,0">
+            <Border Grid.Row="3" Background="#4A5056" BorderBrush="#141C2B" BorderThickness="0,1,0,0" Padding="14,0">
                 <DockPanel LastChildFill="True" VerticalAlignment="Center">
                     <!-- Indicateurs Gauche : LIVE, REC, CPU, FPS, DÉBIT, LAN -->
                     <StackPanel Orientation="Horizontal" DockPanel.Dock="Left" VerticalAlignment="Center">
                         <!-- LIVE -->
                         <StackPanel Orientation="Horizontal" Margin="0,0,16,0">
-                            <TextBlock Text="● " Foreground="#00E676" FontSize="12" FontWeight="Bold"/>
-                            <TextBlock x:Name="TxtStatusLive" Text="LIVE  00:12:34" Foreground="#FFFFFF" FontWeight="Bold" FontFamily="Consolas" FontSize="11"/>
+                            <TextBlock x:Name="StatusLiveDot" Text="● " Foreground="#5C636A" FontSize="12" FontWeight="Bold"/>
+                            <TextBlock x:Name="TxtStatusLive" Text="LIVE  00:00:00" Foreground="#FFFFFF" FontWeight="Bold" FontFamily="Consolas" FontSize="11"/>
                         </StackPanel>
 
                         <!-- REC -->
@@ -794,18 +793,18 @@
                         <TextBlock x:Name="TxtStatusCpu" Text="CPU : 4.8%" Foreground="#94A3B8" FontFamily="Consolas" FontSize="11" Margin="0,0,16,0"/>
 
                         <!-- FPS -->
-                        <TextBlock Text="60.00 FPS" Foreground="#00E676" FontWeight="Bold" FontFamily="Consolas" FontSize="11" Margin="0,0,16,0"/>
+                        <TextBlock x:Name="TxtStatusFps" Text="0.00 FPS" Foreground="#8B949E" FontWeight="Bold" FontFamily="Consolas" FontSize="11" Margin="0,0,16,0"/>
 
                         <!-- Débit -->
                         <StackPanel Orientation="Horizontal" Margin="0,0,16,0">
                             <TextBlock Text="🔗 " Foreground="#38BDF8" FontSize="11"/>
-                            <TextBlock Text="Débit : 6.42 Mbps" Foreground="#FFFFFF" FontFamily="Consolas" FontSize="11"/>
+                            <TextBlock x:Name="TxtStatusBitrate" Text="Débit : 0.00 Mbps" Foreground="#FFFFFF" FontFamily="Consolas" FontSize="11"/>
                         </StackPanel>
 
                         <!-- LAN URL -->
                         <StackPanel Orientation="Horizontal" Margin="0,0,16,0">
                             <TextBlock Text="🖥 " Foreground="#38BDF8" FontSize="11"/>
-                            <TextBlock x:Name="TxtLanBroadcastStatus" Text="LAN : http://192.168.46.78:8080/live" Foreground="#38BDF8" FontFamily="Consolas" FontSize="11"/>
+                            <TextBlock x:Name="TxtLanBroadcastStatus" Text="LAN : …" Foreground="#38BDF8" FontFamily="Consolas" FontSize="11"/>
                         </StackPanel>
                     </StackPanel>
 
@@ -813,7 +812,7 @@
                     <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" HorizontalAlignment="Right" VerticalAlignment="Center">
                         <TextBlock Text="🔊" Foreground="#94A3B8" FontSize="12" Margin="0,0,6,0"/>
                         <Slider Width="90" Value="80" Minimum="0" Maximum="100" Margin="0,0,8,0" VerticalAlignment="Center"/>
-                        <Border Width="16" Height="10" Background="#161B22" CornerRadius="2">
+                        <Border Width="16" Height="10" Background="#2A2E33" CornerRadius="2">
                             <Border Width="12" HorizontalAlignment="Left" Background="#00E676" CornerRadius="2"/>
                         </Border>
 

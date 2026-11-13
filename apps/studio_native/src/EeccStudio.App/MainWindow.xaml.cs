@@ -2,6 +2,8 @@ using System;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
+using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -27,6 +29,11 @@ namespace EeccStudio
         private string _selectedPreviewSlot = "Cam-1";
         private string _selectedProgramSlot = "Cam-1";
         private BroadcastSession? _broadcast;
+        private int _framesThisWindow;
+        private DateTime _fpsStamp = DateTime.UtcNow;
+        private TimeSpan _prevCpu = TimeSpan.Zero;
+        private DateTime _prevCpuAt = DateTime.UtcNow;
+        private static readonly int[] DemoMeterHeights = { 70, 66, 78, 74, 48, 50, 64, 64, 52, 50 };
 
         public MainWindow()
         {
@@ -47,12 +54,18 @@ namespace EeccStudio
 
             if (_scenes.Count > 0)
             {
-                _programScene = _scenes[0]; // Culte Principal en Antenne
-                _previewScene = _scenes[0]; // Culte Principal en Préparation
+                _programScene = _scenes[0];
+                _previewScene = _scenes[0];
                 ListScenes.SelectedIndex = 0;
                 ListSources.ItemsSource = _scenes[0].Sources;
                 UpdatePreviewDisplay();
                 UpdateProgramDisplay();
+            }
+
+            foreach (var scene in _scenes)
+            {
+                foreach (var source in scene.Sources.Where(source => source.Type == SourceType.PhysicalCamera))
+                    _cameraServer.RegisterPhysicalCamera(source.Id, source.Name);
             }
 
             // 3. Minuteur Broadcast temps réel (Status, LIVE, REC, CPU)
@@ -62,12 +75,23 @@ namespace EeccStudio
 
             // Affichage initial du statut réseau
             UpdateNetworkStatusDisplay();
+            if (App.IsDemoMode)
+            {
+                BadgeDemo.Visibility = Visibility.Visible;
+                for (int i = 0; i < DemoMeterHeights.Length; i++)
+                {
+                    if (FindName($"MeterFill{i + 1}") is Border meter)
+                        meter.Height = DemoMeterHeights[i];
+                }
+            }
         }
 
         private void UpdateNetworkStatusDisplay()
         {
             var localIp = _cameraServer.GetLocalIpAddress();
-            TxtLanBroadcastStatus.Text = $"LAN : http://{localIp}:{_cameraServer.Port}/live";
+            TxtLanBroadcastStatus.Text = localIp.Length == 0
+                ? "LAN : aucune adresse privée utilisable"
+                : $"LAN : {localIp}:{_cameraServer.ListeningPort}";
         }
 
         private void OnLoaded(object sender, RoutedEventArgs e)
@@ -118,7 +142,6 @@ namespace EeccStudio
 
         private void OnClockTick(object? sender, EventArgs e)
         {
-            // Mise à jour du timer de direct (LIVE)
             if (_broadcast is { IsActive: true })
             {
                 var summary = _broadcast.Latest.Summary;
@@ -126,44 +149,104 @@ namespace EeccStudio
                     TxtLiveBadge.Text = summary;
             }
 
+            if (App.IsDemoMode)
+            {
+                var example = (Brush)new BrushConverter().ConvertFrom("#2FE06A")!;
+                TxtStatusLive.Text = "LIVE  00:12:34";
+                TxtStatusLive.Foreground = Brushes.White;
+                StatusLiveDot.Foreground = example;
+                TxtStatusRec.Text = "REC  00:00:00";
+                TxtStatusCpu.Text = "CPU : 4.8%";
+                TxtStatusFps.Text = "60.00 FPS";
+                TxtStatusFps.Foreground = example;
+                TxtStatusBitrate.Text = "Débit : 6.42 Mbps";
+                TxtLanBroadcastStatus.Text = "LAN : http://192.168.46.78:8080/live";
+                TxtProgramLiveFooter.Text = "DÉMO · Diffusion en cours...";
+                TxtProgramDetails.Text = "00:12:34";
+                PgmOnAirPill.Visibility = Visibility.Visible;
+                return;
+            }
+
+            var liveBrush = (Brush)new BrushConverter().ConvertFrom("#2FE06A")!;
+            var idleBrush = (Brush)new BrushConverter().ConvertFrom("#5C636A")!;
+
             if (_cameraServer.IsStreaming)
             {
                 var d = _cameraServer.StreamingDuration;
-                TxtStatusLive.Text = $"LIVE  {d.Hours:D2}:{d.Minutes:D2}:{d.Seconds:D2}";
-                TxtStatusLive.Foreground = (Brush)new BrushConverter().ConvertFrom("#00E676");
-                TxtProgramDetails.Text = $"{d.Hours:D2}:{d.Minutes:D2}:{d.Seconds:D2}";
+                var clock = $"{d.Hours:D2}:{d.Minutes:D2}:{d.Seconds:D2}";
+                TxtStatusLive.Text = $"LIVE  {clock}";
+                TxtStatusLive.Foreground = Brushes.White;
+                StatusLiveDot.Foreground = liveBrush;
+                TxtProgramDetails.Text = clock;
+                TxtProgramLiveFooter.Text = "Diffusion en cours...";
+                PgmOnAirPill.Visibility = Visibility.Visible;
             }
             else
             {
-                TxtStatusLive.Text = "LIVE  00:12:34";
-                TxtStatusLive.Foreground = (Brush)new BrushConverter().ConvertFrom("#FFFFFF");
-                TxtProgramDetails.Text = "00:12:34";
+                TxtStatusLive.Text = "LIVE  00:00:00";
+                TxtStatusLive.Foreground = (Brush)new BrushConverter().ConvertFrom("#C5CCD3")!;
+                StatusLiveDot.Foreground = idleBrush;
+                TxtProgramDetails.Text = "";
+                TxtProgramLiveFooter.Text = "En attente";
+                PgmOnAirPill.Visibility = Visibility.Collapsed;
             }
 
-            // Mise à jour du timer d'enregistrement (REC)
             if (_cameraServer.IsRecording)
             {
                 var d = _cameraServer.RecordingDuration;
-                TxtStatusRec.Text = $"REC: {d.Hours:D2}:{d.Minutes:D2}:{d.Seconds:D2}";
-                TxtStatusRec.Foreground = (Brush)new BrushConverter().ConvertFrom("#EF4444");
+                TxtStatusRec.Text = $"REC  {d.Hours:D2}:{d.Minutes:D2}:{d.Seconds:D2}";
+                TxtStatusRec.Foreground = (Brush)new BrushConverter().ConvertFrom("#FF5A5A")!;
             }
             else
             {
-                TxtStatusRec.Text = "REC: 00:00:00";
-                TxtStatusRec.Foreground = (Brush)new BrushConverter().ConvertFrom("#8B949E");
+                TxtStatusRec.Text = "REC  00:00:00";
+                TxtStatusRec.Foreground = (Brush)new BrushConverter().ConvertFrom("#C5CCD3")!;
             }
 
-            // CPU dynamique réaliste
-            var random = new Random();
-            double cpu = 4.2 + (random.NextDouble() * 1.1);
-            TxtStatusCpu.Text = $"CPU: {cpu:F1}%";
+            var proc = Process.GetCurrentProcess();
+            var now = DateTime.UtcNow;
+            var cpuTime = proc.TotalProcessorTime;
+            var wallMs = (now - _prevCpuAt).TotalMilliseconds;
+            var usedMs = (cpuTime - _prevCpu).TotalMilliseconds;
+            var cpuPct = wallMs > 0 ? usedMs / wallMs / Environment.ProcessorCount * 100.0 : 0;
+            TxtStatusCpu.Text = $"CPU : {Math.Clamp(cpuPct, 0, 100):F1}%";
+            _prevCpu = cpuTime;
+            _prevCpuAt = now;
+
+            var windowSeconds = (now - _fpsStamp).TotalSeconds;
+            var countedFps = windowSeconds > 0 ? _framesThisWindow / windowSeconds : 0;
+            _framesThisWindow = 0;
+            _fpsStamp = now;
+
+            double telemetryFps = 0;
+            double bitrateKbps = 0;
+            int telemetryCount = 0;
+            foreach (var cam in _cameraServer.ConnectedCameras.Values)
+            {
+                if (cam.LastTelemetryTime <= cam.ConnectedAt.AddMilliseconds(500)) continue;
+                telemetryFps += cam.Fps;
+                if (_cameraServer.IsStreaming) bitrateKbps += Math.Max(0, cam.BitrateKbps);
+                telemetryCount++;
+            }
+            var fps = countedFps;
+            if (fps < 0.05 && telemetryCount > 0) fps = telemetryFps / telemetryCount;
+            TxtStatusFps.Text = $"{Math.Max(0, fps):F2} FPS";
+            TxtStatusFps.Foreground = fps > 0.5 ? liveBrush : idleBrush;
+            TxtStatusBitrate.Text = $"Débit : {bitrateKbps / 1000.0:F2} Mbps";
+            TxtCameraStatusFooter.Text =
+                $"Téléphones {_cameraServer.ConnectedPhoneCount}/{CameraServer.MaxPhoneConnections}" +
+                $" · reconnexion {_cameraServer.ReservedPhoneCount}" +
+                $" · physiques {_cameraServer.PhysicalCameraCount} (non comptés)";
         }
 
         private void OnCameraConnected(CameraClient camera)
         {
             Dispatcher.Invoke(() =>
             {
-                TxtCameraStatusFooter.Text = $"Serveur Caméra Actif (Port {_cameraServer.Port}) — {_cameraServer.ConnectedCameras.Count}/15 Caméras ({camera.StreamName})";
+                EnsurePhoneSource(camera);
+                if (_selectedPreviewSlot == "Cam-1" && _cameraServer.GetCameraFrame("Cam-1") == null)
+                    _selectedPreviewSlot = camera.StreamName;
+                _ = PushTalliesAsync();
             });
         }
 
@@ -171,7 +254,19 @@ namespace EeccStudio
         {
             Dispatcher.Invoke(() =>
             {
-                TxtCameraStatusFooter.Text = $"Serveur Caméra Actif (Port {_cameraServer.Port}) — {_cameraServer.ConnectedCameras.Count}/15 Caméras";
+                foreach (var scene in _scenes)
+                {
+                    var source = scene.Sources.FirstOrDefault(item => item.Id == streamName);
+                    if (source != null)
+                        source.Details = "déconnecté — la session peut revenir pendant quelques secondes";
+                }
+
+                if (_selectedPreviewSlot == streamName && _cameraServer.GetCameraFrame(streamName) == null)
+                {
+                    ImgPreviewVideo.Source = null;
+                    PanelPreviewSlate.Visibility = Visibility.Visible;
+                    TxtPreviewEmpty.Text = $"{streamName} : connexion perdue. Aucune image.";
+                }
             });
         }
 
@@ -179,38 +274,31 @@ namespace EeccStudio
         {
             Dispatcher.Invoke(() =>
             {
+                _framesThisWindow++;
+                BitmapImage? bitmap;
                 try
                 {
-                    var bitmap = new BitmapImage();
-                    using (var ms = new MemoryStream(jpegBytes))
-                    {
-                        bitmap.BeginInit();
-                        bitmap.CacheOption = BitmapCacheOption.OnLoad;
-                        bitmap.StreamSource = ms;
-                        bitmap.EndInit();
-                        bitmap.Freeze();
-                    }
-
-                    // Aperçu vidéo matériel réel
-                    if (slot == _selectedPreviewSlot || _cameraServer.ConnectedCameras.Count <= 1)
-                    {
-                        ImgPreviewVideo.Source = bitmap;
-                        PanelPreviewSlate.Visibility = Visibility.Collapsed;
-                    }
-
-                    // Programme vidéo matériel réel si à l'antenne sur cette scène
-                    if (_programScene != null && (_programScene.Name.Contains("Orateur") || _programScene.Name.Contains("Chœur") || _programScene.Name.Contains("Plan Large") || _programScene.Name.Contains("Caméra")))
-                    {
-                        if (slot == _selectedProgramSlot || _cameraServer.ConnectedCameras.Count <= 1)
-                        {
-                            ImgProgramVideo.Source = bitmap;
-                            PanelProgramSlate.Visibility = Visibility.Collapsed;
-                            _cameraServer.ActiveProgramFrameBytes = jpegBytes;
-                        }
-                    }
+                    bitmap = new BitmapImage();
+                    using var ms = new MemoryStream(jpegBytes);
+                    bitmap.BeginInit();
+                    bitmap.CacheOption = BitmapCacheOption.OnLoad;
+                    bitmap.StreamSource = ms;
+                    bitmap.EndInit();
+                    bitmap.Freeze();
                 }
                 catch
                 {
+                    return;
+                }
+
+                if (slot == _selectedPreviewSlot)
+                    ShowJpeg(ImgPreviewVideo, PanelPreviewSlate, bitmap!);
+
+                if (slot == _selectedProgramSlot)
+                {
+                    ShowJpeg(ImgProgramVideo, PanelProgramSlate, bitmap);
+                    _cameraServer.ActiveProgramFrameBytes = jpegBytes;
+                    TxtProgramLiveFooter.Text = $"Image reçue · {slot}";
                 }
             });
         }
@@ -231,28 +319,27 @@ namespace EeccStudio
         {
             if (ListSources.SelectedItem is StudioSource src)
             {
-                for (int i = 1; i <= 15; i++)
+                var slot = SlotFromSource(src);
+                if (src.Type == SourceType.MobileCamera && slot != null)
                 {
-                    if (src.Name.Contains($"Cam-{i}") || src.Name.Contains($"Caméra Mobile {i}"))
+                    _selectedPreviewSlot = slot;
+                    var frame = _cameraServer.GetCameraFrame(slot);
+                    if (frame != null && TryDecodeJpeg(frame, out var bitmap))
+                        ShowJpeg(ImgPreviewVideo, PanelPreviewSlate, bitmap!);
+                    else
                     {
-                        _selectedPreviewSlot = $"Cam-{i}";
-                        var frame = _cameraServer.GetCameraFrame(_selectedPreviewSlot);
-                        if (frame != null)
-                        {
-                            var bitmap = new BitmapImage();
-                            using (var ms = new MemoryStream(frame))
-                            {
-                                bitmap.BeginInit();
-                                bitmap.CacheOption = BitmapCacheOption.OnLoad;
-                                bitmap.StreamSource = ms;
-                                bitmap.EndInit();
-                                bitmap.Freeze();
-                            }
-                            ImgPreviewVideo.Source = bitmap;
-                            PanelPreviewSlate.Visibility = Visibility.Collapsed;
-                        }
-                        break;
+                        ImgPreviewVideo.Source = null;
+                        PanelPreviewSlate.Visibility = Visibility.Visible;
+                        TxtPreviewEmpty.Text = $"{slot} : aucune image reçue.";
                     }
+
+                    _ = PushTalliesAsync();
+                }
+                else if (src.Type == SourceType.PhysicalCamera)
+                {
+                    ImgPreviewVideo.Source = null;
+                    PanelPreviewSlate.Visibility = Visibility.Visible;
+                    TxtPreviewEmpty.Text = "Caméra physique sélectionnée. Elle n'est pas un téléphone appairé et aucune image n'est inventée.";
                 }
             }
         }
@@ -279,51 +366,26 @@ namespace EeccStudio
             TxtProgramMain.Text = _programScene.Name;
             _cameraServer.ActiveSceneName = _programScene.Name;
 
-            bool isCameraScene = _programScene.Name.Contains("Orateur") || _programScene.Name.Contains("Chœur") || _programScene.Name.Contains("Plan Large") || _programScene.Name.Contains("Caméra");
-
-            if (isCameraScene)
+            var frame = _cameraServer.GetCameraFrame(_selectedProgramSlot);
+            if (frame != null && TryDecodeJpeg(frame, out var bitmap))
             {
-                _selectedProgramSlot = _selectedPreviewSlot;
-                var frame = _cameraServer.GetCameraFrame(_selectedProgramSlot) ?? _cameraServer.LatestCameraFrameBytes;
-                if (frame != null)
-                {
-                    var bitmap = new BitmapImage();
-                    using (var ms = new MemoryStream(frame))
-                    {
-                        bitmap.BeginInit();
-                        bitmap.CacheOption = BitmapCacheOption.OnLoad;
-                        bitmap.StreamSource = ms;
-                        bitmap.EndInit();
-                        bitmap.Freeze();
-                    }
-                    ImgProgramVideo.Source = bitmap;
-                    PanelProgramSlate.Visibility = Visibility.Collapsed;
-                    _cameraServer.ActiveProgramFrameBytes = frame;
-                }
-                else if (ImgPreviewVideo.Source != null)
-                {
-                    ImgProgramVideo.Source = ImgPreviewVideo.Source;
-                    PanelProgramSlate.Visibility = Visibility.Collapsed;
-                    _cameraServer.ActiveProgramFrameBytes = _cameraServer.LatestCameraFrameBytes;
-                }
-                else
-                {
-                    ImgProgramVideo.Source = null;
-                    PanelProgramSlate.Visibility = Visibility.Visible;
-                }
+                ShowJpeg(ImgProgramVideo, PanelProgramSlate, bitmap!);
+                _cameraServer.ActiveProgramFrameBytes = frame;
+                TxtProgramLiveFooter.Text = $"Image reçue · {_selectedProgramSlot}";
             }
             else
             {
                 ImgProgramVideo.Source = null;
                 PanelProgramSlate.Visibility = Visibility.Visible;
                 _cameraServer.ActiveProgramFrameBytes = null;
+                TxtProgramEmpty.Text = $"Aucune image à l'antenne pour {_selectedProgramSlot}.";
+                TxtProgramLiveFooter.Text = "Aucune image à l'antenne";
             }
 
             if (_programScene.Sources.Count > 0)
             {
                 var first = _programScene.Sources[0];
-                TxtProgramSub.Text = $"{first.Name} • Antenne Active";
-                TxtProgramDetails.Text = $"{_cameraServer.ProgramTitle} • 1920x1080 @ 60 FPS • {_cameraServer.ChurchName}";
+                TxtProgramSub.Text = first.Name;
             }
         }
 
@@ -405,8 +467,18 @@ namespace EeccStudio
             }
             cm.Items.Add(new Separator());
 
-            var miUsb = new MenuItem { Header = "🎥 Caméra Physique USB / Carte SDI (DirectShow)" };
-            miUsb.Click += (s, args) => selected.Sources.Add(new StudioSource { Name = "Caméra USB / SDI", Type = SourceType.PhysicalCamera, Details = "1080p 60 FPS" });
+            var miUsb = new MenuItem { Header = "🎥 Caméra Physique USB / Carte SDI (non comptée dans les 15 téléphones)" };
+            miUsb.Click += (s, args) =>
+            {
+                var physical = new StudioSource
+                {
+                    Name = "Caméra USB / SDI",
+                    Type = SourceType.PhysicalCamera,
+                    Details = "Source physique. Aucune image tant qu'une capture n'est pas branchée."
+                };
+                selected.Sources.Add(physical);
+                _cameraServer.RegisterPhysicalCamera(physical.Id, physical.Name);
+            };
             cm.Items.Add(miUsb);
 
             var miBible = new MenuItem { Header = "📖 Verset Biblique en Direct (Louis Segond)" };
@@ -444,14 +516,18 @@ namespace EeccStudio
         {
             if (_previewScene == null) return;
             _programScene = _previewScene;
+            _selectedProgramSlot = _selectedPreviewSlot;
             UpdateProgramDisplay();
+            _ = PushTalliesAsync();
         }
 
         private void BtnFade_Click(object sender, RoutedEventArgs e)
         {
             if (_previewScene == null) return;
             _programScene = _previewScene;
+            _selectedProgramSlot = _selectedPreviewSlot;
             UpdateProgramDisplay();
+            _ = PushTalliesAsync();
         }
 
         private void BtnFadeToBlack_Click(object sender, RoutedEventArgs e)
@@ -459,8 +535,10 @@ namespace EeccStudio
             ImgProgramVideo.Source = null;
             PanelProgramSlate.Visibility = Visibility.Visible;
             _cameraServer.ActiveProgramFrameBytes = null;
-            TxtProgramMain.Text = "◼ ÉCRAN NOIR (BLACKOUT)";
-            TxtProgramSub.Text = "Signal coupé — Aucune source à l'antenne";
+            TxtProgramEmpty.Text = "Écran noir. Aucune image n'est envoyée.";
+            TxtProgramLiveFooter.Text = "Écran noir";
+            TxtProgramMain.Text = "Écran noir";
+            TxtProgramSub.Text = "Aucune source à l'antenne";
             TxtProgramSceneName.Text = "[ NOIR ]";
         }
 
@@ -498,6 +576,7 @@ namespace EeccStudio
                 TxtLiveBadge.Text = snapshot.Summary;
                 TxtLiveBadge.Foreground = Brushes.White;
                 PgmOnAirPill.Visibility = Visibility.Visible;
+                TxtProgramLiveFooter.Text = snapshot.Summary;
                 TxtProgramStatusFooter.Text = snapshot.Summary;
                 return;
             }
@@ -509,6 +588,7 @@ namespace EeccStudio
             TxtLiveBadge.Text = "HORS LIGNE";
             TxtLiveBadge.Foreground = (Brush)new BrushConverter().ConvertFrom("#8B949E");
             PgmOnAirPill.Visibility = Visibility.Collapsed;
+            TxtProgramLiveFooter.Text = "En attente";
             TxtProgramStatusFooter.Text = "Signal en attente";
         }
 
@@ -649,13 +729,15 @@ namespace EeccStudio
         private void MenuLanStatus_Click(object sender, RoutedEventArgs e)
         {
             var localIp = _cameraServer.GetLocalIpAddress();
+            var addressLine = localIp.Length == 0
+                ? "Aucune adresse IPv4 privée utilisable n'a été détectée."
+                : $"Adresse détectée : http://{localIp}:{_cameraServer.ListeningPort}/live/stream";
             MessageBox.Show(
-                $"Diffusion Locale LAN Activer\n\n" +
-                $"URL de réception EECC TV : http://{localIp}:{_cameraServer.Port}/live/stream\n" +
-                $"Statut API : http://{localIp}:{_cameraServer.Port}/live/status\n" +
-                $"État actuel : {(_cameraServer.IsStreaming ? "DIFFUSION EN DIRECT" : "EN ATTENTE")}\n\n" +
-                $"Les smartphones connectés au Wi-Fi de l'église avec EECC TV peuvent lire ce flux directement.",
-                "Diffusion Locale LAN",
+                addressLine + "\n\n" +
+                "Le même nom de Wi-Fi ne garantit pas que les téléphones joignent Studio. " +
+                "Un pare-feu, un réseau invité ou l'isolation des clients peut bloquer le port. " +
+                "Aucune image n'est affichée tant qu'un téléphone appairé n'en a pas envoyé.",
+                "Réseau local",
                 MessageBoxButton.OK,
                 MessageBoxImage.Information);
         }
@@ -713,6 +795,80 @@ namespace EeccStudio
             _clockTimer.Stop();
             _cameraServer.Stop();
             base.OnClosed(e);
+        }
+
+        private void EnsurePhoneSource(CameraClient camera)
+        {
+            var label = $"{camera.StreamName} · {camera.DisplayName}";
+            foreach (var scene in _scenes)
+            {
+                var existing = scene.Sources.FirstOrDefault(source =>
+                    source.Id == camera.StreamName || SlotFromSource(source) == camera.StreamName);
+                if (existing == null)
+                {
+                    scene.Sources.Add(new StudioSource
+                    {
+                        Id = camera.StreamName,
+                        Name = label,
+                        Type = SourceType.MobileCamera,
+                        Details = camera.RemoteIp,
+                    });
+                }
+                else
+                {
+                    existing.Id = camera.StreamName;
+                    existing.Name = label;
+                    existing.Type = SourceType.MobileCamera;
+                    existing.Details = $"{camera.RemoteIp} · {camera.DeviceModel}";
+                }
+            }
+        }
+
+        private async Task PushTalliesAsync()
+        {
+            foreach (var phone in _cameraServer.ConnectedCameras.Values)
+            {
+                var tally = TallyState.Standby;
+                if (phone.StreamName == _selectedProgramSlot)
+                    tally = TallyState.Program;
+                else if (phone.StreamName == _selectedPreviewSlot)
+                    tally = TallyState.Preview;
+                await _cameraServer.SetTallyAsync(phone.StreamName, tally);
+            }
+        }
+
+        private static void ShowJpeg(System.Windows.Controls.Image target, System.Windows.Controls.Grid slate, BitmapImage bitmap)
+        {
+            target.Source = bitmap;
+            slate.Visibility = Visibility.Collapsed;
+        }
+
+        private static bool TryDecodeJpeg(byte[] jpeg, out BitmapImage? bitmap)
+        {
+            try
+            {
+                bitmap = new BitmapImage();
+                using var ms = new MemoryStream(jpeg);
+                bitmap.BeginInit();
+                bitmap.CacheOption = BitmapCacheOption.OnLoad;
+                bitmap.StreamSource = ms;
+                bitmap.EndInit();
+                bitmap.Freeze();
+                return true;
+            }
+            catch
+            {
+                bitmap = null;
+                return false;
+            }
+        }
+
+        private static string? SlotFromSource(StudioSource source)
+        {
+            if (source.Id.StartsWith("Cam-", StringComparison.OrdinalIgnoreCase))
+                return source.Id;
+            var match = Regex.Match(source.Name, @"Cam-(\d+)");
+            return match.Success ? "Cam-" + match.Groups[1].Value : null;
         }
     }
 }

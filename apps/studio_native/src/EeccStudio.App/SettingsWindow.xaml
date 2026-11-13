@@ -5,7 +5,7 @@
         Height="580" Width="820"
         MinHeight="500" MinWidth="750"
         WindowStartupLocation="CenterOwner"
-        Background="#14151C">
+        Background="#3C4146">
 
     <Grid Margin="16">
         <Grid.RowDefinitions>
@@ -17,16 +17,16 @@
         <!-- Titre avec Logo Officiel -->
         <DockPanel Grid.Row="0" Margin="0,0,0,16">
             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                <Border Width="28" Height="28" CornerRadius="6" Background="#0D1117" BorderBrush="#DC2626" BorderThickness="1.5" Margin="0,0,10,0" ClipToBounds="True">
+                <Border Width="28" Height="28" CornerRadius="6" Background="#2A2E33" BorderBrush="#DC2626" BorderThickness="1.5" Margin="0,0,10,0" ClipToBounds="True">
                     <Image Source="Assets/logo_official.png" Stretch="UniformToFill"/>
                 </Border>
                 <TextBlock Text="PARAMÈTRES EECC STUDIO" FontWeight="Black" FontSize="16" Foreground="#FFFFFF" VerticalAlignment="Center"/>
             </StackPanel>
-            <TextBlock Text="Régie Broadcast &amp; Réseau Culte" Foreground="#8B949E" FontSize="12" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+            <TextBlock Text="Régie Broadcast &amp; Réseau Culte" Foreground="#C5CCD3" FontSize="12" HorizontalAlignment="Right" VerticalAlignment="Center"/>
         </DockPanel>
 
         <!-- Contenu Onglets style OBS Studio -->
-        <TabControl Grid.Row="1" Background="#161B22" BorderBrush="#30363D">
+        <TabControl Grid.Row="1" Background="#32373C" BorderBrush="#22262B">
             <TabControl.Resources>
                 <Style TargetType="TabItem">
                     <Setter Property="Background" Value="#0D1117"/>
@@ -49,20 +49,20 @@
                     <StackPanel>
                         <TextBlock Text="Configuration de la Diffusion (Locale &amp; Web)" FontWeight="Bold" Foreground="#FFFFFF" FontSize="14" Margin="0,0,0,14"/>
 
-                        <GroupBox Header="Diffusion Locale LAN (Pour EECC TV)" Foreground="#F0F6FC" BorderBrush="#30363D" Margin="0,0,0,16" Padding="12">
+                        <GroupBox Header="Diffusion Locale LAN (Pour EECC TV)" Foreground="#F4F6F8" BorderBrush="#22262B" Margin="0,0,0,16" Padding="12">
                             <StackPanel>
                                 <CheckBox x:Name="ChkEnableLan" Content="Activer le serveur de diffusion locale (Permet à EECC TV de recevoir le direct sur Wi-Fi)" IsChecked="True" Foreground="#FFFFFF" Margin="0,0,0,8"/>
-                                <TextBlock Text="Port d'écoute : 8089 (HTTP / HLS / WebSocket)" Foreground="#8B949E" FontSize="11"/>
-                                <TextBlock x:Name="TxtLanUrl" Text="URL locale : http://192.168.1.100:8089/live/stream" Foreground="#16A34A" FontWeight="Bold" FontSize="12" Margin="0,4,0,0"/>
+                                <TextBlock Text="Port d'écoute : 8089 (HTTP / HLS / WebSocket)" Foreground="#C5CCD3" FontSize="11"/>
+                                <TextBlock x:Name="TxtLanUrl" Text="URL locale : …" Foreground="#16A34A" FontWeight="Bold" FontSize="12" Margin="0,4,0,0"/>
                             </StackPanel>
                         </GroupBox>
 
-                        <GroupBox Header="Choix au démarrage du direct" Foreground="#F0F6FC" BorderBrush="#30363D" Padding="12">
+                        <GroupBox Header="Choix au démarrage du direct" Foreground="#F4F6F8" BorderBrush="#22262B" Padding="12">
                             <StackPanel>
-                                <TextBlock TextWrapping="Wrap" Foreground="#F0F6FC" FontSize="12"
-                                           Text="Le bouton Démarrer le streaming demande un des trois modes : EECC TV seule ; EECC TV et une plateforme externe ; EECC TV et au moins trois plateformes externes. EECC TV reste toujours une destination."/>
-                                <TextBlock TextWrapping="Wrap" Foreground="#8B949E" FontSize="11" Margin="0,8,0,0"
-                                           Text="Les clés de flux se saisissent dans cette fenêtre, sont stockées hors du profil lisible, et ne sont pas écrites ici. YouTube, Facebook et TikTok ne sont pas marqués prêts : leur accès réel n'est pas vérifié par cette installation."/>
+                                <TextBlock TextWrapping="Wrap" Foreground="#F4F6F8" FontSize="12"
+                                           Text="Le bouton Démarrer le streaming demande un des trois modes : EECC TV seule ; EECC TV et une plateforme externe ; EECC TV et au moins trois plateformes externes. EECC TV reste toujours une destination. L'image et le bus audio suivent le programme."/>
+                                <TextBlock TextWrapping="Wrap" Foreground="#C5CCD3" FontSize="11" Margin="0,8,0,0"
+                                           Text="Les clés de flux se saisissent au démarrage et restent hors du profil lisible. YouTube, Facebook et TikTok ne sont pas marqués prêts : leur accès réel n'est pas vérifié par cette installation."/>
                             </StackPanel>
                         </GroupBox>
                     </StackPanel>
@@ -75,33 +75,33 @@
                     <StackPanel>
                         <TextBlock Text="Paramètres d'Enregistrement Vidéo Master" FontWeight="Bold" Foreground="#FFFFFF" FontSize="14" Margin="0,0,0,14"/>
 
-                        <TextBlock Text="Dossier de destination des enregistrements :" Foreground="#8B949E" FontSize="12" Margin="0,0,0,4"/>
+                        <TextBlock Text="Dossier de destination des enregistrements :" Foreground="#C5CCD3" FontSize="12" Margin="0,0,0,4"/>
                         <Grid Margin="0,0,0,12">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
-                            <TextBox x:Name="TxtRecordPath" Text="C:\Users\Videos\EECC_Enregistrements" Background="#0D1117" Foreground="#FFFFFF" BorderBrush="#30363D" Padding="8,6"/>
-                            <Button Grid.Column="1" Content="Parcourir..." Background="#21262D" Foreground="#F0F6FC" BorderBrush="#30363D" Padding="12,6" Margin="8,0,0,0" Click="BtnBrowseRecord_Click"/>
+                            <TextBox x:Name="TxtRecordPath" Text="C:\Users\Videos\EECC_Enregistrements" Background="#2A2E33" Foreground="#FFFFFF" BorderBrush="#22262B" Padding="8,6"/>
+                            <Button Grid.Column="1" Content="Parcourir..." Background="#4A5056" Foreground="#F4F6F8" BorderBrush="#22262B" Padding="12,6" Margin="8,0,0,0" Click="BtnBrowseRecord_Click"/>
                         </Grid>
 
-                        <TextBlock Text="Format du conteneur d'enregistrement :" Foreground="#8B949E" FontSize="12" Margin="0,0,0,4"/>
-                        <ComboBox x:Name="CmbRecordFormat" Background="#0D1117" Foreground="#F0F6FC" Margin="0,0,0,12">
+                        <TextBlock Text="Format du conteneur d'enregistrement :" Foreground="#C5CCD3" FontSize="12" Margin="0,0,0,4"/>
+                        <ComboBox x:Name="CmbRecordFormat" Background="#2A2E33" Foreground="#F4F6F8" Margin="0,0,0,12">
                             <ComboBoxItem Content="MP4 (.mp4 — Standard Universel)" IsSelected="True"/>
                             <ComboBoxItem Content="MKV (.mkv — Résistant aux coupures de courant)"/>
                             <ComboBoxItem Content="MOV (.mov — Apple ProRes Postproduction)"/>
                         </ComboBox>
 
-                        <TextBlock Text="Encodeur vidéo matériel :" Foreground="#8B949E" FontSize="12" Margin="0,0,0,4"/>
-                        <ComboBox x:Name="CmbEncoder" Background="#0D1117" Foreground="#F0F6FC" Margin="0,0,0,12">
+                        <TextBlock Text="Encodeur vidéo matériel :" Foreground="#C5CCD3" FontSize="12" Margin="0,0,0,4"/>
+                        <ComboBox x:Name="CmbEncoder" Background="#2A2E33" Foreground="#F4F6F8" Margin="0,0,0,12">
                             <ComboBoxItem Content="NVIDIA NVENC H.264 (Accélération Matérielle GPU)" IsSelected="True"/>
                             <ComboBoxItem Content="Intel QuickSync Video (iGPU)"/>
                             <ComboBoxItem Content="AMD AMF Video Encoder"/>
                             <ComboBoxItem Content="x264 (Logiciel Processeur Haute Qualité)"/>
                         </ComboBox>
 
-                        <TextBlock Text="Qualité de l'enregistrement :" Foreground="#8B949E" FontSize="12" Margin="0,0,0,4"/>
-                        <ComboBox Background="#0D1117" Foreground="#F0F6FC" Margin="0,0,0,12">
+                        <TextBlock Text="Qualité de l'enregistrement :" Foreground="#C5CCD3" FontSize="12" Margin="0,0,0,4"/>
+                        <ComboBox Background="#2A2E33" Foreground="#F4F6F8" Margin="0,0,0,12">
                             <ComboBoxItem Content="Haute Qualité (Taille moyenne, débit 12000 kbps)" IsSelected="True"/>
                             <ComboBoxItem Content="Indiscernable (Très grande taille, débit 24000 kbps)"/>
                             <ComboBoxItem Content="Identique au flux de streaming"/>
@@ -116,21 +116,21 @@
                     <StackPanel>
                         <TextBlock Text="Résolution et Cadence Vidéo" FontWeight="Bold" Foreground="#FFFFFF" FontSize="14" Margin="0,0,0,14"/>
 
-                        <TextBlock Text="Résolution de base (Canevas) :" Foreground="#8B949E" FontSize="12" Margin="0,0,0,4"/>
-                        <ComboBox Background="#0D1117" Foreground="#F0F6FC" Margin="0,0,0,12">
+                        <TextBlock Text="Résolution de base (Canevas) :" Foreground="#C5CCD3" FontSize="12" Margin="0,0,0,4"/>
+                        <ComboBox Background="#2A2E33" Foreground="#F4F6F8" Margin="0,0,0,12">
                             <ComboBoxItem Content="1920x1080 (16:9 Full HD)" IsSelected="True"/>
                             <ComboBoxItem Content="3840x2160 (16:9 Ultra HD 4K)"/>
                             <ComboBoxItem Content="1280x720 (16:9 HD)"/>
                         </ComboBox>
 
-                        <TextBlock Text="Résolution de sortie (Mise à l'échelle) :" Foreground="#8B949E" FontSize="12" Margin="0,0,0,4"/>
-                        <ComboBox Background="#0D1117" Foreground="#F0F6FC" Margin="0,0,0,12">
+                        <TextBlock Text="Résolution de sortie (Mise à l'échelle) :" Foreground="#C5CCD3" FontSize="12" Margin="0,0,0,4"/>
+                        <ComboBox Background="#2A2E33" Foreground="#F4F6F8" Margin="0,0,0,12">
                             <ComboBoxItem Content="1920x1080 (Full HD sans mise à l'échelle)" IsSelected="True"/>
                             <ComboBoxItem Content="1280x720 (HD recommandé pour connexions instables)"/>
                         </ComboBox>
 
-                        <TextBlock Text="Cadence d'images (FPS) :" Foreground="#8B949E" FontSize="12" Margin="0,0,0,4"/>
-                        <ComboBox Background="#0D1117" Foreground="#F0F6FC" Margin="0,0,0,12">
+                        <TextBlock Text="Cadence d'images (FPS) :" Foreground="#C5CCD3" FontSize="12" Margin="0,0,0,4"/>
+                        <ComboBox Background="#2A2E33" Foreground="#F4F6F8" Margin="0,0,0,12">
                             <ComboBoxItem Content="60.00 FPS (Fluidité broadcast maximale)" IsSelected="True"/>
                             <ComboBoxItem Content="59.94 FPS (Standard NTSC)"/>
                             <ComboBoxItem Content="50.00 FPS (Standard PAL)"/>
@@ -146,20 +146,20 @@
                     <StackPanel>
                         <TextBlock Text="Paramètres Audio Multi-Pistes" FontWeight="Bold" Foreground="#FFFFFF" FontSize="14" Margin="0,0,0,14"/>
 
-                        <TextBlock Text="Taux d'échantillonnage :" Foreground="#8B949E" FontSize="12" Margin="0,0,0,4"/>
-                        <ComboBox Background="#0D1117" Foreground="#F0F6FC" Margin="0,0,0,12">
+                        <TextBlock Text="Taux d'échantillonnage :" Foreground="#C5CCD3" FontSize="12" Margin="0,0,0,4"/>
+                        <ComboBox Background="#2A2E33" Foreground="#F4F6F8" Margin="0,0,0,12">
                             <ComboBoxItem Content="48 kHz (Recommandé pour la vidéo)" IsSelected="True"/>
                             <ComboBoxItem Content="44.1 kHz (Standard CD Audio)"/>
                         </ComboBox>
 
-                        <TextBlock Text="Canaux :" Foreground="#8B949E" FontSize="12" Margin="0,0,0,4"/>
-                        <ComboBox Background="#0D1117" Foreground="#F0F6FC" Margin="0,0,0,12">
+                        <TextBlock Text="Canaux :" Foreground="#C5CCD3" FontSize="12" Margin="0,0,0,4"/>
+                        <ComboBox Background="#2A2E33" Foreground="#F4F6F8" Margin="0,0,0,12">
                             <ComboBoxItem Content="Stéréo (2.0)" IsSelected="True"/>
                             <ComboBoxItem Content="Mono (1.0)"/>
                         </ComboBox>
 
-                        <TextBlock Text="Périphérique de monitoring (Casque régisseur) :" Foreground="#8B949E" FontSize="12" Margin="0,0,0,4"/>
-                        <ComboBox Background="#0D1117" Foreground="#F0F6FC" Margin="0,0,0,12">
+                        <TextBlock Text="Périphérique de monitoring (Casque régisseur) :" Foreground="#C5CCD3" FontSize="12" Margin="0,0,0,4"/>
+                        <ComboBox Background="#2A2E33" Foreground="#F4F6F8" Margin="0,0,0,12">
                             <ComboBoxItem Content="Haut-parleurs / Casque par défaut" IsSelected="True"/>
                         </ComboBox>
                     </StackPanel>
@@ -172,17 +172,17 @@
                     <StackPanel>
                         <TextBlock Text="Métadonnées Officielles de l'Église" FontWeight="Bold" Foreground="#FFFFFF" FontSize="14" Margin="0,0,0,14"/>
 
-                        <TextBlock Text="Dénomination officielle :" Foreground="#8B949E" FontSize="12" Margin="0,0,0,4"/>
-                        <TextBox x:Name="TxtChurchName" Text="Église Évangélique les Cohéritiers du Christ (EECC)" Background="#0D1117" Foreground="#FFFFFF" BorderBrush="#30363D" Padding="8,6" Margin="0,0,0,12" IsReadOnly="True"/>
+                        <TextBlock Text="Dénomination officielle :" Foreground="#C5CCD3" FontSize="12" Margin="0,0,0,4"/>
+                        <TextBox x:Name="TxtChurchName" Text="Église Évangélique les Cohéritiers du Christ (EECC)" Background="#2A2E33" Foreground="#FFFFFF" BorderBrush="#22262B" Padding="8,6" Margin="0,0,0,12" IsReadOnly="True"/>
 
-                        <TextBlock Text="Titre du programme / Culte :" Foreground="#8B949E" FontSize="12" Margin="0,0,0,4"/>
-                        <TextBox x:Name="TxtProgramTitle" Text="Grand Culte d'Adoration et d'Enseignement" Background="#0D1117" Foreground="#FFFFFF" BorderBrush="#30363D" Padding="8,6" Margin="0,0,0,12"/>
+                        <TextBlock Text="Titre du programme / Culte :" Foreground="#C5CCD3" FontSize="12" Margin="0,0,0,4"/>
+                        <TextBox x:Name="TxtProgramTitle" Text="Grand Culte d'Adoration et d'Enseignement" Background="#2A2E33" Foreground="#FFFFFF" BorderBrush="#22262B" Padding="8,6" Margin="0,0,0,12"/>
 
-                        <TextBlock Text="Prédicateur / Orateur principal :" Foreground="#8B949E" FontSize="12" Margin="0,0,0,4"/>
-                        <TextBox x:Name="TxtSpeaker" Text="Pasteur Principal" Background="#0D1117" Foreground="#FFFFFF" BorderBrush="#30363D" Padding="8,6" Margin="0,0,0,12"/>
+                        <TextBlock Text="Prédicateur / Orateur principal :" Foreground="#C5CCD3" FontSize="12" Margin="0,0,0,4"/>
+                        <TextBox x:Name="TxtSpeaker" Text="Pasteur Principal" Background="#2A2E33" Foreground="#FFFFFF" BorderBrush="#22262B" Padding="8,6" Margin="0,0,0,12"/>
 
-                        <TextBlock Text="Thème du message :" Foreground="#8B949E" FontSize="12" Margin="0,0,0,4"/>
-                        <TextBox x:Name="TxtTheme" Text="La Puissance de la Foi Agissante" Background="#0D1117" Foreground="#FFFFFF" BorderBrush="#30363D" Padding="8,6" Margin="0,0,0,12"/>
+                        <TextBlock Text="Thème du message :" Foreground="#C5CCD3" FontSize="12" Margin="0,0,0,4"/>
+                        <TextBox x:Name="TxtTheme" Text="La Puissance de la Foi Agissante" Background="#2A2E33" Foreground="#FFFFFF" BorderBrush="#22262B" Padding="8,6" Margin="0,0,0,12"/>
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
@@ -190,9 +190,9 @@
 
         <!-- Boutons d'Action Inférieurs -->
         <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
-            <Button Content="Appliquer" Background="#21262D" Foreground="#F0F6FC" BorderBrush="#30363D" Padding="14,6" Margin="0,0,8,0" Click="BtnApply_Click"/>
+            <Button Content="Appliquer" Background="#4A5056" Foreground="#F4F6F8" BorderBrush="#22262B" Padding="14,6" Margin="0,0,8,0" Click="BtnApply_Click"/>
             <Button Content="OK" Background="#16A34A" Foreground="#FFFFFF" FontWeight="Bold" Padding="18,6" Margin="0,0,8,0" BorderThickness="0" Click="BtnOk_Click"/>
-            <Button Content="Annuler" Background="#21262D" Foreground="#F0F6FC" BorderBrush="#30363D" Padding="14,6" Click="BtnCancel_Click"/>
+            <Button Content="Annuler" Background="#4A5056" Foreground="#F4F6F8" BorderBrush="#22262B" Padding="14,6" Click="BtnCancel_Click"/>
         </StackPanel>
     </Grid>
 </Window>

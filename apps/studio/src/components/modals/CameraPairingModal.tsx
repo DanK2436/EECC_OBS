@@ -1,71 +1,38 @@
 import React from "react";
-import { QRCodeSVG } from "qrcode.react";
-import { X, Smartphone, Wifi, CheckCircle2 } from "lucide-react";
+import { X, Smartphone } from "lucide-react";
 
 interface CameraPairingModalProps {
   isOpen: boolean;
   onClose: () => void;
-  localIp: string;
-  port: number;
 }
 
-export const CameraPairingModal: React.FC<CameraPairingModalProps> = ({
-  isOpen,
-  onClose,
-  localIp,
-  port,
-}) => {
+export const CameraPairingModal: React.FC<CameraPairingModalProps> = ({ isOpen, onClose }) => {
   if (!isOpen) return null;
 
-  const pairingPayload = JSON.stringify({
-    studio_ip: localIp,
-    port: port,
-    token: `sess_${Date.now()}`,
-    stream_name: "Caméra Smartphone 1",
-    codec: "h264",
-    bitrate_kbps: 4500,
-  });
-
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl border border-slate-200 overflow-hidden">
-        {/* Header */}
-        <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <Smartphone className="w-5 h-5 text-blue-400" />
-            <h3 className="font-bold text-sm">Appairer une Caméra Mobile</h3>
-          </div>
-          <button
-            onClick={onClose}
-            className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-white"
-          >
-            <X className="w-4 h-4" />
+    <div className="sheet-back">
+      <div className="sheet narrow" role="dialog" aria-labelledby="pair-title">
+        <header className="sheet-head">
+          <span id="pair-title" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <Smartphone size={14} /> Appairer une caméra
+          </span>
+          <button type="button" className="sheet-x" onClick={onClose} aria-label="Fermer">
+            <X size={14} />
           </button>
-        </div>
-
-        {/* Corps */}
-        <div className="p-6 text-center">
-          <div className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-green-50 text-green-700 border border-green-200 mb-4">
-            <Wifi className="w-3.5 h-3.5 mr-1.5" />
-            Serveur local prêt : {localIp}:{port}
-          </div>
-
-          {/* QR Code */}
-          <div className="bg-white p-4 rounded-2xl border-2 border-slate-300 inline-block shadow-lg mb-4">
-            <QRCodeSVG value={pairingPayload} size={220} level="H" fgColor="#000000" bgColor="#FFFFFF" includeMargin={true} />
-          </div>
-
-          <p className="text-xs text-slate-600 max-w-xs mx-auto leading-relaxed">
-            Ouvrez l’application mobile <strong>EECC Caméra</strong> sur votre téléphone (Android / iOS) et scannez ce code pour démarrer la diffusion directe vers Studio.
+        </header>
+        <div className="sheet-body">
+          <p>
+            Cette fenêtre Electron n’écoute pas le réseau et n’affiche pas de QR. L’appairage des téléphones
+            est dans EECC Studio natif (Windows) : « Connecter un téléphone ».
           </p>
-
-          <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between text-xs text-slate-400">
-            <span>Protocole : SRT / WebRTC LAN</span>
-            <span className="flex items-center text-green-600 font-semibold">
-              <CheckCircle2 className="w-3.5 h-3.5 mr-1" /> En attente de connexion
-            </span>
-          </div>
+          <p style={{ marginTop: 12 }}>
+            Le serveur y limite les téléphones à 15, en plus des caméras physiques. Aucune adresse ni aucun
+            jeton n’est inventé ici.
+          </p>
         </div>
+        <footer className="sheet-foot">
+          <button type="button" className="sheet-btn" onClick={onClose}>Fermer</button>
+        </footer>
       </div>
     </div>
   );

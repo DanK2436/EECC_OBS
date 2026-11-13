@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
+
 import '../constants/colors.dart';
 import '../models/session_config.dart';
 
 class ManualConnectDialog extends StatefulWidget {
-  final Function(StudioSessionConfig) onConnect;
+  final void Function(StudioSessionConfig config) onConnect;
 
   const ManualConnectDialog({super.key, required this.onConnect});
 
-  static Future<void> show(BuildContext context, Function(StudioSessionConfig) onConnect) {
+  static Future<void> show(BuildContext context, void Function(StudioSessionConfig config) onConnect) {
     return showDialog(
       context: context,
       builder: (context) => ManualConnectDialog(onConnect: onConnect),
@@ -19,47 +20,49 @@ class ManualConnectDialog extends StatefulWidget {
 }
 
 class _ManualConnectDialogState extends State<ManualConnectDialog> {
-  final TextEditingController _ipController = TextEditingController(text: '192.168.1.100');
-  final TextEditingController _portController = TextEditingController(text: '8089');
-  final TextEditingController _nameController = TextEditingController(text: 'Caméra Smartphone');
+  final TextEditingController _codeController = TextEditingController();
+  final TextEditingController _nameController = TextEditingController();
+  String? _error;
+
+  @override
+  void dispose() {
+    _codeController.dispose();
+    _nameController.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    try {
+      final config = StudioSessionConfig.parseQr(_codeController.text).withDisplayName(_nameController.text);
+      Navigator.pop(context);
+      widget.onConnect(config);
+    } on FormatException catch (error) {
+      setState(() => _error = error.message);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
       backgroundColor: EeccCamColors.surface,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      title: const Row(
-        children: [
-          Icon(Icons.settings_ethernet_rounded, color: EeccCamColors.primaryLight),
-          SizedBox(width: 10),
-          Text('Connexion Manuelle', style: TextStyle(color: EeccCamColors.textMain, fontSize: 18)),
-        ],
-      ),
+      title: const Text('Coller le code du Studio', style: TextStyle(color: Colors.white, fontSize: 18)),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            TextField(
-              controller: _ipController,
-              keyboardType: TextInputType.datetime,
-              style: const TextStyle(color: Colors.white),
-              decoration: const InputDecoration(
-                labelText: 'Adresse IP de EECC Studio',
-                labelStyle: TextStyle(color: EeccCamColors.textSecondary),
-                hintText: '192.168.1.xxx',
-                hintStyle: TextStyle(color: Colors.white24),
-                prefixIcon: Icon(Icons.computer_rounded, color: EeccCamColors.textSecondary),
-              ),
+            const Text(
+              'Dans EECC Studio, utilisez « Copier le code ». Collez-le ici. Aucune adresse ni aucun jeton n\'est proposé par défaut.',
+              style: TextStyle(color: EeccCamColors.textSecondary, fontSize: 12),
             ),
             const SizedBox(height: 12),
             TextField(
-              controller: _portController,
-              keyboardType: TextInputType.number,
-              style: const TextStyle(color: Colors.white),
+              controller: _codeController,
+              minLines: 3,
+              maxLines: 6,
+              style: const TextStyle(color: Colors.white, fontSize: 12),
               decoration: const InputDecoration(
-                labelText: 'Port de contrôle',
+                labelText: 'Code JSON du QR',
                 labelStyle: TextStyle(color: EeccCamColors.textSecondary),
-                prefixIcon: Icon(Icons.numbers_rounded, color: EeccCamColors.textSecondary),
               ),
             ),
             const SizedBox(height: 12),
@@ -67,36 +70,20 @@ class _ManualConnectDialogState extends State<ManualConnectDialog> {
               controller: _nameController,
               style: const TextStyle(color: Colors.white),
               decoration: const InputDecoration(
-                labelText: 'Nom de la caméra',
+                labelText: 'Nom de ce téléphone',
                 labelStyle: TextStyle(color: EeccCamColors.textSecondary),
-                prefixIcon: Icon(Icons.videocam_rounded, color: EeccCamColors.textSecondary),
               ),
             ),
+            if (_error != null) ...[
+              const SizedBox(height: 12),
+              Text(_error!, style: const TextStyle(color: EeccCamColors.tallyProgram, fontSize: 12)),
+            ],
           ],
         ),
       ),
       actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Annuler', style: TextStyle(color: EeccCamColors.textSecondary)),
-        ),
-        ElevatedButton(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: EeccCamColors.primary,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-          ),
-          onPressed: () {
-            final config = StudioSessionConfig(
-              studioIp: _ipController.text.trim(),
-              port: int.tryParse(_portController.text.trim()) ?? 8554,
-              token: 'manual_${DateTime.now().millisecondsSinceEpoch}',
-              streamName: _nameController.text.trim(),
-            );
-            Navigator.pop(context);
-            widget.onConnect(config);
-          },
-          child: const Text('Connecter', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-        ),
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Annuler')),
+        ElevatedButton(onPressed: _submit, child: const Text('Connecter')),
       ],
     );
   }

@@ -20,7 +20,9 @@ namespace EeccStudio
         private void LoadSettings()
         {
             var localIp = _server.GetLocalIpAddress();
-            TxtLanUrl.Text = $"URL locale : http://{localIp}:{_server.Port}/live/stream";
+            TxtLanUrl.Text = localIp.Length == 0
+                ? "Aucune adresse IPv4 privée utilisable. Le flux n'est pas annoncé."
+                : $"URL locale : http://{localIp}:{_server.ListeningPort}/live/stream";
             TxtChurchName.Text = _server.ChurchName;
             TxtProgramTitle.Text = _server.ProgramTitle;
             TxtSpeaker.Text = _server.Speaker;

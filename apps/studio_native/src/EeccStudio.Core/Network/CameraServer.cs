@@ -1,630 +1,1159 @@
-using System;
-using System.Collections.Concurrent;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
 using System.Net;
-using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Net.WebSockets;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using System.Threading;
-using System.Threading.Tasks;
-using EeccStudio.Broadcast;
+using EeccStudio.Core.Pairing;
 
-namespace EeccStudio.Core.Network
+namespace EeccStudio.Core.Network;
+
+public enum TallyState
 {
-    public enum TallyState
+    Standby,
+    Preview,
+    Program
+}
+
+public sealed class CameraClient
+{
+    public string StreamName { get; set; } = string.Empty;
+    public string SessionId { get; set; } = string.Empty;
+    public string DisplayName { get; set; } = string.Empty;
+    public string DeviceId { get; set; } = string.Empty;
+    public string DeviceModel { get; set; } = string.Empty;
+    public WebSocket Socket { get; set; } = null!;
+    public string StudioLabel { get; set; } = "EECC Studio";
+    internal SemaphoreSlim SendLock { get; set; } = null!;
+    public TallyState CurrentTally { get; set; } = TallyState.Standby;
+    public int SlotNumber { get; set; } = 1;
+    public string RemoteIp { get; set; } = string.Empty;
+    public int BatteryLevel { get; set; } = -1;
+    public bool IsCharging { get; set; }
+    public double AudioLevel { get; set; }
+    public int Fps { get; set; }
+    public int BitrateKbps { get; set; }
+    public DateTimeOffset ConnectedAt { get; set; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset LastTelemetryTime { get; set; } = DateTimeOffset.UnixEpoch;
+    internal DateTimeOffset ReservedUntil { get; set; }
+}
+
+/// <summary>
+/// Écoute LAN déjà utilisée par EECC Caméra : TCP + WebSocket, images JPEG binaires,
+/// télémétrie, tally et commandes. Les téléphones sont limités à 15. Les caméras physiques
+/// sont un catalogue séparé et ne prennent pas ces places.
+/// </summary>
+public sealed class CameraServer : IDisposable
+{
+    public const int MaxPhoneConnections = 15;
+    public const int MaxCameraSlots = MaxPhoneConnections;
+    private const string WebSocketPath = "/camera/control";
+
+    private readonly object _gate = new();
+    private readonly Dictionary<string, CameraClient> _connected = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, CameraClient> _reserved = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, PairingTicket> _tickets = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, string> _physical = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, byte[]> _cameraFrames = new(StringComparer.OrdinalIgnoreCase);
+
+    private TcpListener? _tcpListener;
+    private CancellationTokenSource? _cts;
+    private bool _isRunning;
+
+    public event Action<CameraClient>? OnCameraConnected;
+    public event Action<string>? OnCameraDisconnected;
+    public event Action<CameraClient>? OnTelemetryReceived;
+    public event Action<string, byte[]>? OnCameraFrameReceived;
+    public event Action<bool>? OnStreamingStateChanged;
+    public event Action<bool>? OnRecordingStateChanged;
+
+    public byte[]? LatestCameraFrameBytes { get; private set; }
+    public byte[]? ActiveProgramFrameBytes { get; set; }
+    public int TotalFramesReceived { get; private set; }
+
+    public int Port { get; }
+    public string StudioName { get; set; } = "EECC Studio";
+    public string ChurchName { get; set; } = "Église Évangélique les Cohéritiers du Christ (EECC)";
+    public string ProgramTitle { get; set; } = "Grand Culte d'Adoration et d'Enseignement";
+    public string Speaker { get; set; } = "Pasteur Principal";
+    public string ActiveSceneName { get; set; } = "Culte Principal";
+    public TimeSpan PairingTtl { get; set; } = TimeSpan.FromMinutes(3);
+    public TimeSpan ReconnectGrace { get; set; } = TimeSpan.FromSeconds(45);
+    public Func<DateTimeOffset> Clock { get; set; } = () => DateTimeOffset.UtcNow;
+
+    public bool IsStreaming { get; private set; }
+    public bool IsRecording { get; private set; }
+    public bool IsRunning => _isRunning;
+    public string? StartError { get; private set; }
+    public DateTimeOffset? StreamingStartedAt { get; private set; }
+    public DateTimeOffset? RecordingStartedAt { get; private set; }
+
+    public TimeSpan StreamingDuration => IsStreaming && StreamingStartedAt.HasValue
+        ? Clock() - StreamingStartedAt.Value
+        : TimeSpan.Zero;
+
+    public TimeSpan RecordingDuration => IsRecording && RecordingStartedAt.HasValue
+        ? Clock() - RecordingStartedAt.Value
+        : TimeSpan.Zero;
+
+    public int ListeningPort =>
+        _tcpListener?.LocalEndpoint is IPEndPoint endpoint ? endpoint.Port : 0;
+
+    public CameraServer(int port = 8089)
     {
-        Standby,
-        Preview,
-        Program
+        Port = port;
     }
 
-    public class CameraClient
+    public IReadOnlyDictionary<string, CameraClient> ConnectedCameras
     {
-        public string StreamName { get; set; } = string.Empty;
-        public string Token { get; set; } = string.Empty;
-        public WebSocket Socket { get; set; } = null!;
-        public TallyState CurrentTally { get; set; } = TallyState.Standby;
-        public int SlotNumber { get; set; } = 1;
-        public string DeviceModel { get; set; } = "Smartphone";
-        public string RemoteIp { get; set; } = string.Empty;
-        public int BatteryLevel { get; set; } = 100;
-        public bool IsCharging { get; set; }
-        public int Fps { get; set; } = 30;
-        public int BitrateKbps { get; set; } = 5000;
-        public DateTime ConnectedAt { get; set; } = DateTime.UtcNow;
-        public DateTime LastTelemetryTime { get; set; } = DateTime.UtcNow;
+        get
+        {
+            lock (_gate)
+                return new Dictionary<string, CameraClient>(_connected, StringComparer.OrdinalIgnoreCase);
+        }
     }
 
-    /// <summary>
-    /// Serveur Broadcast & Matrice Multi-Caméra Haute Performance pour EECC Studio.
-    /// Basé sur TcpListener brut (0.0.0.0) + WebSocket RFC 6455 natif pour garantir un fonctionnement à 100%
-    /// sur le réseau Wi-Fi local sans dépendance aux permissions administrateur Windows (urlacl).
-    /// </summary>
-    public class CameraServer
+    public int ConnectedPhoneCount
     {
-        public const int MaxCameraSlots = 15;
-        private TcpListener? _tcpListener;
-        private readonly ConcurrentDictionary<string, CameraClient> _connectedCameras = new();
-        private readonly ConcurrentDictionary<string, byte[]> _cameraFrames = new();
-        private CancellationTokenSource? _cts;
-        private bool _isRunning;
-
-        // Image JPEG de secours
-        private static readonly byte[] StaticJpegFrame = new byte[] {
-            0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46, 0x00, 0x01, 0x01, 0x01, 0x00, 0x48,
-            0x00, 0x48, 0x00, 0x00, 0xFF, 0xDB, 0x00, 0x43, 0x00, 0x08, 0x06, 0x06, 0x07, 0x06, 0x05, 0x08,
-            0x07, 0x07, 0x07, 0x09, 0x09, 0x08, 0x0A, 0x0C, 0x14, 0x0D, 0x0C, 0x0B, 0x0B, 0x0C, 0x19, 0x12,
-            0x13, 0x0F, 0x14, 0x1D, 0x1A, 0x1F, 0x1E, 0x1D, 0x1A, 0x1C, 0x1C, 0x20, 0x24, 0x2E, 0x27, 0x20,
-            0x22, 0x2C, 0x23, 0x1C, 0x1C, 0x28, 0x37, 0x29, 0x2C, 0x30, 0x31, 0x34, 0x34, 0x34, 0x1F, 0x27,
-            0x39, 0x3D, 0x38, 0x32, 0x3C, 0x2E, 0x33, 0x34, 0x32, 0xFF, 0xC0, 0x00, 0x0B, 0x08, 0x01, 0x68,
-            0x02, 0x80, 0x01, 0x01, 0x11, 0x00, 0xFF, 0xC4, 0x00, 0x1F, 0x00, 0x00, 0x01, 0x05, 0x01, 0x01,
-            0x01, 0x01, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x02, 0x03, 0x04,
-            0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0xFF, 0xDA, 0x00, 0x08, 0x01, 0x01, 0x00, 0x00, 0x3F,
-            0x00, 0x7F, 0x00, 0xFF, 0xD9
-        };
-
-        public event Action<CameraClient>? OnCameraConnected;
-        public event Action<string>? OnCameraDisconnected;
-        public event Action<CameraClient>? OnTelemetryReceived;
-        public event Action<string, byte[]>? OnCameraFrameReceived;
-        public event Action<bool>? OnStreamingStateChanged;
-        public event Action<bool>? OnRecordingStateChanged;
-
-        public byte[]? LatestCameraFrameBytes { get; set; }
-        public byte[]? ActiveProgramFrameBytes { get; set; }
-        public int TotalFramesReceived { get; private set; }
-
-        public int Port { get; }
-        public string PairingToken { get; set; } = "EECC-LIVE-4982";
-        public string ChurchName { get; set; } = "Église Évangélique les Cohéritiers du Christ (EECC)";
-        public string ProgramTitle { get; set; } = "Grand Culte d'Adoration et d'Enseignement";
-        public string Speaker { get; set; } = "Pasteur Principal";
-        public string ActiveSceneName { get; set; } = "Culte Principal";
-
-        public bool IsStreaming { get; private set; }
-        public bool IsRecording { get; private set; }
-        public DateTime? StreamingStartedAt { get; private set; }
-        public DateTime? RecordingStartedAt { get; private set; }
-        public int ViewersCount { get; set; }
-        private int _activeStreamClients;
-
-        public TimeSpan StreamingDuration => IsStreaming && StreamingStartedAt.HasValue
-            ? DateTime.UtcNow - StreamingStartedAt.Value
-            : TimeSpan.Zero;
-
-        public TimeSpan RecordingDuration => IsRecording && RecordingStartedAt.HasValue
-            ? DateTime.UtcNow - RecordingStartedAt.Value
-            : TimeSpan.Zero;
-
-        public IReadOnlyDictionary<string, CameraClient> ConnectedCameras => _connectedCameras;
-        public IReadOnlyDictionary<string, byte[]> CameraFrames => _cameraFrames;
-
-        public CameraServer(int port = 8089)
+        get
         {
-            Port = port;
+            lock (_gate)
+                return _connected.Count;
+        }
+    }
+
+    public int ReservedPhoneCount
+    {
+        get
+        {
+            lock (_gate)
+            {
+                PurgeExpiredReservations();
+                return _reserved.Count;
+            }
+        }
+    }
+
+    public int PhoneCount
+    {
+        get
+        {
+            lock (_gate)
+            {
+                PurgeExpiredReservations();
+                return _connected.Count + _reserved.Count;
+            }
+        }
+    }
+
+    public int PhysicalCameraCount
+    {
+        get
+        {
+            lock (_gate)
+                return _physical.Count;
+        }
+    }
+
+    public IReadOnlyList<string> ListLanAddresses() => LanAddresses.ListAssigned();
+
+    public string GetLocalIpAddress()
+    {
+        var addresses = ListLanAddresses();
+        return addresses.Count == 0 ? string.Empty : addresses[0];
+    }
+
+    public void RegisterPhysicalCamera(string id, string name)
+    {
+        if (string.IsNullOrWhiteSpace(id))
+            throw new ArgumentException("Identifiant de caméra physique manquant.", nameof(id));
+        lock (_gate)
+            _physical[id.Trim()] = string.IsNullOrWhiteSpace(name) ? id.Trim() : name.Trim();
+    }
+
+    public PairingTicket IssuePairingTicket(string studioName, string lanIpv4)
+    {
+        var name = (studioName ?? string.Empty).Trim();
+        if (name.Length == 0 || name.Length > 48)
+            throw new ArgumentException("Le nom du Studio affiché dans le QR doit contenir entre 1 et 48 caractères.");
+        if (!LanAddresses.IsPrivateLanIpv4(lanIpv4))
+            throw new ArgumentException("Adresse LAN inutilisable. Aucune adresse de remplacement n'est inventée.");
+        if (ListeningPort <= 0)
+            throw new InvalidOperationException("Le serveur d'appairage n'écoute pas.");
+
+        var token = EncodeToken(RandomNumberGenerator.GetBytes(PairingTicket.TokenByteLength));
+        var ticket = new PairingTicket(token, name, lanIpv4.Trim(), ListeningPort, Clock().Add(PairingTtl));
+        lock (_gate)
+        {
+            PurgeExpiredTickets();
+            _tickets[token] = ticket;
         }
 
-        public byte[]? GetCameraFrame(string slotName)
+        return ticket;
+    }
+
+    public bool RevokePairingTicket(string? token)
+    {
+        if (string.IsNullOrWhiteSpace(token))
+            return false;
+        lock (_gate)
         {
-            return _cameraFrames.TryGetValue(slotName, out var frame) ? frame : null;
-        }
-
-        public string AllocateSlot(string? requestedSlot)
-        {
-            if (!string.IsNullOrWhiteSpace(requestedSlot))
-            {
-                var clean = requestedSlot.Trim();
-                if (clean.StartsWith("Cam-", StringComparison.OrdinalIgnoreCase))
-                {
-                    if (!_connectedCameras.ContainsKey(clean)) return clean;
-                }
-            }
-
-            for (int i = 1; i <= MaxCameraSlots; i++)
-            {
-                var slot = $"Cam-{i}";
-                if (!_connectedCameras.ContainsKey(slot)) return slot;
-            }
-            return $"Cam-{MaxCameraSlots}";
-        }
-
-        /// <summary>
-        /// Détecte l'adresse IP locale Wi-Fi ou Ethernet du PC en éliminant les adaptateurs virtuels (WSL, Docker, VirtualBox).
-        /// </summary>
-        public string GetLocalIpAddress()
-        {
-            try
-            {
-                var interfaces = NetworkInterface.GetAllNetworkInterfaces()
-                    .Where(nic => nic.OperationalStatus == OperationalStatus.Up &&
-                                  nic.NetworkInterfaceType != NetworkInterfaceType.Loopback &&
-                                  !nic.Description.Contains("Virtual", StringComparison.OrdinalIgnoreCase) &&
-                                  !nic.Description.Contains("VMware", StringComparison.OrdinalIgnoreCase) &&
-                                  !nic.Description.Contains("WSL", StringComparison.OrdinalIgnoreCase) &&
-                                  !nic.Description.Contains("Hyper-V", StringComparison.OrdinalIgnoreCase) &&
-                                  !nic.Description.Contains("TAP", StringComparison.OrdinalIgnoreCase) &&
-                                  !nic.Name.Contains("vEthernet", StringComparison.OrdinalIgnoreCase) &&
-                                  !nic.Name.Contains("VirtualBox", StringComparison.OrdinalIgnoreCase) &&
-                                  !nic.Name.Contains("Docker", StringComparison.OrdinalIgnoreCase))
-                    .OrderByDescending(nic => nic.NetworkInterfaceType == NetworkInterfaceType.Wireless80211 ? 2 :
-                                              nic.NetworkInterfaceType == NetworkInterfaceType.Ethernet ? 1 : 0);
-
-                foreach (var netInterface in interfaces)
-                {
-                    var ipProps = netInterface.GetIPProperties();
-                    foreach (var addr in ipProps.UnicastAddresses)
-                    {
-                        if (addr.Address.AddressFamily == AddressFamily.InterNetwork && !IPAddress.IsLoopback(addr.Address))
-                        {
-                            var ipStr = addr.Address.ToString();
-                            if (ipStr.StartsWith("192.168.") || ipStr.StartsWith("10.") || ipStr.StartsWith("172."))
-                            {
-                                return ipStr;
-                            }
-                        }
-                    }
-                }
-            }
-            catch
-            {
-            }
-            return "192.168.1.100";
-        }
-
-        public bool TryStart(out string detail)
-        {
-            if (_isRunning)
-            {
-                detail = string.Empty;
-                return true;
-            }
-
-            try
-            {
-                _cts = new CancellationTokenSource();
-                _tcpListener = new TcpListener(IPAddress.Any, Port);
-                _tcpListener.Server.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
-                _tcpListener.Start();
-                _isRunning = true;
-                detail = string.Empty;
-
-                Task.Run(() => AcceptTcpClientsLoopAsync(_cts.Token));
-                return true;
-            }
-            catch (Exception ex)
-            {
-                detail = ex.GetType().Name + ": " + ex.Message;
-                _isRunning = false;
+            if (!_tickets.TryGetValue(token, out var ticket) || ticket.Consumed)
                 return false;
+            _tickets.Remove(token);
+            return true;
+        }
+    }
+
+    public byte[]? GetCameraFrame(string slotName)
+    {
+        lock (_gate)
+        {
+            foreach (var pair in _cameraFrames)
+            {
+                if (pair.Key.Equals(slotName, StringComparison.OrdinalIgnoreCase))
+                    return pair.Value;
             }
         }
 
-        public void Start()
+        return null;
+    }
+
+    public bool TryStart(out string detail)
+    {
+        if (_isRunning)
         {
-            TryStart(out _);
+            detail = string.Empty;
+            return true;
         }
 
-        public void Stop()
+        try
         {
-            if (!_isRunning) return;
-            _cts?.Cancel();
-            try
-            {
-                _tcpListener?.Stop();
-            }
-            catch
-            {
-            }
+            _cts = new CancellationTokenSource();
+            _tcpListener = new TcpListener(IPAddress.Any, Port);
+            _tcpListener.Start();
+            _isRunning = true;
+            StartError = null;
+            detail = string.Empty;
+            Task.Run(() => AcceptLoopAsync(_cts.Token));
+            return true;
+        }
+        catch (Exception ex)
+        {
+            detail = $"Le port {(Port == 0 ? "demandé" : Port.ToString())} n'a pas pu être ouvert ({ex.GetType().Name}: {ex.Message}). Un autre programme l'utilise peut-être, ou le pare-feu le bloque.";
+            StartError = detail;
             _isRunning = false;
+            try { _tcpListener?.Stop(); } catch { /* déjà fermé */ }
+            _tcpListener = null;
+            return false;
+        }
+    }
+
+    public void Start() => TryStart(out _);
+
+    public void Stop()
+    {
+        List<WebSocket> sockets;
+        lock (_gate)
+        {
+            sockets = _connected.Values.Select(client => client.Socket).Where(socket => socket != null).ToList();
+            _connected.Clear();
+            _reserved.Clear();
+            _tickets.Clear();
         }
 
-        public void StartStreaming()
+        foreach (var socket in sockets)
         {
-            IsStreaming = true;
-            StreamingStartedAt = DateTime.UtcNow;
-            OnStreamingStateChanged?.Invoke(true);
+            try { socket.Abort(); } catch { /* fermeture déjà faite */ }
         }
 
-        public void StopStreaming()
+        _isRunning = false;
+        try { _cts?.Cancel(); } catch { /* déjà annulé */ }
+        try { _tcpListener?.Stop(); } catch { /* déjà arrêté */ }
+    }
+
+    public void Dispose() => Stop();
+
+    public void StartStreaming()
+    {
+        IsStreaming = true;
+        StreamingStartedAt = Clock();
+        OnStreamingStateChanged?.Invoke(true);
+    }
+
+    public void StopStreaming()
+    {
+        IsStreaming = false;
+        StreamingStartedAt = null;
+        OnStreamingStateChanged?.Invoke(false);
+    }
+
+    public void StartRecording()
+    {
+        IsRecording = true;
+        RecordingStartedAt = Clock();
+        OnRecordingStateChanged?.Invoke(true);
+    }
+
+    public void StopRecording()
+    {
+        IsRecording = false;
+        RecordingStartedAt = null;
+        OnRecordingStateChanged?.Invoke(false);
+    }
+
+    public async Task<bool> SendCommandAsync(string slot, string command, CancellationToken cancellationToken = default)
+    {
+        CameraClient? client;
+        lock (_gate)
+            _connected.TryGetValue(slot, out client);
+        if (client == null || client.Socket.State != WebSocketState.Open)
+            return false;
+
+        var json = JsonSerializer.Serialize(new Dictionary<string, string>
         {
-            IsStreaming = false;
-            StreamingStartedAt = null;
-            OnStreamingStateChanged?.Invoke(false);
+            ["type"] = "command",
+            ["command"] = command,
+        });
+        await SendTextAsync(client.Socket, client.SendLock, json, cancellationToken);
+        return true;
+    }
+
+    public async Task SetTallyAsync(string streamName, TallyState tally)
+    {
+        CameraClient? client;
+        lock (_gate)
+            _connected.TryGetValue(streamName, out client);
+        if (client == null || client.Socket.State != WebSocketState.Open)
+            return;
+
+        client.CurrentTally = tally;
+        var tallyName = tally switch
+        {
+            TallyState.Program => "program",
+            TallyState.Preview => "preview",
+            _ => "standby"
+        };
+        var payload = JsonSerializer.Serialize(new Dictionary<string, string>
+        {
+            ["type"] = "tally",
+            ["state"] = tallyName,
+        });
+        try
+        {
+            await SendTextAsync(client.Socket, client.SendLock, payload, CancellationToken.None);
         }
-
-        public void StartRecording()
+        catch
         {
-            IsRecording = true;
-            RecordingStartedAt = DateTime.UtcNow;
-            OnRecordingStateChanged?.Invoke(true);
+            /* le téléphone a coupé pendant l'envoi */
         }
+    }
 
-        public void StopRecording()
+    private async Task AcceptLoopAsync(CancellationToken cancellationToken)
+    {
+        while (!cancellationToken.IsCancellationRequested && _isRunning)
         {
-            IsRecording = false;
-            RecordingStartedAt = null;
-            OnRecordingStateChanged?.Invoke(false);
-        }
-
-        private async Task AcceptTcpClientsLoopAsync(CancellationToken token)
-        {
-            while (!token.IsCancellationRequested && _isRunning)
-            {
-                try
-                {
-                    var tcpClient = await _tcpListener!.AcceptTcpClientAsync(token);
-                    _ = ProcessIncomingConnectionAsync(tcpClient, token);
-                }
-                catch when (token.IsCancellationRequested)
-                {
-                    break;
-                }
-                catch
-                {
-                }
-            }
-        }
-
-        private async Task ProcessIncomingConnectionAsync(TcpClient tcpClient, CancellationToken token)
-        {
-            using var client = tcpClient;
-            client.NoDelay = true;
-            using var stream = client.GetStream();
-
-            var remoteEndpoint = client.Client.RemoteEndPoint?.ToString() ?? "inconnu";
-            var headerBuffer = new byte[8192];
-            int totalRead = 0;
-            string requestText = string.Empty;
-
             try
             {
-                // Lecture de l'en-tête HTTP
-                while (totalRead < headerBuffer.Length)
-                {
-                    int read = await stream.ReadAsync(headerBuffer.AsMemory(totalRead, headerBuffer.Length - totalRead), token);
-                    if (read <= 0) return;
-                    totalRead += read;
-                    requestText = Encoding.UTF8.GetString(headerBuffer, 0, totalRead);
-                    if (requestText.Contains("\r\n\r\n")) break;
-                }
-
-                if (string.IsNullOrEmpty(requestText)) return;
-
-                var firstLine = requestText.Split(new[] { "\r\n" }, StringSplitOptions.None)[0];
-                var parts = firstLine.Split(' ');
-                if (parts.Length < 2) return;
-
-                var method = parts[0].ToUpperInvariant();
-                var path = parts[1];
-
-                // 1. DÉTECTION DU WEBSOCKET (EECC Caméra)
-                if (requestText.IndexOf("Upgrade: websocket", StringComparison.OrdinalIgnoreCase) >= 0)
-                {
-                    await HandleWebSocketUpgradeAsync(stream, requestText, remoteEndpoint, token);
-                    return;
-                }
-
-                // 2. GESTION DES REQUÊTES HTTP (EECC TV & Web)
-                await HandleHttpRequestAsync(stream, method, path, requestText, totalRead, headerBuffer, token);
+                var tcpClient = await _tcpListener!.AcceptTcpClientAsync(cancellationToken);
+                _ = ProcessConnectionAsync(tcpClient, cancellationToken);
+            }
+            catch when (cancellationToken.IsCancellationRequested || !_isRunning)
+            {
+                break;
             }
             catch
             {
+                /* une acceptation ratée ne doit pas arrêter l'écoute */
             }
         }
+    }
 
-        private async Task HandleWebSocketUpgradeAsync(NetworkStream stream, string requestText, string remoteEndpoint, CancellationToken token)
+    private async Task ProcessConnectionAsync(TcpClient tcpClient, CancellationToken cancellationToken)
+    {
+        using var client = tcpClient;
+        client.NoDelay = true;
+        using var stream = client.GetStream();
+        var remote = client.Client.RemoteEndPoint?.ToString() ?? "inconnu";
+        var headerBuffer = new byte[16384];
+        var totalRead = 0;
+
+        try
         {
-            string secWebSocketKey = string.Empty;
-            foreach (var line in requestText.Split(new[] { "\r\n" }, StringSplitOptions.None))
+            var headerEnd = -1;
+            while (totalRead < headerBuffer.Length && headerEnd < 0)
             {
-                if (line.StartsWith("Sec-WebSocket-Key:", StringComparison.OrdinalIgnoreCase))
+                var read = await stream.ReadAsync(headerBuffer.AsMemory(totalRead, headerBuffer.Length - totalRead), cancellationToken);
+                if (read <= 0)
+                    return;
+                totalRead += read;
+                headerEnd = IndexOfHeaderEnd(headerBuffer, totalRead);
+            }
+
+            if (headerEnd < 0)
+                return;
+
+            var headerLength = headerEnd + 4;
+            var requestText = Encoding.ASCII.GetString(headerBuffer, 0, headerLength);
+            var firstLine = requestText.Split("\r\n", StringSplitOptions.None)[0];
+            var parts = firstLine.Split(' ');
+            if (parts.Length < 2)
+                return;
+
+            var method = parts[0].ToUpperInvariant();
+            var path = parts[1];
+            Stream body = stream;
+            if (totalRead > headerLength)
+            {
+                var extra = new byte[totalRead - headerLength];
+                Buffer.BlockCopy(headerBuffer, headerLength, extra, 0, extra.Length);
+                body = new PrefixedStream(extra, stream);
+            }
+
+            if (requestText.Contains("Upgrade: websocket", StringComparison.OrdinalIgnoreCase))
+            {
+                var cleanPath = path.Split('?')[0];
+                if (!cleanPath.Equals(WebSocketPath, StringComparison.OrdinalIgnoreCase))
                 {
-                    secWebSocketKey = line.Substring("Sec-WebSocket-Key:".Length).Trim();
-                    break;
+                    await WriteAsciiAsync(body, "HTTP/1.1 404 Not Found\r\nConnection: close\r\nContent-Length: 0\r\n\r\n", cancellationToken);
+                    return;
                 }
+
+                await AcceptWebSocketAsync(body, requestText, remote, cancellationToken);
+                return;
             }
 
-            if (string.IsNullOrEmpty(secWebSocketKey)) return;
+            await HandleHttpAsync(body, method, path, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            /* arrêt du serveur */
+        }
+        catch
+        {
+            /* connexion individuelle abandonnée */
+        }
+    }
 
-            // Calcul du hash RFC 6455
-            string acceptKey;
-            using (var sha1 = SHA1.Create())
+    private async Task AcceptWebSocketAsync(Stream stream, string requestText, string remote, CancellationToken cancellationToken)
+    {
+        var key = string.Empty;
+        foreach (var line in requestText.Split("\r\n"))
+        {
+            if (line.StartsWith("Sec-WebSocket-Key:", StringComparison.OrdinalIgnoreCase))
             {
-                var combined = secWebSocketKey + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
-                var hash = sha1.ComputeHash(Encoding.UTF8.GetBytes(combined));
-                acceptKey = Convert.ToBase64String(hash);
+                key = line["Sec-WebSocket-Key:".Length..].Trim();
+                break;
             }
-
-            var responseHeaders =
-                "HTTP/1.1 101 Switching Protocols\r\n" +
-                "Upgrade: websocket\r\n" +
-                "Connection: Upgrade\r\n" +
-                $"Sec-WebSocket-Accept: {acceptKey}\r\n\r\n";
-
-            var responseBytes = Encoding.UTF8.GetBytes(responseHeaders);
-            await stream.WriteAsync(responseBytes, token);
-            await stream.FlushAsync(token);
-
-            // Création de l'objet WebSocket .NET natif à partir du flux TCP
-            var ws = WebSocket.CreateFromStream(stream, isServer: true, subProtocol: null, keepAliveInterval: TimeSpan.FromSeconds(30));
-            await ProcessWebSocketSessionAsync(ws, remoteEndpoint, token);
         }
 
-        private async Task ProcessWebSocketSessionAsync(WebSocket socket, string remoteEndpoint, CancellationToken token)
+        if (key.Length == 0)
+            return;
+
+        var accept = Convert.ToBase64String(SHA1.HashData(Encoding.ASCII.GetBytes(key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11")));
+        var response =
+            "HTTP/1.1 101 Switching Protocols\r\n" +
+            "Upgrade: websocket\r\n" +
+            "Connection: Upgrade\r\n" +
+            $"Sec-WebSocket-Accept: {accept}\r\n\r\n";
+        await WriteAsciiAsync(stream, response, cancellationToken);
+        await stream.FlushAsync(cancellationToken);
+
+        var socket = WebSocket.CreateFromStream(stream, isServer: true, subProtocol: null, keepAliveInterval: TimeSpan.FromSeconds(20));
+        await RunSocketAsync(socket, remote, cancellationToken);
+    }
+
+    private async Task RunSocketAsync(WebSocket socket, string remote, CancellationToken cancellationToken)
+    {
+        var buffer = new byte[65536];
+        var message = new MemoryStream();
+        var sendLock = new SemaphoreSlim(1, 1);
+        CameraClient? client = null;
+        var admitted = false;
+        using var handshakeTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        handshakeTimeout.CancelAfter(TimeSpan.FromSeconds(8));
+
+        try
         {
-            var buffer = new byte[65536];
-            CameraClient? client = null;
-            using var msgStream = new MemoryStream();
-
-            try
+            while (socket.State == WebSocketState.Open && !cancellationToken.IsCancellationRequested)
             {
-                while (socket.State == WebSocketState.Open && !token.IsCancellationRequested)
+                var readToken = admitted ? cancellationToken : handshakeTimeout.Token;
+                message.SetLength(0);
+                WebSocketReceiveResult result;
+                do
                 {
-                    msgStream.SetLength(0);
-                    WebSocketReceiveResult result;
-                    do
-                    {
-                        result = await socket.ReceiveAsync(new ArraySegment<byte>(buffer), token);
-                        if (result.MessageType == WebSocketMessageType.Close) break;
-                        msgStream.Write(buffer, 0, result.Count);
-                    } while (!result.EndOfMessage);
+                    result = await socket.ReceiveAsync(buffer, readToken);
+                    if (result.MessageType == WebSocketMessageType.Close)
+                        return;
+                    message.Write(buffer, 0, result.Count);
+                } while (!result.EndOfMessage);
 
-                    if (result.MessageType == WebSocketMessageType.Close) break;
-
-                    if (result.MessageType == WebSocketMessageType.Binary)
+                if (result.MessageType == WebSocketMessageType.Binary)
+                {
+                    if (!admitted || client == null)
+                        continue;
+                    var frame = message.ToArray();
+                    if (frame.Length == 0)
+                        continue;
+                    lock (_gate)
                     {
-                        var frameBytes = msgStream.ToArray();
-                        if (frameBytes.Length > 0)
-                        {
-                            var slot = client?.StreamName ?? "Cam-1";
-                            _cameraFrames[slot] = frameBytes;
-                            LatestCameraFrameBytes = frameBytes;
-                            TotalFramesReceived++;
-                            OnCameraFrameReceived?.Invoke(slot, frameBytes);
-                        }
+                        _cameraFrames[client.StreamName] = frame;
+                        LatestCameraFrameBytes = frame;
+                        TotalFramesReceived++;
                     }
-                    else if (result.MessageType == WebSocketMessageType.Text)
+
+                    OnCameraFrameReceived?.Invoke(client.StreamName, frame);
+                    continue;
+                }
+
+                if (result.MessageType != WebSocketMessageType.Text)
+                    continue;
+
+                JsonDocument document;
+                try
+                {
+                    document = JsonDocument.Parse(message.ToArray());
+                }
+                catch (JsonException)
+                {
+                    continue;
+                }
+
+                using (document)
+                {
+                    var root = document.RootElement;
+                    var type = ReadString(root, "type");
+                    if (!admitted)
                     {
-                        var json = Encoding.UTF8.GetString(msgStream.GetBuffer(), 0, (int)msgStream.Length);
-                        using var doc = JsonDocument.Parse(json);
-                        var root = doc.RootElement;
-                        var type = root.GetProperty("type").GetString();
-
-                        if (type == "handshake")
+                        if (type != "handshake")
+                            continue;
+                        var decision = Admit(root, remote, socket, sendLock);
+                        if (decision.RejectCode != null)
                         {
-                            var reqSlot = root.TryGetProperty("requested_slot", out var rs) ? rs.GetString() : root.TryGetProperty("stream_name", out var sn) ? sn.GetString() : "auto";
-                            var assignedSlot = AllocateSlot(reqSlot);
-                            var pairingToken = root.TryGetProperty("token", out var tk) ? tk.GetString() ?? "" : "";
-                            var model = root.TryGetProperty("device_model", out var dm) ? dm.GetString() ?? "Smartphone" : "Smartphone";
-
-                            client = new CameraClient
+                            await SendTextAsync(socket, sendLock, RejectJson(decision.RejectCode, decision.RejectMessage!), cancellationToken);
+                            try
                             {
-                                StreamName = assignedSlot,
-                                Token = pairingToken,
-                                Socket = socket,
-                                DeviceModel = model,
-                                RemoteIp = remoteEndpoint,
-                                SlotNumber = int.TryParse(assignedSlot.Replace("Cam-", ""), out var n) ? n : 1,
-                                CurrentTally = TallyState.Standby,
-                            };
-
-                            _connectedCameras[assignedSlot] = client;
-                            OnCameraConnected?.Invoke(client);
-
-                            // Accusé de réception formel renvoyé au smartphone pour confirmer la connexion réelle
-                            var ack = new
-                            {
-                                type = "handshake_ack",
-                                status = "connected",
-                                assigned_slot = assignedSlot,
-                                slot_number = client.SlotNumber,
-                                max_slots = MaxCameraSlots,
-                                church = ChurchName,
-                                tally = "standby",
-                                server_time = DateTime.UtcNow.ToString("o")
-                            };
-                            var ackBytes = JsonSerializer.SerializeToUtf8Bytes(ack);
-                            await socket.SendAsync(new ArraySegment<byte>(ackBytes), WebSocketMessageType.Text, true, token);
-                        }
-                        else if (type == "ping")
-                        {
-                            var time = root.TryGetProperty("time", out var tm) ? tm.GetInt64() : 0;
-                            var pongJson = $"{{\"type\":\"pong\",\"time\":{time},\"server_time\":\"{DateTime.UtcNow:o}\"}}";
-                            var pongBytes = Encoding.UTF8.GetBytes(pongJson);
-                            await socket.SendAsync(new ArraySegment<byte>(pongBytes), WebSocketMessageType.Text, true, token);
-                        }
-                        else if (type == "telemetry" && client != null)
-                        {
-                            if (root.TryGetProperty("payload", out var payload))
-                            {
-                                client.BatteryLevel = payload.GetProperty("batteryLevel").GetInt32();
-                                client.IsCharging = payload.GetProperty("isCharging").GetBoolean();
-                                client.Fps = payload.GetProperty("fps").GetInt32();
-                                client.BitrateKbps = payload.GetProperty("currentBitrateKbps").GetInt32();
-                                client.LastTelemetryTime = DateTime.UtcNow;
-
-                                OnTelemetryReceived?.Invoke(client);
+                                await socket.CloseAsync(WebSocketCloseStatus.PolicyViolation, decision.RejectCode, CancellationToken.None);
                             }
+                            catch { /* le client a déjà fermé */ }
+                            return;
                         }
+
+                        client = decision.Client;
+                        admitted = true;
+                        await SendTextAsync(socket, sendLock, decision.AckJson!, cancellationToken);
+                        OnCameraConnected?.Invoke(client!);
+                        continue;
+                    }
+
+                    if (type == "ping")
+                    {
+                        var time = ReadInt64(root, "time");
+                        var pong = JsonSerializer.Serialize(new Dictionary<string, object>
+                        {
+                            ["type"] = "pong",
+                            ["time"] = time,
+                            ["server_time"] = Clock().ToString("o"),
+                        });
+                        await SendTextAsync(socket, sendLock, pong, cancellationToken);
+                    }
+                    else if (type == "telemetry" && client != null)
+                    {
+                        ApplyTelemetry(client, root);
+                        OnTelemetryReceived?.Invoke(client);
+                    }
+                    else if (type == "bye" && client != null)
+                    {
+                        ReleasePhone(client, socket, keepReservation: false);
+                        client = null;
+                        try
+                        {
+                            await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "bye", CancellationToken.None);
+                        }
+                        catch { /* fermeture déjà en cours */ }
+                        return;
                     }
                 }
             }
-            catch
-            {
-            }
-            finally
-            {
-                if (client != null)
-                {
-                    _connectedCameras.TryRemove(client.StreamName, out _);
-                    _cameraFrames.TryRemove(client.StreamName, out _);
-                    OnCameraDisconnected?.Invoke(client.StreamName);
-                }
-                try { socket.Dispose(); } catch { }
-            }
         }
-
-        private async Task HandleHttpRequestAsync(NetworkStream stream, string method, string path, string requestText, int totalHeaderRead, byte[] headerBuffer, CancellationToken token)
+        catch (OperationCanceledException)
         {
-            var cleanPath = path.Split('?')[0].ToLowerInvariant();
-
-            if (method == "OPTIONS")
+            if (!admitted && socket.State == WebSocketState.Open)
             {
-                var optResponse = "HTTP/1.1 200 OK\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods: GET, POST, OPTIONS\r\nAccess-Control-Allow-Headers: *\r\nContent-Length: 0\r\n\r\n";
-                await stream.WriteAsync(Encoding.UTF8.GetBytes(optResponse), token);
-                return;
-            }
-
-            if (cleanPath == "/live/status" || cleanPath == "/status" || cleanPath == "/api/status")
-            {
-                var localIp = GetLocalIpAddress();
-                var slotsList = new List<object>();
-                for (int i = 1; i <= MaxCameraSlots; i++)
-                {
-                    var sName = $"Cam-{i}";
-                    bool isConn = _connectedCameras.TryGetValue(sName, out var cam);
-                    slotsList.Add(new
-                    {
-                        slot = sName,
-                        slot_number = i,
-                        is_connected = isConn,
-                        battery = isConn ? cam!.BatteryLevel : 0,
-                        is_charging = isConn && cam!.IsCharging,
-                        fps = isConn ? cam!.Fps : 0,
-                        bitrate_kbps = isConn ? cam!.BitrateKbps : 0,
-                        tally = isConn ? cam!.CurrentTally.ToString().ToLowerInvariant() : "offline",
-                        has_frame = _cameraFrames.ContainsKey(sName)
-                    });
-                }
-
-                ViewersCount = Volatile.Read(ref _activeStreamClients);
-                var statusData = new
-                {
-                    service = "EECC Studio Broadcast Server",
-                    church = ChurchName,
-                    is_live = IsStreaming,
-                    status = IsStreaming ? "live" : "standby",
-                    title = ProgramTitle,
-                    speaker = Speaker,
-                    active_scene = ActiveSceneName,
-                    live_stream_url = $"http://{localIp}:{Port}{EeccTvContract.StreamPath}",
-                    transport = "mjpeg-http",
-                    viewers = ViewersCount,
-                    uptime_seconds = (int)StreamingDuration.TotalSeconds,
-                    cameras_connected = _connectedCameras.Count,
-                    max_cameras = MaxCameraSlots,
-                    slots = slotsList
-                };
-
-                var jsonBytes = JsonSerializer.SerializeToUtf8Bytes(statusData);
-                var header = $"HTTP/1.1 200 OK\r\nContent-Type: application/json; charset=utf-8\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: {jsonBytes.Length}\r\n\r\n";
-                await stream.WriteAsync(Encoding.UTF8.GetBytes(header), token);
-                await stream.WriteAsync(jsonBytes, token);
-                return;
-            }
-
-            if (cleanPath == "/live/frame.jpg" || cleanPath == "/frame.jpg")
-            {
-                if (!IsStreaming)
-                {
-                    await EeccTvContract.WriteOfflineAsync(stream, token);
-                    return;
-                }
-
-                var frame = ActiveProgramFrameBytes ?? LatestCameraFrameBytes ?? EeccTvFrames.Slate;
-                await EeccTvContract.WriteJpegAsync(stream, frame, token);
-                return;
-            }
-
-            if (cleanPath.StartsWith("/camera/slot/") && cleanPath.EndsWith("/frame.jpg"))
-            {
-                var segments = cleanPath.Split('/');
-                var slot = segments.Length >= 4 ? segments[3] : "cam-1";
-                var frame = GetCameraFrame(slot) ?? StaticJpegFrame;
-                var header = $"HTTP/1.1 200 OK\r\nContent-Type: image/jpeg\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: {frame.Length}\r\n\r\n";
-                await stream.WriteAsync(Encoding.UTF8.GetBytes(header), token);
-                await stream.WriteAsync(frame, token);
-                return;
-            }
-
-            if (cleanPath == "/live/stream")
-            {
-                Interlocked.Increment(ref _activeStreamClients);
                 try
                 {
-                    await EeccTvContract.WriteMjpegAsync(
-                        stream,
-                        () => IsStreaming,
-                        () => ActiveProgramFrameBytes ?? LatestCameraFrameBytes ?? EeccTvFrames.Slate,
-                        () => _isRunning,
-                        token);
+                    await SendTextAsync(socket, sendLock, RejectJson("timeout", "Aucun appairage reçu à temps. Scannez le QR affiché dans EECC Studio."), CancellationToken.None);
                 }
-                finally
+                catch { /* plus rien à dire au client */ }
+            }
+        }
+        catch
+        {
+            /* coupure réseau */
+        }
+        finally
+        {
+            if (client != null)
+                ReleasePhone(client, socket, keepReservation: true);
+            try { socket.Dispose(); } catch { /* déjà libéré */ }
+            sendLock.Dispose();
+        }
+    }
+
+    private Admission Admit(JsonElement root, string remote, WebSocket socket, SemaphoreSlim sendLock)
+    {
+        var token = ReadString(root, "token") ?? string.Empty;
+        var reconnect = ReadBool(root, "reconnect");
+        lock (_gate)
+        {
+            PurgeExpiredReservations();
+            if (reconnect)
+                return AdmitReconnect(token, remote, socket, sendLock, root);
+            return AdmitPairing(token, remote, socket, sendLock, root);
+        }
+    }
+
+    private Admission AdmitReconnect(string sessionId, string remote, WebSocket socket, SemaphoreSlim sendLock, JsonElement root)
+    {
+        if (!_reserved.TryGetValue(sessionId, out var client))
+        {
+            var known = _connected.Values.Any(phone => phone.SessionId == sessionId);
+            return Admission.Reject(known ? "token_used" : "session_unknown", known
+                ? "Cette session est déjà reliée."
+                : "Session inconnue. Scannez un nouveau QR.");
+        }
+
+        if (client.ReservedUntil <= Clock())
+        {
+            _reserved.Remove(sessionId);
+            _cameraFrames.Remove(client.StreamName);
+            return Admission.Reject("session_expired", "La session a expiré. Scannez un nouveau QR.");
+        }
+
+        _reserved.Remove(sessionId);
+        AttachSocket(client, remote, socket, sendLock, root);
+        _connected[client.StreamName] = client;
+        return Admission.Ok(client, AckJson(client));
+    }
+
+    private Admission AdmitPairing(string token, string remote, WebSocket socket, SemaphoreSlim sendLock, JsonElement root)
+    {
+        if (!_tickets.TryGetValue(token, out var ticket))
+            return Admission.Reject("token_invalid", "Jeton refusé. Scannez le QR affiché maintenant dans EECC Studio.");
+        if (ticket.ExpiresAt <= Clock())
+            return Admission.Reject("token_expired", "Jeton expiré. Renouvelez le QR dans EECC Studio.");
+        if (ticket.Consumed)
+            return Admission.Reject("token_used", "Ce QR a déjà servi. Affichez un nouveau QR pour ce téléphone.");
+        if (_connected.Count + _reserved.Count >= MaxPhoneConnections)
+            return Admission.Reject("capacity", "15 téléphones sont déjà reliés. Déconnectez-en un avant d'en ajouter. Les caméras physiques ne libèrent pas ces places.");
+
+        var slot = AllocateSlot(ReadString(root, "requested_slot") ?? ReadString(root, "stream_name"));
+        if (slot == null)
+            return Admission.Reject("capacity", "15 téléphones sont déjà reliés. Déconnectez-en un avant d'en ajouter. Les caméras physiques ne libèrent pas ces places.");
+
+        ticket.Consumed = true;
+        var client = new CameraClient
+        {
+            StreamName = slot,
+            SessionId = EncodeToken(RandomNumberGenerator.GetBytes(16)),
+            SlotNumber = int.Parse(slot["Cam-".Length..], System.Globalization.CultureInfo.InvariantCulture),
+            StudioLabel = ticket.StudioName,
+            ConnectedAt = Clock(),
+        };
+        AttachSocket(client, remote, socket, sendLock, root);
+        _connected[slot] = client;
+        return Admission.Ok(client, AckJson(client));
+    }
+
+    private void AttachSocket(CameraClient client, string remote, WebSocket socket, SemaphoreSlim sendLock, JsonElement root)
+    {
+        client.Socket = socket;
+        client.SendLock = sendLock;
+        client.RemoteIp = remote;
+        client.DeviceModel = TrimLabel(ReadString(root, "device_model"), "non indiqué");
+        client.DeviceId = TrimLabel(ReadString(root, "device_id"), string.Empty);
+        client.DisplayName = TrimLabel(ReadString(root, "display_name"), $"Téléphone {client.SlotNumber}");
+        client.ConnectedAt = Clock();
+        client.ReservedUntil = DateTimeOffset.MinValue;
+    }
+
+    private static string AckJson(CameraClient client)
+    {
+        return JsonSerializer.Serialize(new Dictionary<string, object>
+        {
+            ["type"] = "handshake_ack",
+            ["status"] = "connected",
+            ["assigned_slot"] = client.StreamName,
+            ["slot_number"] = client.SlotNumber,
+            ["session_id"] = client.SessionId,
+            ["display_name"] = client.DisplayName,
+            ["max_phones"] = MaxPhoneConnections,
+            ["studio_name"] = client.StudioLabel,
+            ["tally"] = "standby",
+        });
+    }
+
+    private static string RejectJson(string code, string message)
+    {
+        return JsonSerializer.Serialize(new Dictionary<string, string>
+        {
+            ["type"] = "handshake_reject",
+            ["status"] = "rejected",
+            ["code"] = code,
+            ["message"] = message,
+        });
+    }
+
+    private string? AllocateSlot(string? requested)
+    {
+        if (!string.IsNullOrWhiteSpace(requested))
+        {
+            var clean = requested.Trim();
+            if (clean.StartsWith("Cam-", StringComparison.OrdinalIgnoreCase)
+                && int.TryParse(clean["Cam-".Length..], out var number)
+                && number is >= 1 and <= MaxPhoneConnections
+                && !_connected.ContainsKey($"Cam-{number}")
+                && !_reserved.Values.Any(phone => phone.StreamName.Equals($"Cam-{number}", StringComparison.OrdinalIgnoreCase)))
+            {
+                return $"Cam-{number}";
+            }
+        }
+
+        for (var number = 1; number <= MaxPhoneConnections; number++)
+        {
+            var slot = $"Cam-{number}";
+            if (_connected.ContainsKey(slot))
+                continue;
+            if (_reserved.Values.Any(phone => phone.StreamName.Equals(slot, StringComparison.OrdinalIgnoreCase)))
+                continue;
+            return slot;
+        }
+
+        return null;
+    }
+
+    private void ReleasePhone(CameraClient client, WebSocket socket, bool keepReservation)
+    {
+        var removed = false;
+        lock (_gate)
+        {
+            if (!ReferenceEquals(client.Socket, socket))
+                return;
+            if (_connected.TryGetValue(client.StreamName, out var current) && ReferenceEquals(current, client))
+            {
+                _connected.Remove(client.StreamName);
+                removed = true;
+                if (keepReservation)
                 {
-                    Interlocked.Decrement(ref _activeStreamClients);
+                    client.ReservedUntil = Clock().Add(ReconnectGrace);
+                    _reserved[client.SessionId] = client;
                 }
+                else
+                {
+                    _reserved.Remove(client.SessionId);
+                    _cameraFrames.Remove(client.StreamName);
+                }
+            }
+        }
+
+        if (removed)
+            OnCameraDisconnected?.Invoke(client.StreamName);
+    }
+
+    private void PurgeExpiredReservations()
+    {
+        var now = Clock();
+        var expired = _reserved.Where(pair => pair.Value.ReservedUntil <= now).Select(pair => pair.Key).ToList();
+        foreach (var sessionId in expired)
+        {
+            if (_reserved.Remove(sessionId, out var client))
+                _cameraFrames.Remove(client.StreamName);
+        }
+    }
+
+    private void PurgeExpiredTickets()
+    {
+        var now = Clock();
+        var expired = _tickets.Where(pair => !pair.Value.Consumed && pair.Value.ExpiresAt <= now).Select(pair => pair.Key).ToList();
+        foreach (var token in expired)
+            _tickets.Remove(token);
+    }
+
+    private void ApplyTelemetry(CameraClient client, JsonElement root)
+    {
+        if (!root.TryGetProperty("payload", out var payload) || payload.ValueKind != JsonValueKind.Object)
+            return;
+        var hasBattery = TryReadInt(payload, out var battery, "batteryLevel", "battery_level");
+        var hasCharging = TryReadBool(payload, out var charging, "isCharging", "is_charging");
+        var hasFps = TryReadInt(payload, out var fps, "fps");
+        var hasBitrate = TryReadInt(payload, out var bitrate, "currentBitrateKbps", "bitrate_kbps");
+        var hasAudio = TryReadDouble(payload, out var audio, "audioLevel", "audio_level", "audioLevelNormalized");
+        lock (_gate)
+        {
+            if (hasBattery)
+                client.BatteryLevel = battery;
+            if (hasCharging)
+                client.IsCharging = charging;
+            if (hasFps)
+                client.Fps = fps;
+            if (hasBitrate)
+                client.BitrateKbps = bitrate;
+            if (hasAudio)
+                client.AudioLevel = Math.Clamp(audio, 0, 1);
+            client.LastTelemetryTime = Clock();
+        }
+    }
+
+    private async Task HandleHttpAsync(Stream stream, string method, string path, CancellationToken cancellationToken)
+    {
+        var cleanPath = path.Split('?')[0].ToLowerInvariant();
+        if (method == "OPTIONS")
+        {
+            await WriteAsciiAsync(stream, "HTTP/1.1 200 OK\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods: GET, POST, OPTIONS\r\nAccess-Control-Allow-Headers: *\r\nContent-Length: 0\r\n\r\n", cancellationToken);
+            return;
+        }
+
+        if (cleanPath is "/live/status" or "/status" or "/api/status")
+        {
+            var lan = GetLocalIpAddress();
+            var phones = new List<object>();
+            List<CameraClient> connected;
+            int reserved;
+            int physical;
+            lock (_gate)
+            {
+                PurgeExpiredReservations();
+                connected = _connected.Values.OrderBy(phone => phone.SlotNumber).ToList();
+                reserved = _reserved.Count;
+                physical = _physical.Count;
+            }
+
+            foreach (var phone in connected)
+            {
+                phones.Add(new Dictionary<string, object?>
+                {
+                    ["slot"] = phone.StreamName,
+                    ["slot_number"] = phone.SlotNumber,
+                    ["display_name"] = phone.DisplayName,
+                    ["device_model"] = phone.DeviceModel,
+                    ["remote"] = phone.RemoteIp,
+                    ["battery"] = phone.BatteryLevel < 0 ? null : phone.BatteryLevel,
+                    ["is_charging"] = phone.IsCharging,
+                    ["audio_level"] = phone.AudioLevel,
+                    ["fps"] = phone.Fps > 0 ? phone.Fps : null,
+                    ["bitrate_kbps"] = phone.BitrateKbps > 0 ? phone.BitrateKbps : null,
+                    ["tally"] = phone.CurrentTally.ToString().ToLowerInvariant(),
+                    ["has_frame"] = GetCameraFrame(phone.StreamName) != null,
+                });
+            }
+
+            var status = new Dictionary<string, object?>
+            {
+                ["service"] = "EECC Studio",
+                ["church"] = ChurchName,
+                ["is_live"] = IsStreaming,
+                ["status"] = IsStreaming ? "live" : "standby",
+                ["title"] = ProgramTitle,
+                ["speaker"] = Speaker,
+                ["active_scene"] = ActiveSceneName,
+                ["live_stream_url"] = $"http://{(lan.Length == 0 ? "127.0.0.1" : lan)}:{ListeningPort}/live/stream",
+                ["lan_addresses"] = ListLanAddresses(),
+                ["lan_error"] = lan.Length == 0 ? "Aucune adresse IPv4 privée utilisable. Le QR n'est pas affiché." : null,
+                ["phones_connected"] = connected.Count,
+                ["phones_reconnecting"] = reserved,
+                ["max_phones"] = MaxPhoneConnections,
+                ["physical_cameras"] = physical,
+                ["physical_cameras_count_toward_limit"] = false,
+                ["viewers"] = null,
+                ["resolution"] = null,
+                ["fps"] = null,
+                ["bitrate_kbps"] = null,
+                ["phones"] = phones,
+            };
+            await WriteJsonAsync(stream, status, cancellationToken);
+            return;
+        }
+
+        if (cleanPath is "/live/frame.jpg" or "/frame.jpg")
+        {
+            var frame = IsStreaming ? ActiveProgramFrameBytes : null;
+            if (frame == null)
+            {
+                await WriteJsonAsync(stream, new Dictionary<string, string>
+                {
+                    ["error"] = "aucune_image",
+                    ["message"] = "Aucune image de téléphone n'est à l'antenne.",
+                }, cancellationToken, statusCode: 404);
                 return;
             }
 
-            // Page HTML par défaut
-            var localIpDefault = GetLocalIpAddress();
-            var html = $@"<!DOCTYPE html>
-<html lang=""fr"">
-<head>
-  <meta charset=""UTF-8"">
-  <title>EECC Studio — Diffusion Directe</title>
-  <style>
-    body {{ background: #0A0D14; color: #F0F6FC; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 30px; text-align: center; }}
-    .badge {{ display: inline-block; padding: 6px 14px; border-radius: 20px; font-weight: bold; font-size: 13px; margin-bottom: 15px; }}
-    .live {{ background: #DC2626; color: white; }}
-    .standby {{ background: #30363D; color: #8B949E; }}
-    .card {{ background: #161B22; border: 1px solid #30363D; border-radius: 16px; max-width: 680px; margin: 0 auto; padding: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }}
-    h1 {{ font-size: 24px; margin-bottom: 6px; color: #FFFFFF; }}
-    p.sub {{ color: #8B949E; font-size: 14px; margin-bottom: 20px; }}
-  </style>
-</head>
-<body>
-  <div class=""card"">
-    <div class=""badge {(IsStreaming ? "live" : "standby")}"">
-      {(IsStreaming ? "● DIFFUSION EN DIRECT ACTIVÉE" : "○ STUDIO EN ATTENTE DU CULTE")}
-    </div>
-    <h1>{ChurchName}</h1>
-    <p class=""sub"">{ProgramTitle} — {Speaker}</p>
-    <div style=""display:flex; justify-content:space-around; color:#8B949E; font-size:12px; margin-top:20px;"">
-      <div>Scène active : <strong style=""color:#F0F6FC;"">{ActiveSceneName}</strong></div>
-      <div>Transport : <strong style=""color:#16A34A;"">MJPEG local</strong></div>
-      <div>Serveur : <strong style=""color:#38BDF8;"">http://{localIpDefault}:{Port}</strong></div>
-    </div>
-  </div>
-</body>
-</html>";
-            var htmlBytes = Encoding.UTF8.GetBytes(html);
-            var defaultResp = $"HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: {htmlBytes.Length}\r\n\r\n";
-            await stream.WriteAsync(Encoding.UTF8.GetBytes(defaultResp), token);
-            await stream.WriteAsync(htmlBytes, token);
+            await WriteBytesAsync(stream, "image/jpeg", frame, cancellationToken);
+            return;
         }
 
-        public async Task SetTallyAsync(string streamName, TallyState tally)
+        if (cleanPath.StartsWith("/camera/slot/", StringComparison.Ordinal) && cleanPath.EndsWith("/frame.jpg", StringComparison.Ordinal))
         {
-            if (_connectedCameras.TryGetValue(streamName, out var client) && client.Socket.State == WebSocketState.Open)
+            var segments = cleanPath.Split('/');
+            var slot = segments.Length >= 4 ? segments[3] : string.Empty;
+            var frame = GetCameraFrame(slot);
+            if (frame == null)
             {
-                client.CurrentTally = tally;
-                var tallyStr = tally switch
+                await WriteJsonAsync(stream, new Dictionary<string, string>
                 {
-                    TallyState.Program => "program",
-                    TallyState.Preview => "preview",
-                    _ => "standby"
-                };
-
-                var payload = $"{{\"type\":\"tally\",\"state\":\"{tallyStr}\"}}";
-                var bytes = Encoding.UTF8.GetBytes(payload);
-                await client.Socket.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, CancellationToken.None);
+                    ["error"] = "aucune_image",
+                    ["message"] = $"Aucune image reçue pour {slot}.",
+                }, cancellationToken, statusCode: 404);
+                return;
             }
+
+            await WriteBytesAsync(stream, "image/jpeg", frame, cancellationToken);
+            return;
+        }
+
+        if (cleanPath == "/live/stream")
+        {
+            if (!IsStreaming)
+            {
+                await WriteJsonAsync(stream, new Dictionary<string, string>
+                {
+                    ["error"] = "hors_antenne",
+                    ["message"] = "EECC TV n'est pas en direct.",
+                }, cancellationToken, statusCode: 404);
+                return;
+            }
+
+            await WriteAsciiAsync(stream, "HTTP/1.1 200 OK\r\nContent-Type: multipart/x-mixed-replace; boundary=--eecc_boundary_frame\r\nAccess-Control-Allow-Origin: *\r\nCache-Control: no-cache, no-store\r\n\r\n", cancellationToken);
+            while (!cancellationToken.IsCancellationRequested && _isRunning && IsStreaming)
+            {
+                var frame = ActiveProgramFrameBytes;
+                if (frame != null)
+                {
+                    var part = $"--eecc_boundary_frame\r\nContent-Type: image/jpeg\r\nContent-Length: {frame.Length}\r\n\r\n";
+                    await WriteAsciiAsync(stream, part, cancellationToken);
+                    await stream.WriteAsync(frame, cancellationToken);
+                    await WriteAsciiAsync(stream, "\r\n", cancellationToken);
+                    await stream.FlushAsync(cancellationToken);
+                }
+
+                await Task.Delay(frame == null ? 200 : 66, cancellationToken);
+            }
+
+            return;
+        }
+
+        var lanAddress = GetLocalIpAddress();
+        var html = "<!DOCTYPE html><html lang=\"fr\"><head><meta charset=\"utf-8\"><title>EECC Studio</title></head><body><h1>EECC Studio</h1><p>"
+            + (lanAddress.Length == 0
+                ? "Aucune adresse IPv4 privée utilisable n'a été détectée."
+                : "Écoute LAN sur " + System.Net.WebUtility.HtmlEncode(lanAddress) + ":" + ListeningPort + ".")
+            + " Le même réseau Wi-Fi ne garantit pas que les téléphones puissent joindre ce port.</p></body></html>";
+        await WriteBytesAsync(stream, "text/html; charset=utf-8", Encoding.UTF8.GetBytes(html), cancellationToken);
+    }
+
+    private static async Task SendTextAsync(WebSocket socket, SemaphoreSlim gate, string json, CancellationToken cancellationToken)
+    {
+        var bytes = Encoding.UTF8.GetBytes(json);
+        await gate.WaitAsync(cancellationToken);
+        try
+        {
+            if (socket.State == WebSocketState.Open)
+                await socket.SendAsync(bytes, WebSocketMessageType.Text, true, cancellationToken);
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
+    private static async Task WriteJsonAsync(Stream stream, object payload, CancellationToken cancellationToken, int statusCode = 200)
+    {
+        var body = JsonSerializer.SerializeToUtf8Bytes(payload);
+        var header = $"HTTP/1.1 {statusCode} {(statusCode == 200 ? "OK" : "Not Found")}\r\nContent-Type: application/json; charset=utf-8\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: {body.Length}\r\nConnection: close\r\n\r\n";
+        await WriteAsciiAsync(stream, header, cancellationToken);
+        await stream.WriteAsync(body, cancellationToken);
+    }
+
+    private static async Task WriteBytesAsync(Stream stream, string contentType, byte[] body, CancellationToken cancellationToken)
+    {
+        var header = $"HTTP/1.1 200 OK\r\nContent-Type: {contentType}\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: {body.Length}\r\nConnection: close\r\n\r\n";
+        await WriteAsciiAsync(stream, header, cancellationToken);
+        await stream.WriteAsync(body, cancellationToken);
+    }
+
+    private static Task WriteAsciiAsync(Stream stream, string text, CancellationToken cancellationToken) =>
+        stream.WriteAsync(Encoding.ASCII.GetBytes(text), cancellationToken).AsTask();
+
+    private static int IndexOfHeaderEnd(byte[] buffer, int length)
+    {
+        for (var i = 0; i <= length - 4; i++)
+        {
+            if (buffer[i] == 13 && buffer[i + 1] == 10 && buffer[i + 2] == 13 && buffer[i + 3] == 10)
+                return i;
+        }
+
+        return -1;
+    }
+
+    private static string EncodeToken(byte[] bytes) =>
+        Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+
+    private static string TrimLabel(string? value, string fallback)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return fallback;
+        var cleaned = new string(value.Where(character => !char.IsControl(character)).ToArray()).Trim();
+        if (cleaned.Length == 0)
+            return fallback;
+        return cleaned.Length <= 40 ? cleaned : cleaned[..40];
+    }
+
+    private static string? ReadString(JsonElement element, string name)
+    {
+        if (!element.TryGetProperty(name, out var property))
+            return null;
+        return property.ValueKind == JsonValueKind.String ? property.GetString() : null;
+    }
+
+    private static bool ReadBool(JsonElement element, string name)
+    {
+        if (!element.TryGetProperty(name, out var property))
+            return false;
+        return property.ValueKind == JsonValueKind.True
+            || (property.ValueKind == JsonValueKind.String && property.GetString() == "true");
+    }
+
+    private static long ReadInt64(JsonElement element, string name)
+    {
+        if (!element.TryGetProperty(name, out var property) || property.ValueKind != JsonValueKind.Number)
+            return 0;
+        return property.TryGetInt64(out var value) ? value : 0;
+    }
+
+    private static bool TryReadInt(JsonElement element, out int value, params string[] names)
+    {
+        foreach (var name in names)
+        {
+            if (!element.TryGetProperty(name, out var property) || property.ValueKind != JsonValueKind.Number)
+                continue;
+            if (property.TryGetInt32(out value))
+                return true;
+            if (property.TryGetDouble(out var number))
+            {
+                value = (int)number;
+                return true;
+            }
+        }
+
+        value = 0;
+        return false;
+    }
+
+    private static bool TryReadBool(JsonElement element, out bool value, params string[] names)
+    {
+        foreach (var name in names)
+        {
+            if (!element.TryGetProperty(name, out var property))
+                continue;
+            if (property.ValueKind is JsonValueKind.True or JsonValueKind.False)
+            {
+                value = property.GetBoolean();
+                return true;
+            }
+        }
+
+        value = false;
+        return false;
+    }
+
+    private static bool TryReadDouble(JsonElement element, out double value, params string[] names)
+    {
+        foreach (var name in names)
+        {
+            if (!element.TryGetProperty(name, out var property) || property.ValueKind != JsonValueKind.Number)
+                continue;
+            if (property.TryGetDouble(out value))
+                return true;
+        }
+
+        value = 0;
+        return false;
+    }
+
+    private readonly struct Admission
+    {
+        public CameraClient? Client { get; }
+        public string? AckJson { get; }
+        public string? RejectCode { get; }
+        public string? RejectMessage { get; }
+
+        private Admission(CameraClient? client, string? ackJson, string? rejectCode, string? rejectMessage)
+        {
+            Client = client;
+            AckJson = ackJson;
+            RejectCode = rejectCode;
+            RejectMessage = rejectMessage;
+        }
+
+        public static Admission Ok(CameraClient client, string ackJson) => new(client, ackJson, null, null);
+        public static Admission Reject(string code, string message) => new(null, null, code, message);
+    }
+
+    private sealed class PrefixedStream : Stream
+    {
+        private readonly byte[] _prefix;
+        private int _offset;
+        private readonly Stream _inner;
+
+        public PrefixedStream(byte[] prefix, Stream inner)
+        {
+            _prefix = prefix;
+            _inner = inner;
+        }
+
+        public override bool CanRead => true;
+        public override bool CanSeek => false;
+        public override bool CanWrite => true;
+        public override long Length => throw new NotSupportedException();
+        public override long Position
+        {
+            get => throw new NotSupportedException();
+            set => throw new NotSupportedException();
+        }
+
+        public override void Flush() => _inner.Flush();
+        public override Task FlushAsync(CancellationToken cancellationToken) => _inner.FlushAsync(cancellationToken);
+
+        public override int Read(byte[] buffer, int offset, int count)
+        {
+            var fromPrefix = ReadPrefix(buffer.AsSpan(offset, count));
+            return fromPrefix > 0 ? fromPrefix : _inner.Read(buffer, offset, count);
+        }
+
+        public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            var fromPrefix = ReadPrefix(buffer.Span);
+            if (fromPrefix > 0)
+                return fromPrefix;
+            return await _inner.ReadAsync(buffer, cancellationToken);
+        }
+
+        public override void Write(byte[] buffer, int offset, int count) => _inner.Write(buffer, offset, count);
+        public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) =>
+            _inner.WriteAsync(buffer, offset, count, cancellationToken);
+        public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default) =>
+            _inner.WriteAsync(buffer, cancellationToken);
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+
+        private int ReadPrefix(Span<byte> buffer)
+        {
+            var left = _prefix.Length - _offset;
+            if (left <= 0 || buffer.Length == 0)
+                return 0;
+            var count = Math.Min(left, buffer.Length);
+            _prefix.AsSpan(_offset, count).CopyTo(buffer);
+            _offset += count;
+            return count;
         }
     }
 }

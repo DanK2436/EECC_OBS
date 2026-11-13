@@ -5,7 +5,7 @@
         Height="460" Width="520"
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize"
-        Background="#14151C">
+        Background="#3C4146">
 
     <Grid Margin="24">
         <Grid.RowDefinitions>
@@ -16,28 +16,28 @@
 
         <!-- Logo Officiel & Titre -->
         <StackPanel Grid.Row="0" HorizontalAlignment="Center" Margin="0,0,0,16">
-            <Border Width="64" Height="64" CornerRadius="12" Background="#0D1117" BorderBrush="#DC2626" BorderThickness="2" HorizontalAlignment="Center" Margin="0,0,0,10" ClipToBounds="True">
+            <Border Width="64" Height="64" CornerRadius="12" Background="#2A2E33" BorderBrush="#DC2626" BorderThickness="2" HorizontalAlignment="Center" Margin="0,0,0,10" ClipToBounds="True">
                 <Image Source="Assets/logo_official.png" Stretch="UniformToFill"/>
             </Border>
             <TextBlock Text="EECC STUDIO" FontWeight="Black" FontSize="20" Foreground="#FFFFFF" HorizontalAlignment="Center"/>
             <TextBlock Text="Version 1.0.0 (Build Broadcast Native)" FontSize="12" Foreground="#16A34A" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,2,0,0"/>
-            <TextBlock Text="Régie de production audiovisuelle officielle" FontSize="12" Foreground="#9CA3AF" HorizontalAlignment="Center" Margin="0,4,0,0"/>
+            <TextBlock Text="Régie de production audiovisuelle officielle" FontSize="12" Foreground="#C5CCD3" HorizontalAlignment="Center" Margin="0,4,0,0"/>
         </StackPanel>
 
         <!-- Cadre Licence et Dénomination -->
-        <Border Grid.Row="1" Background="#161B22" BorderBrush="#30363D" BorderThickness="1" CornerRadius="10" Padding="16">
+        <Border Grid.Row="1" Background="#32373C" BorderBrush="#22262B" BorderThickness="1" CornerRadius="10" Padding="16">
             <ScrollViewer VerticalScrollBarVisibility="Auto">
                 <StackPanel>
-                    <TextBlock Text="ÉGLISE ÉVANGÉLIQUE LES COHÉRITIERS DU CHRIST" FontWeight="Black" Foreground="#F0F6FC" FontSize="13" Margin="0,0,0,8"/>
-                    <TextBlock Text="EECC Studio est l'outil officiel de régie audiovisuelle de l'Église Évangélique les Cohéritiers du Christ (EECC)." Foreground="#C9D1D9" FontSize="12" TextWrapping="Wrap" Margin="0,0,0,10" LineHeight="18"/>
-                    <TextBlock Text="Développé pour garantir une captation et une diffusion fluide des cultes, séminaires et louanges, avec liaison sans fil vers les caméras mobiles EECC Caméra et diffusion directe vers les téléviseurs et smartphones EECC TV." Foreground="#8B949E" FontSize="11" TextWrapping="Wrap" LineHeight="16"/>
-                    <Separator Background="#30363D" Margin="0,12"/>
-                    <TextBlock Text="© EECC — Église Évangélique les Cohéritiers du Christ. Tous droits réservés." Foreground="#6E7681" FontSize="11"/>
+                    <TextBlock Text="ÉGLISE ÉVANGÉLIQUE LES COHÉRITIERS DU CHRIST" FontWeight="Black" Foreground="#F4F6F8" FontSize="13" Margin="0,0,0,8"/>
+                    <TextBlock Text="EECC Studio est l'outil officiel de régie audiovisuelle de l'Église Évangélique les Cohéritiers du Christ (EECC)." Foreground="#D5DBE1" FontSize="12" TextWrapping="Wrap" Margin="0,0,0,10" LineHeight="18"/>
+                    <TextBlock Text="Développé pour garantir une captation et une diffusion fluide des cultes, séminaires et louanges, avec liaison sans fil vers les caméras mobiles EECC Caméra et diffusion directe vers les téléviseurs et smartphones EECC TV." Foreground="#C5CCD3" FontSize="11" TextWrapping="Wrap" LineHeight="16"/>
+                    <Separator Background="#22262B" Margin="0,12"/>
+                    <TextBlock Text="© EECC — Église Évangélique les Cohéritiers du Christ. Tous droits réservés." Foreground="#9AA3AB" FontSize="11"/>
                 </StackPanel>
             </ScrollViewer>
         </Border>
 
         <!-- Bouton Fermer -->
-        <Button Grid.Row="2" Content="Fermer" Background="#21262D" Foreground="#FFFFFF" Padding="16,8" BorderBrush="#30363D" HorizontalAlignment="Right" Margin="0,16,0,0" Click="BtnClose_Click"/>
+        <Button Grid.Row="2" Content="Fermer" Background="#4A5056" Foreground="#FFFFFF" Padding="16,8" BorderBrush="#22262B" HorizontalAlignment="Right" Margin="0,16,0,0" Click="BtnClose_Click"/>
     </Grid>
 </Window>

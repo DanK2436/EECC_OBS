@@ -37,6 +37,10 @@ jobs:
       - name: Install Inno Setup
         run: choco install innosetup -y --no-progress
 
+      - name: Test LAN camera pairing
+        working-directory: apps/studio_native
+        run: dotnet test tests/EeccStudio.Core.Tests/EeccStudio.Core.Tests.csproj -c Release --nologo
+
       - name: Publish EECC Studio Native (.NET 8 Win-x64 Self-Contained)
         working-directory: apps/studio_native
         run: |
@@ -190,6 +194,11 @@ jobs:
           channel: 'stable'
           cache: true
 
+      - name: Setup .NET 8 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
       - name: Flutter Pub Get
         working-directory: apps/camera_mobile
         run: flutter pub get
@@ -197,6 +206,10 @@ jobs:
       - name: Patch Cached Gradle Plugins
         run: |
           find /home/runner/.pub-cache -name "build.gradle" -exec sed -i 's/flutter\.compileSdkVersion/35/g; s/flutter\.minSdkVersion/21/g; s/flutter\.targetSdkVersion/35/g' {} + || true
+
+      - name: Flutter test
+        working-directory: apps/camera_mobile
+        run: flutter test
 
       - name: Build Release APK
         working-directory: apps/camera_mobile
@@ -252,7 +265,34 @@ jobs:
           if-no-files-found: error
 
   # ========================================================
-  # 5. GITHUB RELEASE AUTOMATIQUE (Tous les binaires réunis)
+  # 5. BUILD EECC STUDIO WEB (régie navigateur)
+  # ========================================================
+  build-studio-web:
+    name: Build EECC Studio (régie web)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        working-directory: apps/studio
+        run: npm install
+
+      - name: Test studio status rules
+        working-directory: apps/studio
+        run: npm test
+
+      - name: Build studio
+        working-directory: apps/studio
+        run: npm run build
+
+  # ========================================================
+  # 6. GITHUB RELEASE AUTOMATIQUE (Tous les binaires réunis)
   # ========================================================
   create-release:
     name: Publier la Release GitHub

@@ -164,37 +164,41 @@ public sealed class FfmpegProgramSink : IAsyncDisposable
         })
             process.StartInfo.ArgumentList.Add(arg);
         process.ErrorDataReceived += (_, eventArgs) => sink.AppendLog(eventArgs.Data, url);
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(TimeSpan.FromSeconds(8));
+        Task? audioReady = audioPipe == null ? null : audioPipe.WaitForConnectionAsync(timeout.Token);
+        Task? videoReady = videoPipe == null ? null : videoPipe.WaitForConnectionAsync(timeout.Token);
+        Task<FileStream>? audioFifo = audioPipe == null ? OpenFifoAsync(audioPath, timeout.Token) : null;
+        Task<FileStream>? videoFifo = videoPipe == null ? OpenFifoAsync(videoPath, timeout.Token) : null;
         if (!process.Start()) throw new InvalidOperationException("FFmpeg n'a pas démarré.");
         process.BeginErrorReadLine();
         sink._live = process;
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeout.CancelAfter(TimeSpan.FromSeconds(6));
         try
         {
-            if (audioPipe != null && videoPipe != null)
+            var prime = new byte[SamplesPerFrame * 2];
+            if (audioPipe != null && videoPipe != null && audioReady != null && videoReady != null)
             {
-                await audioPipe.WaitForConnectionAsync(timeout.Token);
-                var prime = new byte[SamplesPerFrame * 2];
+                await audioReady;
                 await audioPipe.WriteAsync(prime, timeout.Token);
                 await audioPipe.FlushAsync(timeout.Token);
-                await videoPipe.WaitForConnectionAsync(timeout.Token);
+                await videoReady;
                 sink._liveAudio = audioPipe;
                 sink._liveVideo = videoPipe;
             }
             else
             {
-                sink._liveAudio = await OpenFifoAsync(audioPath, timeout.Token);
-                var prime = new byte[SamplesPerFrame * 2];
+                sink._liveAudio = await audioFifo!;
                 await sink._liveAudio.WriteAsync(prime, timeout.Token);
                 await sink._liveAudio.FlushAsync(timeout.Token);
-                sink._liveVideo = await OpenFifoAsync(videoPath, timeout.Token);
+                sink._liveVideo = await videoFifo!;
             }
         }
         catch (OperationCanceledException)
         {
             if (!process.HasExited) process.Kill(entireProcessTree: true);
             sink.Status = "failed";
-            throw new TimeoutException("FFmpeg n'a pas ouvert les deux flux dans le délai. " + sink.SafeLog);
+            var state = process.HasExited ? "code " + process.ExitCode : "encore lancé";
+            throw new TimeoutException("FFmpeg n'a pas ouvert les deux flux dans le délai (" + state + "). " + sink.SafeLog);
         }
         if (process.HasExited)
         {

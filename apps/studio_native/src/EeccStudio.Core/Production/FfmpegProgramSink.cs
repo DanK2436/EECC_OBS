@@ -117,24 +117,16 @@ public sealed class FfmpegProgramSink : IAsyncDisposable
         Directory.CreateDirectory(directory);
         var id = Guid.NewGuid().ToString("N");
         var audioPath = OperatingSystem.IsWindows() ? @"\\.\pipe\eecc-a-" + id : Path.Combine(directory, "a-" + id + ".fifo");
-        var videoPath = OperatingSystem.IsWindows() ? @"\\.\pipe\eecc-v-" + id : Path.Combine(directory, "v-" + id + ".fifo");
         if (!OperatingSystem.IsWindows())
         {
-            foreach (var path in new[] { audioPath, videoPath })
-            {
-                using var mkfifo = Process.Start(new ProcessStartInfo("mkfifo", path) { UseShellExecute = false, RedirectStandardError = true });
-                mkfifo?.WaitForExit(2000);
-            }
+            using var mkfifo = Process.Start(new ProcessStartInfo("mkfifo", audioPath) { UseShellExecute = false, RedirectStandardError = true });
+            mkfifo?.WaitForExit(2000);
         }
         var sink = new FfmpegProgramSink(ffmpeg, directory) { Status = "starting", VideoEncoder = encoder };
         System.IO.Pipes.NamedPipeServerStream? audioPipe = null;
-        System.IO.Pipes.NamedPipeServerStream? videoPipe = null;
         if (OperatingSystem.IsWindows())
-        {
             audioPipe = new System.IO.Pipes.NamedPipeServerStream("eecc-a-" + id, System.IO.Pipes.PipeDirection.Out, 1, System.IO.Pipes.PipeTransmissionMode.Byte, System.IO.Pipes.PipeOptions.Asynchronous);
-            videoPipe = new System.IO.Pipes.NamedPipeServerStream("eecc-v-" + id, System.IO.Pipes.PipeDirection.Out, 1, System.IO.Pipes.PipeTransmissionMode.Byte, System.IO.Pipes.PipeOptions.Asynchronous);
-        }
-        var process = new Process { StartInfo = new ProcessStartInfo(ffmpeg) { UseShellExecute = false, RedirectStandardError = true, RedirectStandardOutput = true } };
+        var process = new Process { StartInfo = new ProcessStartInfo(ffmpeg) { UseShellExecute = false, RedirectStandardInput = true, RedirectStandardError = true, RedirectStandardOutput = true } };
         var rate = FramesPerSecond.ToString(CultureInfo.InvariantCulture);
         var sampleRate = SampleRate.ToString(CultureInfo.InvariantCulture);
         foreach (var arg in new[]
@@ -143,7 +135,7 @@ public sealed class FfmpegProgramSink : IAsyncDisposable
             "-probesize", "32", "-analyzeduration", "0", "-fflags", "nobuffer",
             "-f", "s16le", "-ar", sampleRate, "-ac", "1", "-i", audioPath,
             "-probesize", "32", "-analyzeduration", "0", "-fflags", "nobuffer",
-            "-f", "rawvideo", "-pix_fmt", "bgr24", "-video_size", Width + "x" + Height, "-framerate", rate, "-i", videoPath,
+            "-f", "rawvideo", "-pix_fmt", "bgr24", "-video_size", Width + "x" + Height, "-framerate", rate, "-i", "pipe:0",
         })
             process.StartInfo.ArgumentList.Add(arg);
         if (encoder == "libx264")
@@ -167,31 +159,19 @@ public sealed class FfmpegProgramSink : IAsyncDisposable
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(TimeSpan.FromSeconds(8));
         Task? audioReady = audioPipe == null ? null : audioPipe.WaitForConnectionAsync(timeout.Token);
-        Task? videoReady = videoPipe == null ? null : videoPipe.WaitForConnectionAsync(timeout.Token);
         Task<FileStream>? audioFifo = audioPipe == null ? OpenFifoAsync(audioPath, timeout.Token) : null;
-        Task<FileStream>? videoFifo = videoPipe == null ? OpenFifoAsync(videoPath, timeout.Token) : null;
         if (!process.Start()) throw new InvalidOperationException("FFmpeg n'a pas démarré.");
         process.BeginErrorReadLine();
         sink._live = process;
+        sink._liveVideo = process.StandardInput.BaseStream;
         try
         {
-            var prime = new byte[SamplesPerFrame * 2];
-            if (audioPipe != null && videoPipe != null && audioReady != null && videoReady != null)
-            {
-                await audioReady;
-                await audioPipe.WriteAsync(prime, timeout.Token);
-                await audioPipe.FlushAsync(timeout.Token);
-                await videoReady;
-                sink._liveAudio = audioPipe;
-                sink._liveVideo = videoPipe;
-            }
-            else
-            {
-                sink._liveAudio = await audioFifo!;
-                await sink._liveAudio.WriteAsync(prime, timeout.Token);
-                await sink._liveAudio.FlushAsync(timeout.Token);
-                sink._liveVideo = await videoFifo!;
-            }
+            var silence = new byte[SamplesPerFrame * 2];
+            var black = new byte[Width * Height * 3];
+            var audioTask = PrimeAsync(audioReady, audioFifo, audioPipe, silence, timeout.Token);
+            var videoTask = PrimeAsync(null, null, sink._liveVideo, black, timeout.Token);
+            await Task.WhenAll(audioTask, videoTask);
+            sink._liveAudio = await audioTask;
         }
         catch (OperationCanceledException)
         {
@@ -211,6 +191,23 @@ public sealed class FfmpegProgramSink : IAsyncDisposable
         sink._audioWriter = Task.Run(() => WriteQueue(sink, sink._audioQueue, audioStream));
         sink.Status = "publishing";
         return sink;
+    }
+
+    private static async Task<Stream> PrimeAsync(Task? pipeReady, Task<FileStream>? fifo, Stream? pipe, byte[] prime, CancellationToken cancellationToken)
+    {
+        Stream stream;
+        if (pipe != null)
+        {
+            if (pipeReady != null) await pipeReady;
+            stream = pipe;
+        }
+        else
+        {
+            stream = await fifo!;
+        }
+        await stream.WriteAsync(prime, cancellationToken);
+        await stream.FlushAsync(cancellationToken);
+        return stream;
     }
 
     private static void WriteQueue(FfmpegProgramSink sink, BlockingCollection<byte[]> queue, Stream stream)

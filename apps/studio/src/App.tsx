@@ -1,7 +1,9 @@
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
+import { LeftRail, StudioNav } from "./components/layout/LeftRail";
 import { TitleBar } from "./components/layout/TitleBar";
 import { StatusBar } from "./components/layout/StatusBar";
-import { StudioPreviewProgram } from "./components/studio/StudioPreviewProgram";
+import { StudioPreviewProgram, TransitionKind } from "./components/studio/StudioPreviewProgram";
 import { ScenesPanel } from "./components/studio/ScenesPanel";
 import { SourcesPanel } from "./components/studio/SourcesPanel";
 import { AudioMixerPanel } from "./components/studio/AudioMixerPanel";
@@ -10,250 +12,358 @@ import { CameraPairingModal } from "./components/modals/CameraPairingModal";
 import { TreasuryWithdrawalModal } from "./components/modals/TreasuryWithdrawalModal";
 import { SettingsModal } from "./components/modals/SettingsModal";
 import { PostProductionModal } from "./components/modals/PostProductionModal";
-import { StudioScene, SceneId, AudioChannel } from "./types/studio";
+import { AudioChannel, SceneId, SceneSource, StudioScene } from "./types/studio";
+import { viewStatus } from "./lib/studioMetrics";
 
-export default function App() {
-  // États de Diffusion et Enregistrement
-  const [isLive, setIsLive] = useState(false);
-  const [isRecording, setIsRecording] = useState(false);
-  const [studioMode, setStudioMode] = useState(true);
-  const [transitionDurationMs, setTransitionDurationMs] = useState(300);
+const DB = (db: number) => 100 + db / 0.6;
 
-  // Scènes prédéfinies
-  const [scenes, setScenes] = useState<StudioScene[]>([
+function initialScenes(): StudioScene[] {
+  return [
     {
-      id: "sc-intro",
-      name: "Accueil & Décompte",
+      id: "sc-main",
+      name: "Culte Principal",
       sources: [
-        { id: "src-vid", name: "Vidéo Intro EECC", type: "media_file", visible: true, locked: true },
-        { id: "src-mus", name: "Musique d'accueil", type: "audio_input", visible: true, locked: true },
-      ],
-    },
-    {
-      id: "sc-speaker",
-      name: "Orateur Principal",
-      sources: [
-        { id: "src-cam1", name: "Caméra 1 (Pupitre)", type: "physical_camera", visible: true, locked: true },
-        { id: "src-mic1", name: "Micro Cravate Pasteur", type: "audio_input", visible: true, locked: true },
-        { id: "src-slide", name: "Diapositive Titre", type: "presentation_slide", visible: true, locked: false },
+        { id: "cam1", name: "Caméra 1", type: "physical_camera", visible: true, locked: true },
+        { id: "cam2", name: "Caméra 2", type: "mobile_camera", visible: true, locked: true },
+        { id: "qr", name: "QR Code", type: "presentation_slide", visible: true, locked: false },
+        { id: "media", name: "Media Pastor", type: "media_file", visible: true, locked: false },
+        { id: "music", name: "Fond Musical", type: "audio_input", visible: true, locked: false },
+        { id: "logo", name: "Logo ECC", type: "presentation_slide", visible: true, locked: true },
       ],
     },
     {
       id: "sc-louange",
-      name: "Chœur & Louange",
+      name: "Louange",
       sources: [
-        {
-          id: "src-mob1",
-          name: "EECC Caméra (Smartphone 1)",
-          type: "mobile_camera",
-          visible: true,
-          locked: false,
-          telemetry: { battery: 85, bitrate: 4500, fps: 30, ip: "192.168.1.102" },
-        },
-        { id: "src-choir", name: "Micros Chœur & Orchestre", type: "audio_input", visible: true, locked: true },
+        { id: "lou-cam2", name: "Caméra 2", type: "mobile_camera", visible: true, locked: false },
+        { id: "lou-cam1", name: "Caméra 1", type: "physical_camera", visible: true, locked: true },
+        { id: "lou-mic", name: "Micros Chœur", type: "audio_input", visible: true, locked: true },
       ],
     },
     {
-      id: "sc-wide",
-      name: "Plan Large Assemblée",
+      id: "sc-teach",
+      name: "Enseignement",
       sources: [
-        { id: "src-wide-cam", name: "Caméra Fond de Temple", type: "physical_camera", visible: true, locked: true },
+        { id: "ens-cam", name: "Caméra 1", type: "physical_camera", visible: true, locked: true },
+        { id: "ens-bible", name: "Verset", type: "bible_verse", visible: true, locked: false },
+        { id: "ens-mic", name: "Micro Pasteur", type: "audio_input", visible: true, locked: true },
       ],
     },
     {
-      id: "sc-bible",
-      name: "Bible & Verset Plein Écran",
+      id: "sc-prayer",
+      name: "Prière",
       sources: [
-        { id: "src-bible-txt", name: "Verset : Jean 3:16 (LSG)", type: "bible_verse", visible: true, locked: true },
-        { id: "src-back-cam", name: "Arrière-plan Flou", type: "physical_camera", visible: true, locked: true },
+        { id: "pri-cam", name: "Caméra 1", type: "physical_camera", visible: true, locked: true },
+        { id: "pri-mus", name: "Fond Musical", type: "audio_input", visible: true, locked: false },
       ],
     },
     {
-      id: "sc-annonces",
-      name: "Annonces & Dîmes (MaishaPay)",
+      id: "sc-end",
+      name: "Fin",
       sources: [
-        { id: "src-maisha", name: "QR Code & Dons MaishaPay / M-Pesa", type: "presentation_slide", visible: true, locked: true },
-        { id: "src-ann-cam", name: "Caméra Présentateur", type: "physical_camera", visible: true, locked: true },
-        { id: "src-ann-mus", name: "Fond Musical Doux", type: "audio_input", visible: true, locked: false },
+        { id: "fin-media", name: "Media Pastor", type: "media_file", visible: true, locked: false },
+        { id: "fin-qr", name: "QR Code", type: "presentation_slide", visible: true, locked: false },
+        { id: "fin-mus", name: "Fond Musical", type: "audio_input", visible: true, locked: false },
       ],
     },
-    {
-      id: "sc-blessing",
-      name: "Sainte-Cène & Bénédiction",
-      sources: [
-        { id: "src-communion", name: "Caméra Table de Communion", type: "physical_camera", visible: true, locked: true },
-        { id: "src-pastor-bless", name: "Micro Pasteur Principal", type: "audio_input", visible: true, locked: true },
-        { id: "src-closing-choir", name: "Chœur Assemblée", type: "audio_input", visible: true, locked: true },
-      ],
-    },
-  ]);
+  ];
+}
 
-  const [previewSceneId, setPreviewSceneId] = useState<SceneId>("sc-louange");
-  const [programSceneId, setProgramSceneId] = useState<SceneId>("sc-speaker");
+function initialChannels(): AudioChannel[] {
+  return [
+    { id: "master", name: "Master (PGM)", volume: DB(0), muted: false, solo: false, peakLevel: 0, hasFilters: true },
+    { id: "pastor", name: "Micro Pasteur", volume: DB(-6), muted: true, solo: false, peakLevel: 0, hasFilters: true },
+    { id: "choir", name: "Chœur / Orchestre", volume: DB(-12), muted: false, solo: false, peakLevel: 0, hasFilters: true },
+    { id: "ecc-cam", name: "ECC Caméra 1", volume: DB(-8), muted: true, solo: false, peakLevel: 0, hasFilters: false },
+    { id: "media", name: "Médias & Vidéo", volume: DB(-10), muted: false, solo: false, peakLevel: 0, hasFilters: false },
+  ];
+}
 
-  // Mixeur Audio
-  const [channels, setChannels] = useState<AudioChannel[]>([
-    { id: "mic-1", name: "Micro Orateur", volume: 85, muted: false, solo: false, peakLevel: 0.72, hasFilters: true },
-    { id: "mic-2", name: "Chœur / Louange", volume: 75, muted: false, solo: false, peakLevel: 0.65, hasFilters: true },
-    { id: "cam-mob", name: "Caméra Smartphone", volume: 60, muted: false, solo: false, peakLevel: 0.40, hasFilters: false },
-    { id: "pc-audio", name: "Audio Ordinateur", volume: 50, muted: false, solo: false, peakLevel: 0.30, hasFilters: false },
-    { id: "master", name: "MASTER SORTIE", volume: 90, muted: false, solo: false, peakLevel: 0.82, hasFilters: true },
-  ]);
+function readDemoFlag(): boolean {
+  if (typeof window === "undefined") return false;
+  return new URLSearchParams(window.location.search).get("demo") === "1";
+}
 
-  // Boîtes de dialogue
+export default function App() {
+  const [nav, setNav] = useState<StudioNav>("accueil");
+  const [demo, setDemo] = useState(readDemoFlag);
+  const [screenLabel, setScreenLabel] = useState("Écran principal");
+  const [studioMode, setStudioMode] = useState(true);
+  const [isLive, setIsLive] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [liveSeconds, setLiveSeconds] = useState(0);
+  const [recordSeconds, setRecordSeconds] = useState(0);
+  const [note, setNote] = useState<string | null>(null);
+  const [menu, setMenu] = useState<null | "outils" | "playlists">(null);
+
+  const [transition, setTransition] = useState<TransitionKind>("cut");
+  const [durationMs, setDurationMs] = useState(400);
+  const [blackout, setBlackout] = useState(false);
+  const [colorFade, setColorFade] = useState(false);
+
+  const [scenes, setScenes] = useState<StudioScene[]>(initialScenes);
+  const [previewSceneId, setPreviewSceneId] = useState<SceneId>("sc-main");
+  const [programSceneId, setProgramSceneId] = useState<SceneId>("sc-main");
+  const [channels, setChannels] = useState<AudioChannel[]>(initialChannels);
+
   const [isPairingOpen, setIsPairingOpen] = useState(false);
   const [isTreasuryOpen, setIsTreasuryOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isPostProdOpen, setIsPostProdOpen] = useState(false);
 
-  const previewScene = scenes.find((s) => s.id === previewSceneId) || scenes[0];
-  const programScene = scenes.find((s) => s.id === programSceneId) || scenes[1];
+  useEffect(() => {
+    if (!isLive && !isRecording) return;
+    const id = window.setInterval(() => {
+      if (isLive) setLiveSeconds((s) => s + 1);
+      if (isRecording) setRecordSeconds((s) => s + 1);
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [isLive, isRecording]);
 
-  // Exécution de la transition Aperçu -> Programme
-  const handleExecuteTransition = () => {
-    const temp = programSceneId;
-    setProgramSceneId(previewSceneId);
-    setPreviewSceneId(temp);
+  const previewScene = scenes.find((s) => s.id === previewSceneId) ?? scenes[0];
+  const programScene = scenes.find((s) => s.id === programSceneId) ?? scenes[0];
+  const master = channels.find((c) => c.id === "master");
+
+  const status = useMemo(
+    () =>
+      viewStatus({
+        demo,
+        isLive,
+        isRecording,
+        liveSeconds,
+        recordSeconds,
+        cpuPercent: null,
+        videoFps: 0,
+        bitrateMbps: 0,
+        lanUrl: null,
+      }),
+    [demo, isLive, isRecording, liveSeconds, recordSeconds]
+  );
+
+  const applyTransition = (kind: TransitionKind = transition) => {
+    setTransition(kind);
+    if (kind === "cut") {
+      setProgramSceneId(previewSceneId);
+      setBlackout(false);
+      setColorFade(false);
+      return;
+    }
+    window.setTimeout(() => {
+      setProgramSceneId(previewSceneId);
+      setBlackout(kind === "fade-black");
+      setColorFade(kind === "fade-color");
+    }, durationMs);
   };
 
-  const handleToggleSourceVisibility = (sourceId: string) => {
+  const updatePreviewSources = (map: (src: SceneSource) => SceneSource) => {
     setScenes((prev) =>
-      prev.map((sc) => {
-        if (sc.id === previewSceneId) {
-          return {
-            ...sc,
-            sources: sc.sources.map((src) =>
-              src.id === sourceId ? { ...src, visible: !src.visible } : src
-            ),
-          };
-        }
-        return sc;
-      })
+      prev.map((sc) => (sc.id === previewSceneId ? { ...sc, sources: sc.sources.map(map) } : sc))
     );
   };
 
-  const handleToggleSourceLock = (sourceId: string) => {
-    setScenes((prev) =>
-      prev.map((sc) => {
-        if (sc.id === previewSceneId) {
-          return {
-            ...sc,
-            sources: sc.sources.map((src) =>
-              src.id === sourceId ? { ...src, locked: !src.locked } : src
-            ),
-          };
-        }
-        return sc;
-      })
-    );
+  const selectNav = (id: StudioNav) => {
+    setNav(id);
+    setMenu(null);
+    if (id === "parametres") setIsSettingsOpen(true);
+    if (id === "outils") setMenu("outils");
+    if (id === "playlists") setMenu("playlists");
+    if (id === "diffusion") setNote(null);
+  };
+
+  const refuseStream = () => {
+    if (demo) {
+      setIsLive((v) => !v);
+      if (isLive) setLiveSeconds(0);
+      setNote("Mode démo : le voyant suit l'exemple, aucune sortie n'est ouverte.");
+      return;
+    }
+    setIsLive(false);
+    setNote("Aucune sortie de diffusion connectée. Le statut reste hors antenne.");
+  };
+
+  const refuseRecord = () => {
+    if (demo) {
+      setIsRecording((v) => !v);
+      if (isRecording) setRecordSeconds(0);
+      setNote("Mode démo : aucun fichier n'est écrit.");
+      return;
+    }
+    setIsRecording(false);
+    setNote("Aucun enregistrement démarré : pas de périphérique de capture.");
   };
 
   return (
-    <div className="h-full flex flex-col bg-background overflow-hidden">
-      {/* 1. Barre de Titre et Menus */}
-      <TitleBar
-        projectName="Culte Dominical — EECC Matadi"
-        isSaved={true}
-        onOpenPairing={() => setIsPairingOpen(true)}
-        onOpenTreasury={() => setIsTreasuryOpen(true)}
-        onOpenSettings={() => setIsSettingsOpen(true)}
-        onOpenPostProd={() => setIsPostProdOpen(true)}
-      />
-
-      {/* 2. Écran Central Moniteurs (Aperçu / Programme) */}
-      <StudioPreviewProgram
-        previewScene={previewScene}
-        programScene={programScene}
-        studioMode={studioMode}
-        transitionDurationMs={transitionDurationMs}
-        onSetTransitionDuration={setTransitionDurationMs}
-        onExecuteTransition={handleExecuteTransition}
-      />
-
-      {/* 3. Dock Inférieur : Scènes, Sources, Mixeur Audio, Contrôles */}
-      <div className="h-56 bg-surface border-t border-border flex divide-x divide-border">
-        {/* Panneau Scènes */}
-        <ScenesPanel
-          scenes={scenes}
-          selectedSceneId={previewSceneId}
-          onSelectScene={setPreviewSceneId}
-          onAddScene={() => {
-            const newId = `sc-${Date.now()}`;
-            setScenes([...scenes, { id: newId, name: `Nouvelle Scène ${scenes.length + 1}`, sources: [] }]);
-          }}
-          onDeleteScene={(id) => setScenes(scenes.filter((s) => s.id !== id))}
-        />
-
-        {/* Panneau Sources */}
-        <SourcesPanel
-          sources={previewScene.sources}
-          onToggleVisibility={handleToggleSourceVisibility}
-          onToggleLock={handleToggleSourceLock}
-          onAddSource={() => {}}
-          onPairMobileCamera={() => setIsPairingOpen(true)}
-        />
-
-        {/* Panneau Mixeur Audio DSP */}
-        <AudioMixerPanel
-          channels={channels}
-          onVolumeChange={(id, vol) =>
-            setChannels((prev) => prev.map((c) => (c.id === id ? { ...c, volume: vol } : c)))
-          }
-          onToggleMute={(id) =>
-            setChannels((prev) => prev.map((c) => (c.id === id ? { ...c, muted: !c.muted } : c)))
-          }
-          onOpenDspFilters={() => {}}
-        />
-
-        {/* Panneau Contrôles Principaux */}
-        <ControlsPanel
-          isLive={isLive}
-          isRecording={isRecording}
+    <div className="studio-root">
+      <LeftRail active={nav} onSelect={selectNav} />
+      <div className="workspace">
+        <TitleBar
+          active={nav}
+          onSelect={selectNav}
+          screenLabel={screenLabel}
+          onScreen={setScreenLabel}
+          recording={status.recOn}
           studioMode={studioMode}
-          onToggleLive={() => setIsLive(!isLive)}
-          onToggleRecording={() => setIsRecording(!isRecording)}
-          onToggleStudioMode={() => setStudioMode(!studioMode)}
-          onOpenTreasury={() => setIsTreasuryOpen(true)}
-          onOpenPostProd={() => setIsPostProdOpen(true)}
-          onOpenSettings={() => setIsSettingsOpen(true)}
+          onToggleStudioMode={() => setStudioMode((v) => !v)}
+          demo={demo}
+        />
+
+        <StudioPreviewProgram
+          previewScene={previewScene}
+          programScene={programScene}
+          studioMode={studioMode}
+          transition={transition}
+          durationMs={durationMs}
+          onDuration={setDurationMs}
+          onSelectTransition={setTransition}
+          onApply={(kind) => applyTransition(kind)}
+          demo={demo}
+          onAir={status.onAir}
+          programFooter={demo ? `DÉMO · ${status.programFooter}` : status.programFooter}
+          programClock={status.programClock}
+          blackout={blackout}
+          colorFade={colorFade}
+        />
+
+        <div className="docks">
+          <ScenesPanel
+            scenes={scenes}
+            selectedSceneId={previewSceneId}
+            emphasis={nav === "scenes"}
+            onSelectScene={setPreviewSceneId}
+            onAddScene={() => {
+              const id = `sc-${Date.now()}`;
+              setScenes((prev) => [...prev, { id, name: `Scène ${prev.length + 1}`, sources: [] }]);
+              setPreviewSceneId(id);
+            }}
+            onDeleteScene={(id) => {
+              setScenes((prev) => prev.filter((s) => s.id !== id));
+              if (previewSceneId === id) setPreviewSceneId(scenes.find((s) => s.id !== id)?.id ?? "");
+            }}
+            onMove={(id, dir) => {
+              setScenes((prev) => {
+                const index = prev.findIndex((s) => s.id === id);
+                const next = index + dir;
+                if (index < 0 || next < 0 || next >= prev.length) return prev;
+                const copy = prev.slice();
+                const [item] = copy.splice(index, 1);
+                copy.splice(next, 0, item);
+                return copy;
+              });
+            }}
+          />
+
+          <SourcesPanel
+            sources={previewScene.sources}
+            emphasis={nav === "medias"}
+            onToggleVisibility={(id) =>
+              updatePreviewSources((src) => (src.id === id ? { ...src, visible: !src.visible } : src))
+            }
+            onToggleLock={(id) =>
+              updatePreviewSources((src) => (src.id === id ? { ...src, locked: !src.locked } : src))
+            }
+            onAddSource={(type, name) => {
+              const id = `src-${Date.now()}`;
+              setScenes((prev) =>
+                prev.map((sc) =>
+                  sc.id === previewSceneId
+                    ? { ...sc, sources: [...sc.sources, { id, name, type, visible: true, locked: false }] }
+                    : sc
+                )
+              );
+            }}
+            onRemoveSource={(id) => {
+              setScenes((prev) =>
+                prev.map((sc) =>
+                  sc.id === previewSceneId ? { ...sc, sources: sc.sources.filter((s) => s.id !== id) } : sc
+                )
+              );
+            }}
+            onPairMobile={() => setIsPairingOpen(true)}
+          />
+
+          <AudioMixerPanel
+            channels={channels}
+            demo={demo}
+            onVolumeChange={(id, vol) =>
+              setChannels((prev) => prev.map((c) => (c.id === id ? { ...c, volume: vol } : c)))
+            }
+            onToggleMute={(id) =>
+              setChannels((prev) => prev.map((c) => (c.id === id ? { ...c, muted: !c.muted } : c)))
+            }
+          />
+
+          <ControlsPanel
+            emphasis={nav === "diffusion" || nav === "enregistrement"}
+            isLive={status.liveOn}
+            isRecording={status.recOn}
+            studioMode={studioMode}
+            note={note}
+            onToggleLive={refuseStream}
+            onToggleRecording={refuseRecord}
+            onToggleStudioMode={() => setStudioMode((v) => !v)}
+            onSnapshot={() =>
+              setNote(
+                demo
+                  ? "Mode démo : aucun instantané n'est enregistré."
+                  : "Aucun signal à capturer."
+              )
+            }
+            onQuickSettings={() => setIsSettingsOpen(true)}
+          />
+        </div>
+
+        <StatusBar
+          status={status}
+          masterVolume={master?.volume ?? 100}
+          onMasterVolume={(vol) =>
+            setChannels((prev) => prev.map((c) => (c.id === "master" ? { ...c, volume: vol } : c)))
+          }
         />
       </div>
 
-      {/* 4. Barre d'état inférieure */}
-      <StatusBar
-        isLive={isLive}
-        isRecording={isRecording}
-        liveDuration="01:24:18"
-        recordDuration="01:24:18"
-        cpuUsage={18}
-        memoryUsageMb={640}
-        fps={60}
-        droppedFrames={0}
-        bitrateKbps={4500}
-      />
-
-      {/* 5. Fenêtres Modales */}
-      <CameraPairingModal
-        isOpen={isPairingOpen}
-        onClose={() => setIsPairingOpen(false)}
-        localIp="192.168.1.50"
-        port={8554}
-      />
-
-      <TreasuryWithdrawalModal
-        isOpen={isTreasuryOpen}
-        onClose={() => setIsTreasuryOpen(false)}
-      />
-
-      <SettingsModal
-        isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
-      />
-
-      <PostProductionModal
-        isOpen={isPostProdOpen}
-        onClose={() => setIsPostProdOpen(false)}
-      />
+      {createPortal(
+        <>
+          {menu && (
+            <div className="menu-pop" style={{ position: "fixed", left: 70, top: menu === "outils" ? 300 : 210 }}>
+              {menu === "outils" ? (
+                <>
+                  <button type="button" onClick={() => { setMenu(null); setIsPairingOpen(true); }}>
+                    Appairer une caméra
+                  </button>
+                  <button type="button" onClick={() => { setMenu(null); setIsPostProdOpen(true); }}>
+                    Postproduction du culte
+                  </button>
+                  <button type="button" onClick={() => { setMenu(null); setIsTreasuryOpen(true); }}>
+                    Trésorerie et dons
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDemo((v) => !v);
+                      setMenu(null);
+                      setIsLive(false);
+                      setIsRecording(false);
+                    }}
+                  >
+                    {demo ? "Quitter le mode démo" : "Activer le mode démo (données d'exemple)"}
+                  </button>
+                </>
+              ) : (
+                scenes.map((scene, index) => (
+                  <button key={scene.id} type="button" onClick={() => { setPreviewSceneId(scene.id); setMenu(null); }}>
+                    {index + 1}. {scene.name}
+                  </button>
+                ))
+              )}
+            </div>
+          )}
+          <CameraPairingModal isOpen={isPairingOpen} onClose={() => setIsPairingOpen(false)} localIp="non détectée" port={8554} />
+          <TreasuryWithdrawalModal isOpen={isTreasuryOpen} onClose={() => setIsTreasuryOpen(false)} />
+          <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
+          <PostProductionModal isOpen={isPostProdOpen} onClose={() => setIsPostProdOpen(false)} />
+        </>,
+        document.body
+      )}
     </div>
   );
 }

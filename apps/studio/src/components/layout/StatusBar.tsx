@@ -1,86 +1,56 @@
 import React from "react";
-import { Radio, Disc, Cpu, HardDrive, Wifi, Activity } from "lucide-react";
+import { Link2, MonitorSmartphone, Volume2 } from "lucide-react";
+import type { StatusView } from "../../lib/studioMetrics";
 
 interface StatusBarProps {
-  isLive: boolean;
-  isRecording: boolean;
-  liveDuration: string;
-  recordDuration: string;
-  cpuUsage: number;
-  memoryUsageMb: number;
-  fps: number;
-  droppedFrames: number;
-  bitrateKbps: number;
+  status: StatusView;
+  masterVolume: number;
+  onMasterVolume: (value: number) => void;
 }
 
-export const StatusBar: React.FC<StatusBarProps> = ({
-  isLive,
-  isRecording,
-  liveDuration,
-  recordDuration,
-  cpuUsage,
-  memoryUsageMb,
-  fps,
-  droppedFrames,
-  bitrateKbps,
-}) => {
+export const StatusBar: React.FC<StatusBarProps> = ({ status, masterVolume, onMasterVolume }) => {
   return (
-    <footer className="h-8 bg-slate-900 border-t border-slate-800 text-white px-4 flex items-center justify-between text-[11px] select-none">
-      {/* États Direct et Enregistrement */}
-      <div className="flex items-center space-x-6">
-        <div className="flex items-center space-x-2">
-          <span
-            className={`w-2.5 h-2.5 rounded-full ${
-              isLive ? "bg-live animate-pulse" : "bg-slate-600"
-            }`}
-          />
-          <span className="font-bold text-slate-300">LIVE :</span>
-          <span className={`font-mono ${isLive ? "text-live font-bold" : "text-slate-500"}`}>
-            {isLive ? liveDuration : "00:00:00"}
-          </span>
-        </div>
-
-        <div className="flex items-center space-x-2">
-          <span
-            className={`w-2.5 h-2.5 rounded-full ${
-              isRecording ? "bg-red-500" : "bg-slate-600"
-            }`}
-          />
-          <span className="font-bold text-slate-300">REC :</span>
-          <span className={`font-mono ${isRecording ? "text-red-400 font-bold" : "text-slate-500"}`}>
-            {isRecording ? recordDuration : "00:00:00"}
-          </span>
-        </div>
+    <footer className="statusbar">
+      <div className="status-left">
+        {status.exampleData && <span className="demo-chip">MODE DÉMO</span>}
+        <span className="stat">
+          <i className={`dot ${status.liveOn ? "live" : ""}`} />
+          <b>LIVE</b>
+          <span className="mono">{status.liveTime}</span>
+        </span>
+        <span className="stat">
+          <i className={`dot ${status.recOn ? "rec" : "rec"}`} />
+          <b>REC</b>
+          <span className="mono">{status.recTime}</span>
+        </span>
+        <i className="sep" />
+        <span className="stat">
+          CPU : <span className="mono">{status.cpu}</span>
+        </span>
+        <i className="sep" />
+        <span className={`fps ${status.liveOn || status.exampleData ? "hot" : ""}`}>{status.fps}</span>
+        <i className="sep" />
+        <span className="stat">
+          <Link2 size={12} />
+          Débit : <span className="mono">{status.bitrate}</span>
+        </span>
+        <span className="stat">
+          <MonitorSmartphone size={12} />
+          LAN : <span className="mono">{status.lan}</span>
+        </span>
       </div>
-
-      {/* Métriques Matérielles & Réseau */}
-      <div className="flex items-center space-x-5 text-slate-400 font-mono">
-        <div className="flex items-center space-x-1.5">
-          <Cpu className="w-3.5 h-3.5 text-slate-400" />
-          <span>CPU: {cpuUsage}%</span>
-        </div>
-
-        <div className="flex items-center space-x-1.5">
-          <HardDrive className="w-3.5 h-3.5 text-slate-400" />
-          <span>RAM: {memoryUsageMb} MB</span>
-        </div>
-
-        <div className="flex items-center space-x-1.5">
-          <Activity className="w-3.5 h-3.5 text-slate-400" />
-          <span>FPS: {fps}</span>
-        </div>
-
-        <div className="flex items-center space-x-1.5">
-          <span className="text-slate-500">Pertes:</span>
-          <span className={droppedFrames > 0 ? "text-amber-400" : "text-slate-400"}>
-            {droppedFrames} (0.0%)
-          </span>
-        </div>
-
-        <div className="flex items-center space-x-1.5">
-          <Wifi className="w-3.5 h-3.5 text-green-400" />
-          <span className="text-green-400 font-bold">{isLive ? bitrateKbps : 0} kb/s</span>
-        </div>
+      <div className="status-right">
+        <Volume2 size={13} />
+        <input
+          className="vol"
+          type="range"
+          min={0}
+          max={100}
+          step={0.1}
+          value={masterVolume}
+          aria-label="Volume master"
+          onChange={(e) => onMasterVolume(Number(e.target.value))}
+        />
       </div>
     </footer>
   );

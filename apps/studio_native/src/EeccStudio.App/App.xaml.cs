@@ -8,6 +8,10 @@ namespace EeccStudio
         public static bool IsSmokeTest { get; } =
             string.Equals(Environment.GetEnvironmentVariable("EECC_STUDIO_SMOKE"), "1", StringComparison.Ordinal);
 
+        /// <summary>Données d'exemple de la maquette, uniquement si l'opérateur l'a demandé explicitement.</summary>
+        public static bool IsDemoMode { get; } =
+            string.Equals(Environment.GetEnvironmentVariable("EECC_STUDIO_DEMO"), "1", StringComparison.Ordinal);
+
         public static string LogPath { get; } =
             Path.Combine(AppContext.BaseDirectory, "startup.log");
 

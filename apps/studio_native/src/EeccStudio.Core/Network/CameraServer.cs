@@ -89,7 +89,7 @@ namespace EeccStudio.Core.Network
         public bool IsRecording { get; private set; }
         public DateTime? StreamingStartedAt { get; private set; }
         public DateTime? RecordingStartedAt { get; private set; }
-        public int ViewersCount { get; set; } = 1;
+        public int ViewersCount { get; set; } = 0;
 
         public TimeSpan StreamingDuration => IsStreaming && StreamingStartedAt.HasValue
             ? DateTime.UtcNow - StreamingStartedAt.Value
@@ -500,6 +500,16 @@ namespace EeccStudio.Core.Network
                     });
                 }
 
+                var measuredFps = 0;
+                var measuredBitrate = 0;
+                foreach (var cam in _connectedCameras.Values)
+                {
+                    if (cam.LastTelemetryTime <= cam.ConnectedAt.AddMilliseconds(500)) continue;
+                    if (cam.Fps > measuredFps) measuredFps = cam.Fps;
+                    measuredBitrate += Math.Max(0, cam.BitrateKbps);
+                }
+                if (!IsStreaming) measuredBitrate = 0;
+
                 var statusData = new
                 {
                     service = "EECC Studio Broadcast Server",
@@ -510,9 +520,9 @@ namespace EeccStudio.Core.Network
                     speaker = Speaker,
                     active_scene = ActiveSceneName,
                     live_stream_url = $"http://{localIp}:{Port}/live/stream",
-                    resolution = "1920x1080",
-                    fps = 60,
-                    bitrate_kbps = 5850,
+                    resolution = (_cameraFrames.IsEmpty && LatestCameraFrameBytes == null) ? "aucun signal" : "flux caméra",
+                    fps = measuredFps,
+                    bitrate_kbps = measuredBitrate,
                     audio = "48kHz Stéréo",
                     viewers = ViewersCount,
                     uptime_seconds = (int)StreamingDuration.TotalSeconds,

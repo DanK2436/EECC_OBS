@@ -1,120 +1,159 @@
-import React from "react";
-import { SceneSource } from "../../types/studio";
-import { Plus, Eye, EyeOff, Lock, Unlock, Smartphone, Camera, Mic, Presentation, BookOpen, Monitor } from "lucide-react";
+import React, { useState } from "react";
+import {
+  Plus,
+  MoreVertical,
+  Eye,
+  EyeOff,
+  Lock,
+  Unlock,
+  GripVertical,
+  Folder,
+  Settings,
+  Trash2,
+  Video,
+  Camera,
+  QrCode,
+  PlayCircle,
+  Music,
+  Diamond,
+  BookOpen,
+  Monitor,
+  Smartphone,
+} from "lucide-react";
+import type { SceneSource } from "../../types/studio";
 
 interface SourcesPanelProps {
   sources: SceneSource[];
+  emphasis: boolean;
   onToggleVisibility: (id: string) => void;
   onToggleLock: (id: string) => void;
-  onAddSource: () => void;
-  onPairMobileCamera: () => void;
+  onAddSource: (type: SceneSource["type"], name: string) => void;
+  onRemoveSource: (id: string) => void;
+  onPairMobile: () => void;
 }
+
+function SourceGlyph({ type, name }: { type: SceneSource["type"]; name: string }) {
+  const common = { size: 13, strokeWidth: 1.75 };
+  const key = name.toLowerCase();
+  if (key.includes("logo")) return <Diamond {...common} />;
+  if (key.includes("qr")) return <QrCode {...common} color="#6ee7a8" />;
+  if (key.includes("média") || key.includes("media")) return <PlayCircle {...common} color="#3ddc6a" />;
+  switch (type) {
+    case "physical_camera":
+      return <Video {...common} />;
+    case "mobile_camera":
+      return <Camera {...common} />;
+    case "presentation_slide":
+      return <QrCode {...common} color="#6ee7a8" />;
+    case "media_file":
+      return <PlayCircle {...common} color="#3ddc6a" />;
+    case "audio_input":
+      return <Music {...common} color="#7dd3fc" />;
+    case "bible_verse":
+      return <BookOpen {...common} color="#f5d90a" />;
+    case "window_capture":
+      return <Monitor {...common} />;
+    default:
+      return <Diamond {...common} />;
+  }
+}
+
+const ADDABLES: { type: SceneSource["type"]; name: string; icon: React.ReactNode }[] = [
+  { type: "physical_camera", name: "Caméra", icon: <Video size={12} /> },
+  { type: "mobile_camera", name: "Caméra mobile", icon: <Smartphone size={12} /> },
+  { type: "presentation_slide", name: "Diapositive", icon: <QrCode size={12} /> },
+  { type: "media_file", name: "Média", icon: <PlayCircle size={12} /> },
+  { type: "audio_input", name: "Audio", icon: <Music size={12} /> },
+  { type: "bible_verse", name: "Verset", icon: <BookOpen size={12} /> },
+  { type: "window_capture", name: "Capture fenêtre", icon: <Monitor size={12} /> },
+];
 
 export const SourcesPanel: React.FC<SourcesPanelProps> = ({
   sources,
+  emphasis,
   onToggleVisibility,
   onToggleLock,
   onAddSource,
-  onPairMobileCamera,
+  onRemoveSource,
+  onPairMobile,
 }) => {
-  const getSourceIcon = (type: SceneSource["type"]) => {
-    switch (type) {
-      case "mobile_camera":
-        return <Smartphone className="w-3.5 h-3.5 text-blue-500" />;
-      case "physical_camera":
-        return <Camera className="w-3.5 h-3.5 text-slate-600" />;
-      case "audio_input":
-        return <Mic className="w-3.5 h-3.5 text-emerald-600" />;
-      case "presentation_slide":
-        return <Presentation className="w-3.5 h-3.5 text-indigo-500" />;
-      case "bible_verse":
-        return <BookOpen className="w-3.5 h-3.5 text-amber-600" />;
-      default:
-        return <Monitor className="w-3.5 h-3.5 text-slate-500" />;
-    }
-  };
+  const [menu, setMenu] = useState(false);
+  const [selected, setSelected] = useState<string | null>(sources[0]?.id ?? null);
 
   return (
-    <div className="w-72 bg-surface border-r border-border flex flex-col h-full select-none">
-      {/* En-tête Panneau */}
-      <div className="h-8 px-3 bg-panel border-b border-border flex items-center justify-between">
-        <span className="text-xs font-bold text-slate-700">Sources de la scène</span>
-        <div className="flex items-center space-x-1">
-          <button
-            onClick={onPairMobileCamera}
-            title="Appairer EECC Caméra (Smartphone)"
-            className="px-2 py-0.5 rounded bg-blue-100 hover:bg-blue-200 text-primary text-[10px] font-bold transition-colors flex items-center"
-          >
-            <Smartphone className="w-3 h-3 mr-1" />
-            + Tél.
+    <section className={`dock ${emphasis ? "emphasis" : ""}`} aria-label="Sources" style={{ position: "relative" }}>
+      <header className="dock-head">
+        <span>Sources</span>
+        <span className="head-actions">
+          <button type="button" className="icon-btn" title="Ajouter une source" onClick={() => setMenu((v) => !v)}>
+            <Plus size={11} />
           </button>
-          <button
-            onClick={onAddSource}
-            title="Ajouter une source"
-            className="p-1 rounded hover:bg-slate-200 text-slate-600 hover:text-textMain transition-colors"
-          >
-            <Plus className="w-3.5 h-3.5" />
+          <button type="button" className="icon-btn" title="Plus" aria-label="Plus de sources">
+            <MoreVertical size={11} />
           </button>
-        </div>
-      </div>
-
-      {/* Liste des Sources */}
-      <div className="flex-1 overflow-y-auto p-1.5 space-y-1">
-        {sources.length === 0 ? (
-          <div className="text-center py-8 text-xs text-slate-400">
-            Aucune source dans cette scène.
-          </div>
-        ) : (
-          sources.map((src) => (
-            <div
-              key={src.id}
-              className={`px-2.5 py-2 rounded-lg border text-xs flex items-center justify-between transition-colors ${
-                src.visible
-                  ? "bg-white border-slate-200 text-slate-800 shadow-xs"
-                  : "bg-slate-50 border-slate-100 text-slate-400"
-              }`}
+        </span>
+      </header>
+      {menu && (
+        <div className="menu-pop add-menu">
+          {ADDABLES.map((item) => (
+            <button
+              key={item.name}
+              type="button"
+              onClick={() => {
+                setMenu(false);
+                if (item.type === "mobile_camera") onPairMobile();
+                onAddSource(item.type, item.name);
+              }}
             >
-              <div className="flex items-center space-x-2 truncate">
-                {getSourceIcon(src.type)}
-                <span className="font-semibold truncate">{src.name}</span>
-                {src.type === "mobile_camera" && src.telemetry?.battery && (
-                  <span className="text-[10px] text-green-600 bg-green-50 px-1 rounded font-mono">
-                    {src.telemetry.battery}%
-                  </span>
-                )}
-              </div>
-
-              <div className="flex items-center space-x-1 text-slate-400">
-                <button
-                  onClick={() => onToggleLock(src.id)}
-                  className="p-1 hover:text-slate-700 rounded"
-                >
-                  {src.locked ? (
-                    <Lock className="w-3 h-3 text-amber-500" />
-                  ) : (
-                    <Unlock className="w-3 h-3 text-slate-300" />
-                  )}
-                </button>
-                <button
-                  onClick={() => onToggleVisibility(src.id)}
-                  className="p-1 hover:text-slate-700 rounded"
-                >
-                  {src.visible ? (
-                    <Eye className="w-3.5 h-3.5 text-slate-600" />
-                  ) : (
-                    <EyeOff className="w-3.5 h-3.5 text-slate-300" />
-                  )}
-                </button>
-              </div>
-            </div>
-          ))
+              {item.icon} {item.name}
+            </button>
+          ))}
+        </div>
+      )}
+      <div className="dock-body">
+        {sources.length === 0 && (
+          <div style={{ padding: 10, color: "#9aa3ab", fontSize: 11 }}>Aucune source dans cette scène.</div>
         )}
+        {sources.map((src) => (
+          <div
+            key={src.id}
+            className="source-row"
+            onClick={() => setSelected(src.id)}
+            style={{ background: selected === src.id ? "rgba(255,255,255,0.04)" : undefined, opacity: src.visible ? 1 : 0.45 }}
+          >
+            <button type="button" className={`ghost ${src.visible ? "on" : ""}`} title="Visibilité" onClick={() => onToggleVisibility(src.id)}>
+              {src.visible ? <Eye size={12} /> : <EyeOff size={12} />}
+            </button>
+            <SourceGlyph type={src.type} name={src.name} />
+            <span className="name">{src.name}</span>
+            <button type="button" className="ghost" title={src.locked ? "Verrouillée" : "Déverrouiller"} onClick={() => onToggleLock(src.id)}>
+              {src.locked ? <Lock size={11} /> : <Unlock size={11} />}
+            </button>
+            <span className="ghost" aria-hidden>
+              <GripVertical size={11} />
+            </span>
+          </div>
+        ))}
       </div>
-
-      <div className="h-8 px-3 bg-panel border-t border-border flex items-center justify-between text-[10px] text-slate-400">
-        <span>Ordre d'incrustation</span>
-        <span>{sources.length} sources</span>
-      </div>
-    </div>
+      <footer className="dock-foot">
+        <button type="button" className="icon-btn" title="Ajouter" onClick={() => setMenu(true)}>
+          <Plus size={11} />
+        </button>
+        <button type="button" className="icon-btn" title="Dossier" aria-label="Dossier">
+          <Folder size={11} />
+        </button>
+        <button type="button" className="icon-btn" title="Propriétés" aria-label="Propriétés">
+          <Settings size={11} />
+        </button>
+        <button
+          type="button"
+          className="icon-btn"
+          title="Supprimer"
+          onClick={() => selected && onRemoveSource(selected)}
+        >
+          <Trash2 size={11} />
+        </button>
+      </footer>
+    </section>
   );
 };

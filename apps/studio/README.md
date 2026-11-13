@@ -9,4 +9,4 @@ Régie audiovisuelle officielle de l'église EECC pour Windows 10/11 64 bits.
 - Diffusion en direct simultanée (RTMP vers YouTube, Facebook, TikTok).
 - Postproduction rapide : découpage audio, export podcast (WAV/MP3) et génération de résumés/documents.
 - Tableau de bord Trésorerie avec retraits sécurisés par code OTP 5 caractères via Brevo.
-- Charte graphique : 70% blanc, 20% bleu-gris, 10% noir.
+- Charte graphique : console anthracite, aperçu vert, programme rouge.

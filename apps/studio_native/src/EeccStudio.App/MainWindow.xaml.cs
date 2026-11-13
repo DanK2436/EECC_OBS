@@ -269,9 +269,9 @@ namespace EeccStudio
                 StatusServerText.Text = "Enregistrement impossible : FFmpeg est introuvable.";
                 return;
             }
-            var dialog = new System.Windows.Forms.FolderBrowserDialog();
-            if (!App.IsSmokeTest && dialog.ShowDialog() != System.Windows.Forms.DialogResult.OK) return;
-            var folder = App.IsSmokeTest ? Path.GetTempPath() : dialog.SelectedPath;
+            var dialog = new Microsoft.Win32.OpenFolderDialog();
+            if (!App.IsSmokeTest && dialog.ShowDialog() != true) return;
+            var folder = App.IsSmokeTest ? Path.GetTempPath() : dialog.FolderName;
             try
             {
                 _recordDirectory = Path.Combine(folder, "EECC-" + DateTime.Now.ToString("yyyyMMdd-HHmmss"));

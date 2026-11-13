@@ -1,109 +1,164 @@
 import React from "react";
-import { StudioScene } from "../../types/studio";
-import { ArrowRight, SlidersHorizontal, RefreshCw } from "lucide-react";
+import { Columns2, Settings, Maximize2, Scissors, Moon, Palette, Play, Radio } from "lucide-react";
+import type { StudioScene } from "../../types/studio";
+
+export type TransitionKind = "cut" | "fade-black" | "fade-color";
 
 interface StudioPreviewProgramProps {
   previewScene: StudioScene;
   programScene: StudioScene;
   studioMode: boolean;
-  transitionDurationMs: number;
-  onSetTransitionDuration: (val: number) => void;
-  onExecuteTransition: (type: "cut" | "fade") => void;
+  transition: TransitionKind;
+  durationMs: number;
+  onDuration: (ms: number) => void;
+  onSelectTransition: (kind: TransitionKind) => void;
+  onApply: (kind?: TransitionKind) => void;
+  demo: boolean;
+  onAir: boolean;
+  programFooter: string;
+  programClock: string;
+  blackout: boolean;
+  colorFade: boolean;
 }
+
+const Stage: React.FC<{ demo: boolean; label: string }> = ({ demo, label }) => {
+  if (!demo) {
+    return (
+      <div className="monitor-empty">
+        <strong>Aucun signal</strong>
+        <span>{label}</span>
+      </div>
+    );
+  }
+  return (
+    <div className="demo-stage" aria-hidden>
+      <div className="cross" />
+      <div className="floor" />
+      <div className="seats" />
+      <div className="demo-watermark">DÉMO</div>
+    </div>
+  );
+};
 
 export const StudioPreviewProgram: React.FC<StudioPreviewProgramProps> = ({
   previewScene,
   programScene,
   studioMode,
-  transitionDurationMs,
-  onSetTransitionDuration,
-  onExecuteTransition,
+  transition,
+  durationMs,
+  onDuration,
+  onSelectTransition,
+  onApply,
+  demo,
+  onAir,
+  programFooter,
+  programClock,
+  blackout,
+  colorFade,
 }) => {
+  const visibleNames = previewScene.sources.filter((s) => s.visible).map((s) => s.name);
+  const previewSource = visibleNames.length
+    ? `${visibleNames[0]} + ${visibleNames.some((n) => /m[ée]dia/i.test(n)) ? "Média" : visibleNames[1] ?? "Média"}`
+    : "Aucune source";
+
   return (
-    <div className="flex-1 bg-slate-950 p-4 flex items-center justify-center gap-4 overflow-hidden">
-      {/* 1. ÉCRAN APERÇU (PREVIEW - Cadre Vert) */}
+    <section className={`monitors ${studioMode ? "" : "single"}`}>
       {studioMode && (
-        <div className="flex-1 max-w-xl h-full flex flex-col">
-          <div className="flex items-center justify-between pb-1.5 px-1">
-            <span className="text-xs font-bold text-green-400 uppercase tracking-wider flex items-center">
-              <span className="w-2 h-2 rounded-full bg-green-500 mr-2" />
-              Aperçu (Prochaine Scène) : {previewScene.name}
+        <div className="monitor preview">
+          <div className="monitor-stage">
+            <Stage demo={demo} label="Aperçu sans flux vidéo" />
+          </div>
+          <div className="mon-bar" style={{ color: "#2fe06a" }}>
+            <span>[ APERÇU (PREVIEW) ]</span>
+            <span className="mon-tools">
+              <button type="button" title="Disposition" aria-label="Disposition">
+                <Columns2 size={12} />
+              </button>
+              <button type="button" title="Réglages aperçu" aria-label="Réglages aperçu">
+                <Settings size={12} />
+              </button>
+              <button type="button" title="Plein cadre" aria-label="Plein cadre">
+                <Maximize2 size={12} />
+              </button>
             </span>
-            <span className="text-[11px] text-slate-500 font-mono">1920x1080</span>
           </div>
-
-          <div className="flex-1 bg-slate-900 rounded-xl border-2 border-green-600/70 overflow-hidden relative shadow-lg flex items-center justify-center">
-            {/* Visualisation simulée de la composition vidéo */}
-            <div className="text-center text-slate-400">
-              <span className="text-xl font-bold text-slate-200 block mb-1">{previewScene.name}</span>
-              <span className="text-xs text-slate-500">
-                {previewScene.sources.filter((s) => s.visible).length} sources actives
-              </span>
-            </div>
-
-            {/* Repère de cadrage */}
-            <div className="absolute inset-4 border border-dashed border-white/10 pointer-events-none" />
+          <div className="mon-caption">
+            <div className="t">◉ Scène : {previewScene.name}</div>
+            <div className="s">Source : {previewSource}</div>
           </div>
         </div>
       )}
 
-      {/* 2. CONTRÔLES DE TRANSITION CENTRAUX */}
       {studioMode && (
-        <div className="flex flex-col items-center justify-center space-y-3 px-2">
+        <div className="transition">
+          <h2>» TRANSITION</h2>
           <button
-            onClick={() => onExecuteTransition("cut")}
-            className="w-24 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-bold transition-all shadow-md active:scale-95 border border-slate-700"
+            type="button"
+            className={`t-btn cut ${transition === "cut" ? "active" : ""}`}
+            onClick={() => onApply("cut")}
           >
-            CUT
+            <Scissors size={13} /> Couper
           </button>
-
           <button
-            onClick={() => onExecuteTransition("fade")}
-            className="w-24 py-2.5 bg-primary hover:bg-primary-light text-white rounded-lg text-xs font-bold transition-all shadow-md shadow-primary/30 active:scale-95 flex items-center justify-center space-x-1"
+            type="button"
+            className={`t-btn ${transition === "fade-black" ? "active" : ""}`}
+            onClick={() => onSelectTransition("fade-black")}
           >
-            <span>FONDU</span>
-            <ArrowRight className="w-3.5 h-3.5" />
+            <Moon size={13} /> Fondu Noir
           </button>
-
-          {/* Durée de transition */}
-          <div className="flex flex-col items-center mt-2">
-            <span className="text-[10px] text-slate-400 font-semibold mb-1">DURÉE</span>
-            <div className="flex items-center bg-slate-800 rounded px-2 py-1 border border-slate-700 text-xs">
-              <input
-                type="number"
-                value={transitionDurationMs}
-                onChange={(e) => onSetTransitionDuration(Number(e.target.value))}
-                className="w-12 bg-transparent text-center text-white font-mono focus:outline-none"
-              />
-              <span className="text-slate-500 text-[10px]">ms</span>
-            </div>
+          <button
+            type="button"
+            className={`t-btn ${transition === "fade-color" ? "active" : ""}`}
+            onClick={() => onSelectTransition("fade-color")}
+          >
+            <Palette size={13} /> Fondu Couleur
+          </button>
+          <div className="duration-row">
+            <span>Durée :</span>
+            <input
+              type="range"
+              min={100}
+              max={1000}
+              step={50}
+              value={durationMs}
+              aria-label="Durée de transition"
+              onChange={(e) => onDuration(Number(e.target.value))}
+            />
+            <b>{durationMs} ms</b>
           </div>
+          <button type="button" className="t-btn" onClick={() => onApply()}>
+            <Play size={12} /> Appliquer
+          </button>
         </div>
       )}
 
-      {/* 3. ÉCRAN PROGRAMME (PROGRAM - Cadre Rouge / À l'antenne) */}
-      <div className="flex-1 max-w-xl h-full flex flex-col">
-        <div className="flex items-center justify-between pb-1.5 px-1">
-          <span className="text-xs font-bold text-live uppercase tracking-wider flex items-center">
-            <span className="w-2 h-2 rounded-full bg-live mr-2 animate-ping" />
-            Programme (À l’antenne) : {programScene.name}
-          </span>
-          <span className="text-[11px] text-slate-500 font-mono">1920x1080 @ 60fps</span>
+      <div className="monitor program">
+        <div className="monitor-stage">
+          {blackout ? (
+            <div className="monitor-empty">
+              <strong>Fondu noir</strong>
+              <span>Programme coupé</span>
+            </div>
+          ) : colorFade ? (
+            <div className="monitor-empty" style={{ background: "#1a2744" }}>
+              <strong>Fondu couleur</strong>
+              <span>{programScene.name}</span>
+            </div>
+          ) : (
+            <Stage demo={demo} label="Programme sans flux vidéo" />
+          )}
         </div>
-
-        <div className="flex-1 bg-slate-900 rounded-xl border-2 border-live overflow-hidden relative shadow-lg flex items-center justify-center">
-          {/* Signal réel envoyé aux projecteurs et aux diffusions RTMP */}
-          <div className="text-center text-slate-400">
-            <span className="text-xl font-bold text-white block mb-1">{programScene.name}</span>
-            <span className="text-xs text-live font-semibold">SIGNAL ENVOYÉ SUR LE FLUX</span>
-          </div>
-
-          {/* Filigrane d'identification */}
-          <div className="absolute bottom-3 right-4 px-2 py-0.5 rounded bg-black/60 text-[10px] text-white/70 font-mono">
-            EECC TV LIVE
-          </div>
+        <div className="mon-bar" style={{ color: "#ff3b3b" }}>
+          <span>● PROGRAMME (ON AIR)</span>
+          <span className={`onair-pill ${onAir ? "" : "idle"}`}>
+            <Radio size={10} /> {onAir ? "ON AIR" : "HORS ANTENNE"}
+          </span>
+        </div>
+        <div className="pgm-footer">
+          <span>{programFooter}</span>
+          <span className="clock">{programClock}</span>
         </div>
       </div>
-    </div>
+    </section>
   );
 };

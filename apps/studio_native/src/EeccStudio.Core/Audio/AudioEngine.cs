@@ -50,8 +50,8 @@ namespace EeccStudio.Core.Audio
                     Id = id,
                     Name = name,
                     VolumeLinear = 0.85f,
-                    CurrentLevelDb = -18.0f,
-                    PeakLevelDb = -14.0f
+                    CurrentLevelDb = -60.0f,
+                    PeakLevelDb = -60.0f
                 });
             }
         }

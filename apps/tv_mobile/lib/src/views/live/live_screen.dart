@@ -125,10 +125,10 @@ class _LiveScreenState extends State<LiveScreen> with SingleTickerProviderStateM
         backgroundColor: EeccColors.surface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Row(
-          children: const [
-            Icon(Icons.router_rounded, color: EeccColors.primary),
-            SizedBox(width: 8),
-            Text('Connexion Régie EECC Studio', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          children: [
+            const Icon(Icons.router_rounded, color: EeccColors.primary),
+            const SizedBox(width: 8),
+            const Text('Connexion Régie EECC Studio', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
           ],
         ),
         content: Column(
@@ -221,7 +221,7 @@ class _LiveScreenState extends State<LiveScreen> with SingleTickerProviderStateM
             const SizedBox(width: 8),
             const Text(
               'EECC TV',
-              style: TextStyle(fontWeight: FontWeight.black, color: EeccColors.textMain, fontSize: 18),
+              style: TextStyle(fontWeight: FontWeight.w900, color: EeccColors.textMain, fontSize: 18),
             ),
           ],
         ),

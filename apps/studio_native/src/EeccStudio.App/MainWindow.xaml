@@ -5,6 +5,7 @@
         Height="840" Width="1360"
         MinHeight="720" MinWidth="1024"
         Background="#14151C"
+        Icon="Assets/eecc.ico"
         WindowStartupLocation="CenterScreen">
     
     <Window.Resources>
@@ -397,7 +398,8 @@
 
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                     <TextBlock x:Name="TxtLanBroadcastStatus" Text="Diffusion Locale LAN : http://192.168.1.100:8089/live/stream" Foreground="#38BDF8" FontSize="11" Margin="0,0,16,0"/>
-                    <TextBlock x:Name="TxtCameraStatusFooter" Text="Serveur Caméra Actif (Port 8089) — 0 Caméra" Foreground="#8B949E" FontSize="11"/>
+                    <TextBlock x:Name="TxtCameraStatusFooter" Text="Serveur Caméra Actif (Port 8089) — 0 Caméra" Foreground="#8B949E" FontSize="11" Margin="0,0,16,0"/>
+                    <TextBlock x:Name="StatusServerText" Text="Serveur Prêt" Foreground="#8B949E" FontSize="11"/>
                 </StackPanel>
             </DockPanel>
         </Border>

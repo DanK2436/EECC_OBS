@@ -33,7 +33,7 @@ namespace EeccStudio
 
             _cameraServer.OnCameraConnected += OnCameraConnected;
             _cameraServer.OnCameraDisconnected += OnCameraDisconnected;
-            _cameraServer.Start();
+            Loaded += OnLoaded;
 
             // 2. Initialisation des scènes d'église complètes
             _scenes = new ObservableCollection<StudioScene>(StudioScene.GetDefaultChurchScenes());
@@ -61,6 +61,52 @@ namespace EeccStudio
         {
             var localIp = _cameraServer.GetLocalIpAddress();
             TxtLanBroadcastStatus.Text = $"Diffusion Locale LAN : http://{localIp}:{_cameraServer.Port}/live/stream";
+        }
+
+        private void OnLoaded(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (_cameraServer.TryStart(out var detail))
+                {
+                    StatusServerText.Text = string.IsNullOrEmpty(detail)
+                        ? $"Serveur actif (port {_cameraServer.Port})"
+                        : "Serveur — " + detail;
+                    if (!string.IsNullOrEmpty(detail))
+                        App.WriteLog("CameraServer " + detail);
+                }
+                else
+                {
+                    StatusServerText.Text = "Serveur indisponible";
+                    App.WriteLog("CameraServer failed " + detail);
+                    if (!App.IsSmokeTest)
+                    {
+                        MessageBox.Show(
+                            detail,
+                            "EECC Studio — serveur caméra",
+                            MessageBoxButton.OK,
+                            MessageBoxImage.Warning);
+                    }
+                }
+
+                File.WriteAllText(
+                    Path.Combine(AppContext.BaseDirectory, "startup.ready"),
+                    DateTime.UtcNow.ToString("o"));
+                App.WriteLog("MainWindow loaded");
+            }
+            catch (Exception ex)
+            {
+                App.WriteLog(ex.ToString());
+                StatusServerText.Text = "Erreur au démarrage";
+                if (!App.IsSmokeTest)
+                {
+                    MessageBox.Show(
+                        ex.ToString(),
+                        "EECC Studio — erreur au démarrage",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Error);
+                }
+            }
         }
 
         private void OnClockTick(object? sender, EventArgs e)

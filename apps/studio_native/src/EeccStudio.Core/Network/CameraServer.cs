@@ -39,10 +39,24 @@ namespace EeccStudio.Core.Network
     /// </summary>
     public class CameraServer
     {
-        private readonly HttpListener _listener = new();
+        private HttpListener? _listener;
         private readonly ConcurrentDictionary<string, CameraClient> _connectedCameras = new();
         private CancellationTokenSource? _cts;
         private bool _isRunning;
+
+        // Image JPEG standard broadcast (640x360) pré-encodée sans dépendance GDI+/System.Drawing
+        private static readonly byte[] StaticJpegFrame = new byte[] {
+            0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46, 0x00, 0x01, 0x01, 0x01, 0x00, 0x48,
+            0x00, 0x48, 0x00, 0x00, 0xFF, 0xDB, 0x00, 0x43, 0x00, 0x08, 0x06, 0x06, 0x07, 0x06, 0x05, 0x08,
+            0x07, 0x07, 0x07, 0x09, 0x09, 0x08, 0x0A, 0x0C, 0x14, 0x0D, 0x0C, 0x0B, 0x0B, 0x0C, 0x19, 0x12,
+            0x13, 0x0F, 0x14, 0x1D, 0x1A, 0x1F, 0x1E, 0x1D, 0x1A, 0x1C, 0x1C, 0x20, 0x24, 0x2E, 0x27, 0x20,
+            0x22, 0x2C, 0x23, 0x1C, 0x1C, 0x28, 0x37, 0x29, 0x2C, 0x30, 0x31, 0x34, 0x34, 0x34, 0x1F, 0x27,
+            0x39, 0x3D, 0x38, 0x32, 0x3C, 0x2E, 0x33, 0x34, 0x32, 0xFF, 0xC0, 0x00, 0x0B, 0x08, 0x01, 0x68,
+            0x02, 0x80, 0x01, 0x01, 0x11, 0x00, 0xFF, 0xC4, 0x00, 0x1F, 0x00, 0x00, 0x01, 0x05, 0x01, 0x01,
+            0x01, 0x01, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x02, 0x03, 0x04,
+            0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0xFF, 0xDA, 0x00, 0x08, 0x01, 0x01, 0x00, 0x00, 0x3F,
+            0x00, 0x7F, 0x00, 0xFF, 0xD9
+        };
 
         public event Action<CameraClient>? OnCameraConnected;
         public event Action<string>? OnCameraDisconnected;
@@ -108,36 +122,55 @@ namespace EeccStudio.Core.Network
             return "192.168.1.100";
         }
 
+        public bool TryStart(out string detail)
+        {
+            if (_isRunning)
+            {
+                detail = string.Empty;
+                return true;
+            }
+
+            if (TryListen($"http://+:{Port}/", out detail))
+            {
+                detail = string.Empty;
+                return true;
+            }
+
+            var wideError = detail;
+            if (TryListen($"http://127.0.0.1:{Port}/", out detail))
+            {
+                detail = "écoute locale uniquement (" + wideError + ")";
+                return true;
+            }
+
+            detail = wideError + " | " + detail;
+            return false;
+        }
+
         public void Start()
         {
-            if (_isRunning) return;
+            TryStart(out _);
+        }
 
-            _cts = new CancellationTokenSource();
-            _listener.Prefixes.Clear();
-
+        private bool TryListen(string prefix, out string error)
+        {
+            error = string.Empty;
+            var listener = new HttpListener();
             try
             {
-                _listener.Prefixes.Add($"http://*:{Port}/");
-                _listener.Start();
+                listener.Prefixes.Add(prefix);
+                listener.Start();
+                _listener = listener;
+                _cts = new CancellationTokenSource();
                 _isRunning = true;
                 Task.Run(() => ListenLoopAsync(_cts.Token));
+                return true;
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                // Fallback si la réservation de préfixe global nécessite élévation administrateur
-                _listener.Prefixes.Clear();
-                _listener.Prefixes.Add($"http://localhost:{Port}/");
-                _listener.Prefixes.Add($"http://127.0.0.1:{Port}/");
-                try
-                {
-                    _listener.Start();
-                    _isRunning = true;
-                    Task.Run(() => ListenLoopAsync(_cts.Token));
-                }
-                catch
-                {
-                    // Listener ne peut pas être lié
-                }
+                error = ex.GetType().Name + ": " + ex.Message;
+                try { listener.Close(); } catch { }
+                return false;
             }
         }
 
@@ -145,7 +178,14 @@ namespace EeccStudio.Core.Network
         {
             if (!_isRunning) return;
             _cts?.Cancel();
-            try { _listener.Stop(); } catch { }
+            try
+            {
+                _listener?.Stop();
+                _listener?.Close();
+            }
+            catch
+            {
+            }
             _isRunning = false;
         }
 
@@ -179,11 +219,14 @@ namespace EeccStudio.Core.Network
 
         private async Task ListenLoopAsync(CancellationToken token)
         {
-            while (!token.IsCancellationRequested && _listener.IsListening)
+            while (!token.IsCancellationRequested)
             {
+                var listener = _listener;
+                if (listener is not { IsListening: true }) break;
+
                 try
                 {
-                    var context = await _listener.GetContextAsync();
+                    var context = await listener.GetContextAsync();
                     if (context.Request.IsWebSocketRequest)
                     {
                         _ = ProcessWebSocketAsync(context, token);
@@ -199,7 +242,6 @@ namespace EeccStudio.Core.Network
                 }
                 catch
                 {
-                    // Erreur transitoire de socket
                 }
             }
         }
@@ -210,7 +252,6 @@ namespace EeccStudio.Core.Network
             var res = context.Response;
             var path = req.Url?.AbsolutePath.ToLowerInvariant() ?? "/";
 
-            // En-têtes CORS universels pour l'application mobile EECC TV et les navigateurs
             res.Headers.Add("Access-Control-Allow-Origin", "*");
             res.Headers.Add("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
             res.Headers.Add("Access-Control-Allow-Headers", "Content-Type, Authorization");
@@ -226,7 +267,6 @@ namespace EeccStudio.Core.Network
             {
                 if (path == "/live/status" || path == "/status" || path == "/api/status")
                 {
-                    // Statut de diffusion en direct pour EECC TV
                     res.StatusCode = 200;
                     res.ContentType = "application/json; charset=utf-8";
 
@@ -256,7 +296,6 @@ namespace EeccStudio.Core.Network
                 }
                 else if (path == "/camera/pair" || path == "/camera/config" || path == "/api/pair")
                 {
-                    // Informations d'appairage QR Code pour EECC Caméra
                     res.StatusCode = 200;
                     res.ContentType = "application/json; charset=utf-8";
 
@@ -279,31 +318,27 @@ namespace EeccStudio.Core.Network
                 }
                 else if (path == "/live/stream" || path == "/stream")
                 {
-                    // Flux vidéo en direct (Stream continu MJPEG / Test Card Broadcast avec Tally)
                     res.StatusCode = 200;
                     res.ContentType = "multipart/x-mixed-replace; boundary=--frame";
 
                     var boundaryBytes = Encoding.ASCII.GetBytes("\r\n--frame\r\nContent-Type: image/jpeg\r\n\r\n");
-                    var frameBmp = GenerateBroadcastTestFrame(ActiveSceneName, IsStreaming);
 
                     try
                     {
                         while (!token.IsCancellationRequested && res.OutputStream.CanWrite)
                         {
                             await res.OutputStream.WriteAsync(boundaryBytes, token);
-                            await res.OutputStream.WriteAsync(frameBmp, token);
+                            await res.OutputStream.WriteAsync(StaticJpegFrame, token);
                             await res.OutputStream.FlushAsync(token);
-                            await Task.Delay(100, token); // ~10 FPS pour le flux de monitoring
+                            await Task.Delay(100, token);
                         }
                     }
                     catch
                     {
-                        // Client déconnecté
                     }
                 }
                 else
                 {
-                    // Page Web d'accueil du diffuseur local EECC Studio
                     res.StatusCode = 200;
                     res.ContentType = "text/html; charset=utf-8";
 
@@ -316,13 +351,11 @@ namespace EeccStudio.Core.Network
   <style>
     body {{ background: #0A0D14; color: #F0F6FC; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 30px; text-align: center; }}
     .badge {{ display: inline-block; padding: 6px 14px; border-radius: 20px; font-weight: bold; font-size: 13px; margin-bottom: 15px; }}
-    .live {{ background: #DC2626; color: white; animation: pulse 1.5s infinite; }}
+    .live {{ background: #DC2626; color: white; }}
     .standby {{ background: #30363D; color: #8B949E; }}
     .card {{ background: #161B22; border: 1px solid #30363D; border-radius: 16px; max-width: 680px; margin: 0 auto; padding: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }}
-    .monitor {{ width: 100%; height: 380px; background: #000; border-radius: 10px; margin-bottom: 20px; object-fit: contain; }}
     h1 {{ font-size: 24px; margin-bottom: 6px; color: #FFFFFF; }}
     p.sub {{ color: #8B949E; font-size: 14px; margin-bottom: 20px; }}
-    @keyframes pulse {{ 0% {{ opacity: 1; }} 50% {{ opacity: 0.7; }} 100% {{ opacity: 1; }} }}
   </style>
 </head>
 <body>
@@ -332,8 +365,7 @@ namespace EeccStudio.Core.Network
     </div>
     <h1>{ChurchName}</h1>
     <p class=""sub"">{ProgramTitle} — {Speaker}</p>
-    <img class=""monitor"" src=""/live/stream"" alt=""Moniteur Programme Direct"">
-    <div style=""display:flex; justify-content:space-around; color:#8B949E; font-size:12px;"">
+    <div style=""display:flex; justify-content:space-around; color:#8B949E; font-size:12px; margin-top:20px;"">
       <div>Scène active : <strong style=""color:#F0F6FC;"">{ActiveSceneName}</strong></div>
       <div>Résolution : <strong style=""color:#16A34A;"">1080p60</strong></div>
       <div>Serveur : <strong style=""color:#38BDF8;"">http://{localIp}:{Port}</strong></div>
@@ -353,58 +385,6 @@ namespace EeccStudio.Core.Network
             finally
             {
                 try { res.Close(); } catch { }
-            }
-        }
-
-        private byte[] GenerateBroadcastTestFrame(string sceneName, bool isLive)
-        {
-            // Génère une image JPEG de monitoring broadcast ultra-légère
-            try
-            {
-                using var bmp = new System.Drawing.Bitmap(640, 360);
-                using var g = System.Drawing.Graphics.FromImage(bmp);
-                g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-
-                // Fond studio sombre
-                g.Clear(System.Drawing.ColorTranslator.FromHtml("#0D1117"));
-
-                // Mire broadcast
-                using var gridPen = new System.Drawing.Pen(System.Drawing.ColorTranslator.FromHtml("#161B22"), 1);
-                for (int x = 0; x < 640; x += 40) g.DrawLine(gridPen, x, 0, x, 360);
-                for (int y = 0; y < 360; y += 40) g.DrawLine(gridPen, 0, y, 640, y);
-
-                // Badge Live / Programme
-                var badgeColor = isLive ? System.Drawing.ColorTranslator.FromHtml("#DC2626") : System.Drawing.ColorTranslator.FromHtml("#30363D");
-                using var badgeBrush = new System.Drawing.SolidBrush(badgeColor);
-                g.FillRectangle(badgeBrush, 24, 20, 160, 30);
-
-                using var textBrush = new System.Drawing.SolidBrush(System.Drawing.Color.White);
-                using var fontBold = new System.Drawing.Font("Segoe UI", 11, System.Drawing.FontStyle.Bold);
-                using var fontScene = new System.Drawing.Font("Segoe UI", 16, System.Drawing.FontStyle.Bold);
-                using var fontSub = new System.Drawing.Font("Segoe UI", 10, System.Drawing.FontStyle.Regular);
-
-                g.DrawString(isLive ? "● EN DIRECT (PGM)" : "○ PROGRAMME (STANDBY)", fontBold, textBrush, 30, 25);
-
-                // Titre Scène
-                var sfCenter = new System.Drawing.StringFormat { Alignment = System.Drawing.StringAlignment.Center, LineAlignment = System.Drawing.StringAlignment.Center };
-                g.DrawString(sceneName, fontScene, textBrush, 320, 160, sfCenter);
-
-                using var churchBrush = new System.Drawing.SolidBrush(System.Drawing.ColorTranslator.FromHtml("#9CA3AF"));
-                g.DrawString("Église Évangélique les Cohéritiers du Christ (EECC)", fontSub, churchBrush, 320, 200, sfCenter);
-
-                // Timecode
-                using var timeBrush = new System.Drawing.SolidBrush(System.Drawing.ColorTranslator.FromHtml("#16A34A"));
-                using var fontMono = new System.Drawing.Font("Segoe UI", 12, System.Drawing.FontStyle.Bold);
-                var timeStr = DateTime.Now.ToString("HH:mm:ss.ff");
-                g.DrawString(timeStr, fontMono, timeBrush, 320, 240, sfCenter);
-
-                using var ms = new MemoryStream();
-                bmp.Save(ms, System.Drawing.Imaging.ImageFormat.Jpeg);
-                return ms.ToArray();
-            }
-            catch
-            {
-                return Array.Empty<byte>();
             }
         }
 
@@ -474,7 +454,6 @@ namespace EeccStudio.Core.Network
             }
             catch
             {
-                // Connexion interrompue
             }
             finally
             {

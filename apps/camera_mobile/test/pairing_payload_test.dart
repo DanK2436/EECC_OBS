@@ -88,10 +88,11 @@ void main() {
   test('local address text does not claim the studio is reachable', () {
     final empty = LocalNetworkStatus.fromAddresses(['8.8.8.8', '127.0.0.1']);
     expect(empty.hasPrivateAddress, isFalse);
-    expect(empty.message, contains('ne prouve pas'));
+    expect(empty.message.toLowerCase(), isNot(contains('connecté')));
+    expect(empty.message, contains('session'));
 
     final wifi = LocalNetworkStatus.fromAddresses(['192.168.4.20']);
     expect(wifi.hasPrivateAddress, isTrue);
-    expect(wifi.message, contains('ne prouve pas'));
+    expect(wifi.message, contains('pas une session'));
   });
 }

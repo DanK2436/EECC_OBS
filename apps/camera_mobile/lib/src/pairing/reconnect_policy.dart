@@ -15,6 +15,7 @@ class ReconnectPolicy {
     'capacity',
     'session_expired',
     'session_unknown',
+    'session_invalid',
   };
 
   static ReconnectDecision decide({

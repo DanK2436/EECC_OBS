@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../constants/colors.dart';
 import '../pairing/local_network.dart';
+import '../pairing/studio_link_phase.dart';
 import 'camera_active_screen.dart';
 import 'manual_connect_dialog.dart';
 import 'qr_scanner_screen.dart';
@@ -16,7 +17,7 @@ class CamHomeScreen extends StatefulWidget {
 }
 
 class _CamHomeScreenState extends State<CamHomeScreen> {
-  String _networkMessage = 'Lecture des adresses du téléphone…';
+  String _addressLine = 'Adresse locale non lue. Aucune session Studio n\'est ouverte.';
 
   @override
   void initState() {
@@ -32,10 +33,10 @@ class _CamHomeScreenState extends State<CamHomeScreen> {
       );
       final addresses = interfaces.expand((interface) => interface.addresses.map((address) => address.address));
       if (!mounted) return;
-      setState(() => _networkMessage = LocalNetworkStatus.fromAddresses(addresses).message);
+      setState(() => _addressLine = LocalNetworkStatus.fromAddresses(addresses).message);
     } catch (error) {
       if (!mounted) return;
-      setState(() => _networkMessage = 'Adresses locales illisibles : $error');
+      setState(() => _addressLine = 'Adresse locale illisible. Aucune session Studio n\'est ouverte.');
     }
   }
 
@@ -60,10 +61,28 @@ class _CamHomeScreenState extends State<CamHomeScreen> {
                 border: Border.all(color: Colors.white10),
               ),
               child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(Icons.wifi_rounded, color: Colors.white70, size: 28),
+                  const Icon(Icons.link_off, color: Colors.white70, size: 28),
                   const SizedBox(width: 14),
-                  Expanded(child: Text(_networkMessage, style: const TextStyle(color: Colors.white, fontSize: 13))),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          StudioLinkLabels.disconnected,
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+                        ),
+                        const SizedBox(height: 4),
+                        const Text(
+                          'Aucune session avec EECC Studio.',
+                          style: TextStyle(color: Colors.white, fontSize: 13),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(_addressLine, style: const TextStyle(color: EeccCamColors.textSecondary, fontSize: 12)),
+                      ],
+                    ),
+                  ),
                 ],
               ),
             ),

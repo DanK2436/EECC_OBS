@@ -1,13 +1,15 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:math';
 
 import 'package:battery_plus/battery_plus.dart';
-import 'package:web_socket_channel/web_socket_channel.dart';
+import 'package:web_socket_channel/io.dart';
 
 import '../models/device_telemetry.dart';
 import '../models/session_config.dart';
 import '../pairing/reconnect_policy.dart';
+import '../pairing/studio_link_phase.dart';
 
 /// Liaison WebSocket réelle avec EECC Studio.
 /// L'état connecté n'est posé qu'après un handshake_ack de la régie.
@@ -20,10 +22,12 @@ class StudioConnectionService {
   final void Function(int realFps, int realBitrateKbps)? onMetricsUpdated;
   final void Function(String code, String message)? onRejected;
   final void Function(String message)? onStatus;
+  final void Function(StudioLinkPhase phase)? onPhaseChanged;
+  final Duration handshakeTimeout;
 
   final Battery _battery = Battery();
   final String _deviceId = 'phone-${Random.secure().nextInt(1 << 32)}';
-  WebSocketChannel? _wsChannel;
+  IOWebSocketChannel? _wsChannel;
   StreamSubscription? _wsSubscription;
   Timer? _telemetryTimer;
   Timer? _heartbeatTimer;
@@ -31,6 +35,7 @@ class StudioConnectionService {
   Timer? _retryTimer;
 
   bool _isConnected = false;
+  StudioLinkPhase _phase = StudioLinkPhase.disconnected;
   bool _userLeft = false;
   int _retry = 0;
   int _generation = 0;
@@ -58,9 +63,12 @@ class StudioConnectionService {
     this.onMetricsUpdated,
     this.onRejected,
     this.onStatus,
+    this.onPhaseChanged,
+    this.handshakeTimeout = const Duration(seconds: 8),
   });
 
   bool get isConnected => _isConnected;
+  StudioLinkPhase get phase => _phase;
   bool get canReconnect => _sessionId != null && !_userLeft;
   String? get sessionId => _sessionId;
   TallyState get currentTally => _currentTally;
@@ -85,18 +93,35 @@ class StudioConnectionService {
     _retryTimer?.cancel();
     _handshakeTimeoutTimer?.cancel();
     _closeSocket();
-    _isConnected = false;
-    onConnectionStatusChanged(false);
+    _markDisconnected();
+    _setPhase(useSession ? StudioLinkPhase.reconnecting : StudioLinkPhase.connecting);
     _lastRejectCode = null;
 
     final token = useSession ? _sessionId : config.token;
     if (token == null || token.isEmpty) {
+      _setPhase(StudioLinkPhase.disconnected);
       onRejected?.call('session_unknown', 'Session inconnue. Scannez un nouveau QR.');
       return;
     }
 
+    WebSocket socket;
     try {
-      final channel = WebSocketChannel.connect(Uri.parse(config.controlWebSocketUrl));
+      socket = await WebSocket.connect(config.controlWebSocketUrl).timeout(handshakeTimeout);
+    } catch (error) {
+      if (generation != _generation || _userLeft) return;
+      _lastRejectCode = 'network';
+      _markDisconnected();
+      _setPhase(StudioLinkPhase.disconnected);
+      onRejected?.call('network', 'Connexion impossible : $error');
+      return;
+    }
+    if (generation != _generation || _userLeft) {
+      socket.close();
+      return;
+    }
+
+    try {
+      final channel = IOWebSocketChannel(socket);
       _wsChannel = channel;
       _wsSubscription = channel.stream.listen(
         (data) {
@@ -121,19 +146,23 @@ class StudioConnectionService {
         'protocol_version': 'eecc-lan-1',
       }));
       _handshakeTimeoutTimer?.cancel();
-      _handshakeTimeoutTimer = Timer(const Duration(seconds: 8), () {
-        if (_isConnected || _userLeft) return;
+      _handshakeTimeoutTimer = Timer(handshakeTimeout, () {
+        if (_isConnected || _userLeft || generation != _generation) return;
         _lastRejectCode = 'timeout';
+        _markDisconnected();
+        _setPhase(StudioLinkPhase.disconnected);
         onRejected?.call(
           'timeout',
           'La régie n\'a pas répondu. Vérifiez l\'adresse, le pare-feu du PC et que le téléphone n\'est pas isolé du Wi-Fi.',
         );
         _closeSocket();
-        onConnectionStatusChanged(false);
       });
     } catch (error) {
+      if (generation != _generation || _userLeft) return;
+      _lastRejectCode = 'network';
+      _markDisconnected();
+      _setPhase(StudioLinkPhase.disconnected);
       onRejected?.call('network', 'Connexion impossible : $error');
-      onConnectionStatusChanged(false);
     }
   }
 
@@ -163,18 +192,28 @@ class StudioConnectionService {
       final message = jsonDecode(rawData) as Map<String, dynamic>;
       final type = message['type'] as String?;
       if (type == 'handshake_ack') {
+        final session = message['session_id'];
+        if (session is! String || session.trim().isEmpty) {
+          _lastRejectCode = 'session_invalid';
+          _markDisconnected();
+          _setPhase(StudioLinkPhase.disconnected);
+          onRejected?.call('session_invalid', 'Accusé sans session. La liaison n\'est pas établie.');
+          _closeSocket();
+          return;
+        }
         _handshakeTimeoutTimer?.cancel();
         _retry = 0;
         _lastRejectCode = null;
-        _sessionId = message['session_id'] as String? ?? _sessionId;
+        _sessionId = session.trim();
         _assignedSlot = message['assigned_slot'] as String? ?? '';
         _slotNumber = message['slot_number'] as int? ?? 0;
         if (_assignedSlot.isNotEmpty) {
           onSlotAssigned?.call(_assignedSlot, _slotNumber);
         }
         _isConnected = true;
+        _setPhase(StudioLinkPhase.connected);
         onConnectionStatusChanged(true);
-        onStatus?.call('Connecté à ${message['studio_name'] ?? config.studioName} · $_assignedSlot');
+        onStatus?.call(_assignedSlot.isEmpty ? 'Session $_sessionId' : 'Session $_assignedSlot');
         _initBatteryMonitoring();
         _startTelemetryLoop();
         _startHeartbeat();
@@ -184,11 +223,12 @@ class StudioConnectionService {
         final code = message['code'] as String? ?? 'rejected';
         final text = message['message'] as String? ?? 'La régie a refusé la connexion.';
         _lastRejectCode = code;
-        if (code == 'session_unknown' || code == 'session_expired' || code == 'token_used') {
+        if (code == 'session_unknown' || code == 'session_expired' || code == 'token_used' || code == 'session_invalid') {
           _sessionId = null;
         }
+        _markDisconnected();
+        _setPhase(StudioLinkPhase.disconnected);
         onRejected?.call(code, text);
-        onConnectionStatusChanged(false);
         _closeSocket();
       } else if (type == 'tally') {
         final state = message['state'] as String? ?? 'standby';
@@ -281,7 +321,7 @@ class StudioConnectionService {
     _telemetryTimer?.cancel();
     _heartbeatTimer?.cancel();
     _closeSocket();
-    onConnectionStatusChanged(false);
+    if (wasConnected) onConnectionStatusChanged(false);
     onTallyChanged(TallyState.standby);
     if (!wasConnected && _lastRejectCode == null) {
       _lastRejectCode = 'network';
@@ -293,10 +333,12 @@ class StudioConnectionService {
       attempts: _retry,
     );
     if (!decision.retry) {
+      _setPhase(StudioLinkPhase.disconnected);
       if (decision.message.isNotEmpty) onStatus?.call(decision.message);
       return;
     }
     _retry += 1;
+    _setPhase(StudioLinkPhase.reconnecting);
     onStatus?.call(decision.message);
     _retryTimer?.cancel();
     _retryTimer = Timer(decision.delay, () {
@@ -328,9 +370,21 @@ class StudioConnectionService {
     }
     if (release) _sessionId = null;
     _closeSocket();
-    _isConnected = false;
+    _markDisconnected();
+    _setPhase(StudioLinkPhase.disconnected);
     _currentTally = TallyState.standby;
-    onConnectionStatusChanged(false);
     onTallyChanged(TallyState.standby);
+  }
+
+  void _markDisconnected() {
+    final was = _isConnected;
+    _isConnected = false;
+    if (was) onConnectionStatusChanged(false);
+  }
+
+  void _setPhase(StudioLinkPhase phase) {
+    if (_phase == phase) return;
+    _phase = phase;
+    onPhaseChanged?.call(phase);
   }
 }

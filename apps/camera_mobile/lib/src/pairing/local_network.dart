@@ -13,15 +13,12 @@ class LocalNetworkStatus {
     if (private.isEmpty) {
       return const LocalNetworkStatus(
         [],
-        'Aucune adresse privée détectée sur ce téléphone. Le Wi-Fi local est nécessaire. '
-        'Le même nom de réseau ne prouve pas que EECC Studio est joignable : '
-        'l\'isolation du point d\'accès, un réseau invité ou le pare-feu du PC peuvent bloquer la liaison.',
+        'Aucune adresse privée locale. Cela ne crée pas de session avec EECC Studio.',
       );
     }
     return LocalNetworkStatus(
       private,
-      'Adresse privée du téléphone : ${private.first}. '
-      'Cela ne prouve pas que le Studio répond, ni que le pare-feu laisse passer le port.',
+      'Adresse locale du téléphone : ${private.first}. Ce n\'est pas une session Studio.',
     );
   }
 }

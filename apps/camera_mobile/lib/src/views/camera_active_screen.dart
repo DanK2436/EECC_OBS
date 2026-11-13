@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import '../constants/colors.dart';
 import '../models/session_config.dart';
+import '../pairing/studio_link_phase.dart';
 import '../services/studio_connection_service.dart';
 
 /// Écran de captation vidéo 100% MATÉRIEL et FONCTIONNEL
@@ -19,6 +20,7 @@ class CameraActiveScreen extends StatefulWidget {
 class _CameraActiveScreenState extends State<CameraActiveScreen> with WidgetsBindingObserver {
   late StudioConnectionService _connectionService;
   TallyState _tally = TallyState.standby;
+  StudioLinkPhase _phase = StudioLinkPhase.disconnected;
   bool _isConnected = false;
   bool _isStreamingFrames = false;
   bool _isCapturing = false;
@@ -170,6 +172,10 @@ class _CameraActiveScreenState extends State<CameraActiveScreen> with WidgetsBin
         if (!mounted) return;
         setState(() => _linkMessage = message);
       },
+      onPhaseChanged: (phase) {
+        if (!mounted) return;
+        setState(() => _phase = phase);
+      },
     );
     _connectionService.connect();
   }
@@ -228,29 +234,22 @@ class _CameraActiveScreenState extends State<CameraActiveScreen> with WidgetsBin
   }
 
   Color _getTallyColor() {
-    if (!_isConnected) return EeccCamColors.tallyStandby;
+    if (_phase != StudioLinkPhase.connected) return EeccCamColors.tallyStandby;
     switch (_tally) {
       case TallyState.program:
-        return EeccCamColors.tallyProgram; // Rouge solide
+        return EeccCamColors.tallyProgram;
       case TallyState.preview:
-        return EeccCamColors.tallyPreview; // Vert solide
+        return EeccCamColors.tallyPreview;
       case TallyState.standby:
-        return EeccCamColors.tallyStandby; // Gris solide
+        return EeccCamColors.tallyStandby;
     }
   }
 
   String _getTallyLabel() {
-    if (!_isConnected) {
-      return _linkMessage ?? 'HORS LIGNE — la régie n\'a pas confirmé la session';
-    }
-    switch (_tally) {
-      case TallyState.program:
-        return '● À L\'ANTENNE : $_activeSlotName';
-      case TallyState.preview:
-        return '○ EN APERÇU : $_activeSlotName';
-      case TallyState.standby:
-        return 'CONNECTÉ : $_activeSlotName (STANDBY)';
-    }
+    final video = StudioLinkLabels.video(_phase, _tally);
+    if (video == null) return StudioLinkLabels.badge(_phase);
+    final slot = _activeSlotName.isEmpty ? '' : ' · $_activeSlotName';
+    return '${StudioLinkLabels.badge(_phase)} · $video$slot';
   }
 
   @override
@@ -344,14 +343,15 @@ class _CameraActiveScreenState extends State<CameraActiveScreen> with WidgetsBin
                       ),
                     ),
                     const SizedBox(width: 12),
-                    Text(
-                      '${widget.config.displayName} · n°$_activeSlotNumber',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
+                    if (_phase == StudioLinkPhase.connected && _activeSlotName.isNotEmpty)
+                      Text(
+                        '${widget.config.displayName} · n°$_activeSlotNumber',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
-                    ),
                   ],
                 ),
               ),
@@ -416,24 +416,34 @@ class _CameraActiveScreenState extends State<CameraActiveScreen> with WidgetsBin
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Row(
-                      children: [
-                        const Icon(Icons.wifi, color: Colors.white, size: 18),
-                        const SizedBox(width: 6),
-                        Text(
-                          _isConnected ? '$_activeSlotName (${widget.config.studioIp})' : (_linkMessage ?? 'Régie non confirmée'),
-                          style: TextStyle(
-                            color: _isConnected ? Colors.white : Colors.redAccent,
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
+                    Expanded(
+                      child: Row(
+                        children: [
+                          Icon(
+                            _phase == StudioLinkPhase.connected ? Icons.link : Icons.link_off,
+                            color: Colors.white,
+                            size: 18,
                           ),
-                        ),
-                        if (!_isConnected && _connectionService.canReconnect)
-                          TextButton(
-                            onPressed: () => _connectionService.reconnect(),
-                            child: const Text('Reconnecter'),
+                          const SizedBox(width: 6),
+                          Flexible(
+                            child: Text(
+                              _phase == StudioLinkPhase.connected
+                                  ? '${StudioLinkLabels.connected}${_activeSlotName.isEmpty ? '' : ' · $_activeSlotName'}'
+                                  : '${StudioLinkLabels.badge(_phase)}${_linkMessage == null ? '' : ' — $_linkMessage'}',
+                              style: TextStyle(
+                                color: _phase == StudioLinkPhase.connected ? Colors.white : Colors.white70,
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                           ),
-                      ],
+                          if (_phase != StudioLinkPhase.connected && _connectionService.canReconnect)
+                            TextButton(
+                              onPressed: () => _connectionService.reconnect(),
+                              child: const Text('Reconnecter'),
+                            ),
+                        ],
+                      ),
                     ),
                     Row(
                       children: [

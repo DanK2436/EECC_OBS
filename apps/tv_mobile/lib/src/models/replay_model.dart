@@ -9,7 +9,7 @@ class ReplayItem {
   final String url;
   final String? externalId;
   final String? speaker;
-  final DateTime date;
+  final DateTime? date;
   final String? durationText;
   final String availabilityStatus; // 'available', 'unverified', 'unavailable'
 
@@ -21,23 +21,23 @@ class ReplayItem {
     required this.url,
     this.externalId,
     this.speaker,
-    required this.date,
+    this.date,
     this.durationText,
-    this.availabilityStatus = 'available',
+    this.availabilityStatus = 'unverified',
   });
 
   factory ReplayItem.fromJson(Map<String, dynamic> json) {
     return ReplayItem(
       id: json['id'] as String,
       eventId: json['event_id'] as String,
-      title: json['title'] as String? ?? 'Culte EECC',
-      platform: json['platform'] as String? ?? 'youtube',
+      title: json['title'] as String? ?? 'Replay sans titre',
+      platform: json['platform'] as String? ?? 'plateforme',
       url: json['url'] as String,
       externalId: json['external_id'] as String?,
       speaker: json['speaker'] as String?,
-      date: json['date'] != null ? DateTime.parse(json['date'] as String) : DateTime.now(),
+      date: json['date'] != null ? DateTime.tryParse(json['date'] as String) : null,
       durationText: json['duration_text'] as String?,
-      availabilityStatus: json['availability_status'] as String? ?? 'available',
+      availabilityStatus: json['availability_status'] as String? ?? 'unverified',
     );
   }
 }

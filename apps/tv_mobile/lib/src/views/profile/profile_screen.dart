@@ -1,10 +1,40 @@
 import 'package:flutter/material.dart';
 import '../../constants/colors.dart';
 import '../../constants/config.dart';
+import '../../services/supabase_service.dart';
+import '../../services/tv_catalog.dart';
 import '../donation/donation_modal.dart';
 
-class ProfileScreen extends StatelessWidget {
+class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
+
+  @override
+  State<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends State<ProfileScreen> {
+  final EeccDataService _data = EeccDataService();
+  List<ChurchPlace> _churches = [];
+  String? _notice;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final snapshot = await _data.loadCatalog();
+    if (!mounted) return;
+    setState(() {
+      _churches = snapshot.churches;
+      _notice = snapshot.error;
+    });
+  }
+
+  void _say(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -43,12 +73,12 @@ class ProfileScreen extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Fidèle EECC',
+                          'Aucun compte connecté',
                           style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: EeccColors.textMain),
                         ),
                         SizedBox(height: 4),
                         Text(
-                          'fidele@eecc-eglise.org',
+                          'La connexion n\'est pas branchée',
                           style: TextStyle(fontSize: 13, color: EeccColors.textSecondary),
                         ),
                       ],
@@ -70,8 +100,8 @@ class ProfileScreen extends StatelessWidget {
             _buildMenuTile(
               icon: Icons.receipt_long_rounded,
               title: 'Mes reçus de dons',
-              subtitle: 'Historique des contributions',
-              onTap: () {},
+              subtitle: 'Aucun reçu n\'est chargé',
+              onTap: () => _say('Les reçus ne sont pas disponibles. Aucun paiement n\'est consulté.'),
             ),
 
             const SizedBox(height: 20),
@@ -79,30 +109,32 @@ class ProfileScreen extends StatelessWidget {
             _buildMenuTile(
               icon: Icons.notifications_active_outlined,
               title: 'Notifications de culte',
-              subtitle: 'Alertes début de direct et nouveaux sermons',
-              trailing: Switch(value: true, activeColor: EeccColors.primary, onChanged: (v) {}),
-              onTap: () {},
+              subtitle: 'Non branchées',
+              trailing: Switch(value: false, activeColor: EeccColors.primary, onChanged: (_) => _say('Les notifications ne sont pas branchées.')),
+              onTap: () => _say('Les notifications ne sont pas branchées.'),
             ),
             _buildMenuTile(
               icon: Icons.language_rounded,
               title: 'Langue de l\'application',
-              subtitle: 'Français (par défaut)',
-              onTap: () {},
+              subtitle: 'Français uniquement',
+              onTap: () => _say('Aucune autre langue n\'est disponible.'),
             ),
 
             const SizedBox(height: 20),
             _buildSectionTitle('À propos de l\'EECC'),
             _buildMenuTile(
               icon: Icons.info_outline_rounded,
-              title: 'Vision et Responsables de l\'église',
-              subtitle: 'Découvrir la mission EECC',
-              onTap: () {},
+              title: 'Vision et responsables',
+              subtitle: 'Texte non enregistré dans l\'application',
+              onTap: () => _say('Aucune page de présentation n\'est enregistrée.'),
             ),
             _buildMenuTile(
               icon: Icons.location_on_outlined,
-              title: 'Nos églises & Implantations',
-              subtitle: 'Horaires et adresses des cultes',
-              onTap: () {},
+              title: 'Implantations',
+              subtitle: _churches.isEmpty
+                  ? (_notice ?? 'Aucune implantation enregistrée')
+                  : _churches.map((church) => '${church.name}${church.city == null ? '' : ' — ${church.city}'}').join(', '),
+              onTap: () => _say(_churches.isEmpty ? 'Aucune implantation enregistrée.' : _churches.map((church) => church.address ?? church.name).join('\n')),
             ),
 
             const SizedBox(height: 30),

@@ -21,6 +21,7 @@ class _HomeScreenState extends State<HomeScreen> {
   ChurchEvent? _currentEvent;
   List<ReplayItem> _replays = [];
   List<PodcastItem> _podcasts = [];
+  String? _error;
   bool _isLoading = true;
 
   @override
@@ -30,15 +31,13 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _loadData() async {
-    final event = await _dataService.getCurrentOrNextEvent();
-    final replays = await _dataService.getReplaysCatalog();
-    final podcasts = await _dataService.getPodcasts();
-
+    final snapshot = await _dataService.loadCatalog();
     if (mounted) {
       setState(() {
-        _currentEvent = event;
-        _replays = replays;
-        _podcasts = podcasts;
+        _currentEvent = snapshot.event;
+        _replays = snapshot.replays;
+        _podcasts = snapshot.podcasts;
+        _error = snapshot.error;
         _isLoading = false;
       });
     }
@@ -87,7 +86,11 @@ class _HomeScreenState extends State<HomeScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.notifications_none_rounded, color: EeccColors.slate),
-            onPressed: () {},
+            onPressed: () {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Les notifications ne sont pas branchées.')),
+              );
+            },
           ),
           IconButton(
             icon: const Icon(Icons.favorite_outline_rounded, color: EeccColors.primary),
@@ -104,7 +107,11 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // 1. BANNIÈRE DIRECT OU PROCHAIN CULTE
+              if (_error != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Text(_error!, style: const TextStyle(color: EeccColors.warningOrange)),
+                ),
               _buildLiveOrScheduledCard(),
 
               const SizedBox(height: 16),
@@ -184,16 +191,16 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
               const Spacer(),
-              if (!isLive)
-                const Text(
-                  'Dimanche 09:00',
-                  style: TextStyle(color: Colors.white70, fontSize: 13),
+              if (!isLive && _currentEvent != null)
+                Text(
+                  _currentEvent!.dateFormatted,
+                  style: const TextStyle(color: Colors.white70, fontSize: 13),
                 ),
             ],
           ),
           const SizedBox(height: 12),
           Text(
-            _currentEvent?.title ?? 'Culte EECC',
+            _currentEvent?.title ?? 'Aucun culte programmé',
             style: const TextStyle(
               color: Colors.white,
               fontSize: 18,
@@ -202,7 +209,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           const SizedBox(height: 6),
           Text(
-            _currentEvent?.theme ?? 'La grâce infinie et la marche chrétienne',
+            _currentEvent?.theme ?? _currentEvent?.description ?? 'Aucune description enregistrée.',
             style: const TextStyle(color: Colors.white70, fontSize: 13),
           ),
           const SizedBox(height: 16),
@@ -294,6 +301,9 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
         const SizedBox(height: 10),
+        if (_replays.isEmpty)
+          const Text('Aucun replay enregistré.', style: TextStyle(color: EeccColors.textSecondary))
+        else
         SizedBox(
           height: 190,
           child: ListView.builder(
@@ -409,6 +419,8 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
         const SizedBox(height: 8),
+        if (_podcasts.isEmpty)
+          const Text('Aucun sermon audio enregistré.', style: TextStyle(color: EeccColors.textSecondary)),
         ..._podcasts.map((podcast) {
           return Container(
             margin: const EdgeInsets.only(bottom: 10),

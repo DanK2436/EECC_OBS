@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:just_audio/just_audio.dart';
 import '../../constants/colors.dart';
 import '../../models/podcast_model.dart';
 import '../../services/supabase_service.dart';
@@ -13,10 +14,11 @@ class MediaLibraryScreen extends StatefulWidget {
 
 class _MediaLibraryScreenState extends State<MediaLibraryScreen> {
   final EeccDataService _dataService = EeccDataService();
+  final AudioPlayer _player = AudioPlayer();
   List<PodcastItem> _podcasts = [];
   bool _isLoading = true;
   String? _currentlyPlayingId;
-  bool _isPlaying = false;
+  String? _error;
 
   @override
   void initState() {
@@ -24,25 +26,40 @@ class _MediaLibraryScreenState extends State<MediaLibraryScreen> {
     _loadPodcasts();
   }
 
+  @override
+  void dispose() {
+    _player.dispose();
+    super.dispose();
+  }
+
   Future<void> _loadPodcasts() async {
-    final list = await _dataService.getPodcasts();
+    final snapshot = await _dataService.loadCatalog();
     if (mounted) {
       setState(() {
-        _podcasts = list;
+        _podcasts = snapshot.podcasts;
+        _error = snapshot.error;
         _isLoading = false;
       });
     }
   }
 
-  void _togglePlayPodcast(PodcastItem podcast) {
-    setState(() {
-      if (_currentlyPlayingId == podcast.id) {
-        _isPlaying = !_isPlaying;
+  Future<void> _togglePlayPodcast(PodcastItem podcast) async {
+    if (podcast.audioUrl.isEmpty) {
+      setState(() => _error = 'Aucun fichier audio n\'est enregistré pour « ${podcast.title} ».');
+      return;
+    }
+    try {
+      if (_currentlyPlayingId == podcast.id && _player.playing) {
+        await _player.pause();
       } else {
+        await _player.setUrl(podcast.audioUrl);
+        await _player.play();
         _currentlyPlayingId = podcast.id;
-        _isPlaying = true;
       }
-    });
+      if (mounted) setState(() => _error = null);
+    } catch (_) {
+      if (mounted) setState(() => _error = 'La lecture de « ${podcast.title} » a échoué.');
+    }
   }
 
   Future<void> _openDocument(String url) async {
@@ -68,6 +85,16 @@ class _MediaLibraryScreenState extends State<MediaLibraryScreen> {
           ? const Center(child: CircularProgressIndicator(color: EeccColors.primary))
           : Column(
               children: [
+                if (_error != null)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                    child: Text(_error!, style: const TextStyle(color: EeccColors.warningOrange)),
+                  ),
+                if (_podcasts.isEmpty)
+                  const Expanded(
+                    child: Center(child: Text('Aucun sermon audio enregistré.', style: TextStyle(color: EeccColors.textSecondary))),
+                  )
+                else
                 Expanded(
                   child: ListView.builder(
                     padding: const EdgeInsets.all(16),
@@ -106,7 +133,7 @@ class _MediaLibraryScreenState extends State<MediaLibraryScreen> {
                                     borderRadius: BorderRadius.circular(12),
                                   ),
                                   child: Icon(
-                                    isCurrent && _isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                                    isCurrent && _player.playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
                                     color: isCurrent ? EeccColors.primary : EeccColors.slate,
                                     size: 28,
                                   ),
@@ -134,7 +161,7 @@ class _MediaLibraryScreenState extends State<MediaLibraryScreen> {
                                 ),
                                 IconButton(
                                   icon: Icon(
-                                    isCurrent && _isPlaying
+                                    isCurrent && _player.playing
                                         ? Icons.pause_circle_filled_rounded
                                         : Icons.play_circle_fill_rounded,
                                     color: EeccColors.primary,
@@ -212,12 +239,15 @@ class _MediaLibraryScreenState extends State<MediaLibraryScreen> {
               ),
             ),
             IconButton(
-              icon: Icon(_isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded, color: Colors.white),
-              onPressed: () => setState(() => _isPlaying = !_isPlaying),
+              icon: Icon(_player.playing ? Icons.pause_rounded : Icons.play_arrow_rounded, color: Colors.white),
+              onPressed: () => _togglePlayPodcast(current),
             ),
             IconButton(
               icon: const Icon(Icons.close_rounded, color: Colors.white70),
-              onPressed: () => setState(() => _currentlyPlayingId = null),
+              onPressed: () async {
+                await _player.stop();
+                if (mounted) setState(() => _currentlyPlayingId = null);
+              },
             ),
           ],
         ),

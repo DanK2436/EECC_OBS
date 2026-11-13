@@ -152,6 +152,10 @@ jobs:
         working-directory: apps/tv_mobile
         run: flutter pub get
 
+      - name: Test EECC TV catalog
+        working-directory: apps/tv_mobile
+        run: flutter test
+
       - name: Patch Cached Gradle Plugins
         run: |
           find /home/runner/.pub-cache -name "build.gradle" -exec sed -i 's/flutter\.compileSdkVersion/35/g; s/flutter\.minSdkVersion/21/g; s/flutter\.targetSdkVersion/35/g' {} + || true

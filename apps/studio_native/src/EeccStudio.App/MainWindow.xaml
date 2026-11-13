@@ -72,7 +72,6 @@
                 <Setter Property="Foreground" Value="#F0F6FC"/>
                 <Setter Property="BorderBrush" Value="#253248"/>
                 <Setter Property="BorderThickness" Value="1"/>
-                <Setter Property="CornerRadius" Value="8"/>
                 <Setter Property="Padding" Value="12,8"/>
                 <Setter Property="Margin" Value="0,4"/>
                 <Setter Property="FontWeight" Value="SemiBold"/>

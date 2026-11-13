@@ -9,6 +9,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
+using EeccStudio.Broadcast;
 using EeccStudio.Core.Audio;
 using EeccStudio.Core.Models;
 using EeccStudio.Core.Network;
@@ -18,7 +19,7 @@ namespace EeccStudio
     public partial class MainWindow : Window
     {
         private readonly CameraServer _cameraServer;
-        private readonly AudioEngine _audioEngine;
+        private AudioEngine? _audioEngine;
         private readonly DispatcherTimer _clockTimer;
         private readonly ObservableCollection<StudioScene> _scenes;
 
@@ -27,6 +28,7 @@ namespace EeccStudio
         private bool _isStudioMode = true;
         private string _selectedPreviewSlot = "Cam-1";
         private string _selectedProgramSlot = "Cam-1";
+        private BroadcastSession? _broadcast;
         private int _framesThisWindow;
         private DateTime _fpsStamp = DateTime.UtcNow;
         private TimeSpan _prevCpu = TimeSpan.Zero;
@@ -140,6 +142,13 @@ namespace EeccStudio
 
         private void OnClockTick(object? sender, EventArgs e)
         {
+            if (_broadcast is { IsActive: true })
+            {
+                var summary = _broadcast.Latest.Summary;
+                if (!string.Equals(TxtLiveBadge.Text, summary, StringComparison.Ordinal))
+                    TxtLiveBadge.Text = summary;
+            }
+
             if (App.IsDemoMode)
             {
                 var example = (Brush)new BrushConverter().ConvertFrom("#2FE06A")!;
@@ -537,38 +546,50 @@ namespace EeccStudio
 
         #region Contrôles Streaming, Recording & Mode Studio
 
-        private void BtnToggleStream_Click(object sender, RoutedEventArgs e)
+        private async void BtnToggleStream_Click(object sender, RoutedEventArgs e)
         {
-            if (!_cameraServer.IsStreaming)
+            if (_broadcast is { IsActive: true } running)
             {
-                _cameraServer.StartStreaming();
-                BtnToggleStream.Content = "Arrêter le streaming";
+                var stopped = await running.StopAsync();
+                _broadcast = null;
+                ApplyBroadcastChrome(stopped);
+                return;
+            }
+
+            var dialog = new DiffusionWindow(_cameraServer, _audioEngine ?? new AudioEngine()) { Owner = this };
+            dialog.ShowDialog();
+            if (dialog.StartedSession is { IsActive: true } session)
+            {
+                _broadcast = session;
+                ApplyBroadcastChrome(session.Latest);
+            }
+        }
+
+        private void ApplyBroadcastChrome(BroadcastSnapshot snapshot)
+        {
+            if (snapshot.TvIsLive)
+            {
+                BtnToggleStream.Content = "■   Arrêter le streaming";
                 BtnToggleStream.Background = (Brush)new BrushConverter().ConvertFrom("#DC2626");
                 BtnToggleStream.Foreground = Brushes.White;
-
                 BadgeLiveIndicator.Background = (Brush)new BrushConverter().ConvertFrom("#DC2626");
-                TxtLiveBadge.Text = "DIFFUSION EN COURS (1080p60)";
+                TxtLiveBadge.Text = snapshot.Summary;
                 TxtLiveBadge.Foreground = Brushes.White;
-
                 PgmOnAirPill.Visibility = Visibility.Visible;
-                TxtProgramLiveFooter.Text = "Diffusion en cours...";
-                TxtProgramStatusFooter.Text = "Diffusion active vers YouTube, Facebook & EECC TV";
+                TxtProgramLiveFooter.Text = snapshot.Summary;
+                TxtProgramStatusFooter.Text = snapshot.Summary;
+                return;
             }
-            else
-            {
-                _cameraServer.StopStreaming();
-                BtnToggleStream.Content = "Démarrer le streaming";
-                BtnToggleStream.Background = (Brush)new BrushConverter().ConvertFrom("#21262D");
-                BtnToggleStream.Foreground = (Brush)new BrushConverter().ConvertFrom("#F0F6FC");
 
-                BadgeLiveIndicator.Background = (Brush)new BrushConverter().ConvertFrom("#21262D");
-                TxtLiveBadge.Text = "HORS LIGNE";
-                TxtLiveBadge.Foreground = (Brush)new BrushConverter().ConvertFrom("#8B949E");
-
-                PgmOnAirPill.Visibility = Visibility.Collapsed;
-                TxtProgramLiveFooter.Text = "En attente";
-                TxtProgramStatusFooter.Text = "Signal en attente — Prêt pour diffusion";
-            }
+            BtnToggleStream.Content = "▶   Démarrer le Streaming";
+            BtnToggleStream.Background = (Brush)new BrushConverter().ConvertFrom("#1877F2");
+            BtnToggleStream.Foreground = Brushes.White;
+            BadgeLiveIndicator.Background = (Brush)new BrushConverter().ConvertFrom("#21262D");
+            TxtLiveBadge.Text = "HORS LIGNE";
+            TxtLiveBadge.Foreground = (Brush)new BrushConverter().ConvertFrom("#8B949E");
+            PgmOnAirPill.Visibility = Visibility.Collapsed;
+            TxtProgramLiveFooter.Text = "En attente";
+            TxtProgramStatusFooter.Text = "Signal en attente";
         }
 
         private void BtnToggleRecord_Click(object sender, RoutedEventArgs e)
@@ -648,7 +669,7 @@ namespace EeccStudio
 
         private void AudioSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
-            // Fader Audio Interactif
+            _audioEngine?.SetVolume("master", (float)(e.NewValue / 100.0));
         }
 
         #endregion

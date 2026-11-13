@@ -57,23 +57,12 @@
                             </StackPanel>
                         </GroupBox>
 
-                        <GroupBox Header="Diffusion Externe RTMP (YouTube, Facebook, Restream)" Foreground="#F4F6F8" BorderBrush="#22262B" Padding="12">
+                        <GroupBox Header="Choix au démarrage du direct" Foreground="#F4F6F8" BorderBrush="#22262B" Padding="12">
                             <StackPanel>
-                                <TextBlock Text="Service de diffusion :" Foreground="#C5CCD3" FontSize="12" Margin="0,0,0,4"/>
-                                <ComboBox x:Name="CmbRtmpService" Background="#2A2E33" Foreground="#F4F6F8" Margin="0,0,0,10" SelectionChanged="CmbRtmpService_SelectionChanged">
-                                    <ComboBoxItem Content="YouTube — RTMPS" IsSelected="True"/>
-                                    <ComboBoxItem Content="Facebook Live"/>
-                                    <ComboBoxItem Content="Restream.io"/>
-                                    <ComboBoxItem Content="Serveur RTMP Personnalisé"/>
-                                </ComboBox>
-
-                                <TextBlock Text="URL du serveur d'ingestion :" Foreground="#C5CCD3" FontSize="12" Margin="0,0,0,4"/>
-                                <TextBox x:Name="TxtRtmpServer" Text="rtmp://a.rtmp.youtube.com/live2" Background="#2A2E33" Foreground="#FFFFFF" BorderBrush="#22262B" Padding="8,6" Margin="0,0,0,10"/>
-
-                                <TextBlock Text="Clé de flux (Stream Key) :" Foreground="#C5CCD3" FontSize="12" Margin="0,0,0,4"/>
-                                <PasswordBox x:Name="TxtStreamKey" Password="" Background="#2A2E33" Foreground="#FFFFFF" BorderBrush="#22262B" Padding="8,6" Margin="0,0,0,10"/>
-
-                                <TextBlock Text="Débit vidéo recommandé : 5500 kbps (1080p60) ou 3500 kbps (720p60)" Foreground="#C5CCD3" FontSize="11"/>
+                                <TextBlock TextWrapping="Wrap" Foreground="#F4F6F8" FontSize="12"
+                                           Text="Le bouton Démarrer le streaming demande un des trois modes : EECC TV seule ; EECC TV et une plateforme externe ; EECC TV et au moins trois plateformes externes. EECC TV reste toujours une destination. L'image et le bus audio suivent le programme."/>
+                                <TextBlock TextWrapping="Wrap" Foreground="#C5CCD3" FontSize="11" Margin="0,8,0,0"
+                                           Text="Les clés de flux se saisissent au démarrage et restent hors du profil lisible. YouTube, Facebook et TikTok ne sont pas marqués prêts : leur accès réel n'est pas vérifié par cette installation."/>
                             </StackPanel>
                         </GroupBox>
                     </StackPanel>

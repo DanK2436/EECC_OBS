@@ -856,7 +856,7 @@ public sealed class CameraServer : IDisposable
                 ["title"] = ProgramTitle,
                 ["speaker"] = Speaker,
                 ["active_scene"] = ActiveSceneName,
-                ["live_stream_url"] = lan.Length == 0 ? null : $"http://{lan}:{ListeningPort}/live/stream",
+                ["live_stream_url"] = $"http://{(lan.Length == 0 ? "127.0.0.1" : lan)}:{ListeningPort}/live/stream",
                 ["lan_addresses"] = ListLanAddresses(),
                 ["lan_error"] = lan.Length == 0 ? "Aucune adresse IPv4 privée utilisable. Le QR n'est pas affiché." : null,
                 ["phones_connected"] = connected.Count,
@@ -876,7 +876,7 @@ public sealed class CameraServer : IDisposable
 
         if (cleanPath is "/live/frame.jpg" or "/frame.jpg")
         {
-            var frame = ActiveProgramFrameBytes;
+            var frame = IsStreaming ? ActiveProgramFrameBytes : null;
             if (frame == null)
             {
                 await WriteJsonAsync(stream, new Dictionary<string, string>
@@ -912,8 +912,18 @@ public sealed class CameraServer : IDisposable
 
         if (cleanPath == "/live/stream")
         {
+            if (!IsStreaming)
+            {
+                await WriteJsonAsync(stream, new Dictionary<string, string>
+                {
+                    ["error"] = "hors_antenne",
+                    ["message"] = "EECC TV n'est pas en direct.",
+                }, cancellationToken, statusCode: 404);
+                return;
+            }
+
             await WriteAsciiAsync(stream, "HTTP/1.1 200 OK\r\nContent-Type: multipart/x-mixed-replace; boundary=--eecc_boundary_frame\r\nAccess-Control-Allow-Origin: *\r\nCache-Control: no-cache, no-store\r\n\r\n", cancellationToken);
-            while (!cancellationToken.IsCancellationRequested && _isRunning)
+            while (!cancellationToken.IsCancellationRequested && _isRunning && IsStreaming)
             {
                 var frame = ActiveProgramFrameBytes;
                 if (frame != null)

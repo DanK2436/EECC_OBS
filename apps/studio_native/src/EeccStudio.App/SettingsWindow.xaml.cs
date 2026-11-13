@@ -1,7 +1,6 @@
 using System;
 using System.IO;
 using System.Windows;
-using System.Windows.Controls;
 using EeccStudio.Core.Network;
 
 namespace EeccStudio
@@ -30,29 +29,6 @@ namespace EeccStudio
 
             var defaultVideoDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyVideos), "EECC_Enregistrements");
             TxtRecordPath.Text = defaultVideoDir;
-        }
-
-        private void CmbRtmpService_SelectionChanged(object sender, SelectionChangedEventArgs e)
-        {
-            if (TxtRtmpServer == null) return;
-
-            var selected = (CmbRtmpService.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "";
-            if (selected.Contains("YouTube"))
-            {
-                TxtRtmpServer.Text = "rtmp://a.rtmp.youtube.com/live2";
-            }
-            else if (selected.Contains("Facebook"))
-            {
-                TxtRtmpServer.Text = "rtmps://live-api-s.facebook.com:443/rtmp/";
-            }
-            else if (selected.Contains("Restream"))
-            {
-                TxtRtmpServer.Text = "rtmp://live.restream.io/live";
-            }
-            else
-            {
-                TxtRtmpServer.Text = "rtmp://";
-            }
         }
 
         private void BtnBrowseRecord_Click(object sender, RoutedEventArgs e)

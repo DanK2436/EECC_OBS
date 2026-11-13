@@ -21,6 +21,7 @@ public sealed class StudioLinkController : IAsyncDisposable
 
     public event Action<string>? StatusChanged;
     public event Action<DecodedVideoFrame>? VideoFrame;
+    public event Action<short[]>? PcmDecoded;
 
     public int? ListeningPort => _server?.Port;
     public string? ActiveLanIp { get; private set; }
@@ -197,6 +198,7 @@ public sealed class StudioLinkController : IAsyncDisposable
         _media = session;
         session.StatusChanged += text => StatusChanged?.Invoke(text);
         session.VideoFrameDecoded += frame => VideoFrame?.Invoke(frame);
+        session.PcmDecoded += pcm => PcmDecoded?.Invoke(pcm);
         session.LocalIceCandidateJson += json =>
         {
             if (_server != null) _ = _server.SendAsync(json);

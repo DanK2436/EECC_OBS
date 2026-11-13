@@ -69,7 +69,9 @@
                         <MenuItem Header="Plein écran et projecteurs (non branchés)" IsEnabled="False"/>
                     </MenuItem>
                     <MenuItem Header="Collection de scènes">
-                        <MenuItem Header="Les scènes affichées ne commandent pas le flux" IsEnabled="False"/>
+                        <MenuItem Header="Nouvelle scène caméra" Click="MenuNewCameraScene_Click"/>
+                        <MenuItem Header="Nouvelle scène fond" Click="MenuNewColorScene_Click"/>
+                        <MenuItem Header="Supprimer la scène d'aperçu" Click="MenuDeleteScene_Click"/>
                     </MenuItem>
                     <MenuItem Header="Profils">
                         <MenuItem Header="Aucun profil n'est enregistré" IsEnabled="False"/>
@@ -79,8 +81,10 @@
                         <MenuItem Header="Tally programme" Click="BtnTallyProgram_Click"/>
                         <MenuItem Header="Tally attente" Click="BtnTallyStandby_Click"/>
                         <Separator/>
-                        <MenuItem Header="Enregistrement (non branché)" IsEnabled="False"/>
-                        <MenuItem Header="Diffusion externe (non branchée)" IsEnabled="False"/>
+                        <MenuItem Header="Démarrer l'enregistrement" Click="MenuRecordStart_Click"/>
+                        <MenuItem Header="Arrêter et finaliser l'enregistrement" Click="MenuRecordStop_Click"/>
+                        <MenuItem Header="Démarrer la diffusion RTMP locale" Click="MenuStreamStart_Click"/>
+                        <MenuItem Header="Arrêter la diffusion" Click="MenuStreamStop_Click"/>
                     </MenuItem>
                     <MenuItem Header="Aide" Click="MenuHelp_Click"/>
                 </Menu>
@@ -106,17 +110,20 @@
 
             <!-- Boutons de Transition Centraux (Cut & Fade) -->
             <StackPanel Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Center">
-                <Button x:Name="BtnTransition" Content="TALLY ANTENNE" Background="#DC2626" Foreground="#FFFFFF" FontWeight="Black" Padding="8,8" Margin="0,4" BorderThickness="0" Click="BtnTallyProgram_Click"/>
+                <Button x:Name="BtnCut" Content="COUPER" Background="#DC2626" Foreground="#FFFFFF" FontWeight="Black" Padding="8,8" Margin="0,4" BorderThickness="0" Click="BtnCut_Click"/>
+                <Button x:Name="BtnTransition" Content="TALLY ANTENNE" Background="#7F1D1D" Foreground="#FFFFFF" FontWeight="Black" Padding="8,8" Margin="0,4" BorderThickness="0" Click="BtnTallyProgram_Click"/>
                 <Button Content="TALLY APERÇU" Background="#15803D" Foreground="#FFFFFF" FontWeight="Bold" Padding="8,6" Margin="0,4" BorderThickness="0" Click="BtnTallyPreview_Click"/>
                 <Button Content="TALLY ATTENTE" Background="#21262D" Foreground="#F0F6FC" FontWeight="Bold" Padding="8,6" Margin="0,4" BorderBrush="#30363D" Click="BtnTallyStandby_Click"/>
-                <TextBlock Text="Le tally est envoyé au téléphone. Il ne commute pas l'image programme." Foreground="#8B949E" FontSize="10" TextWrapping="Wrap" TextAlignment="Center" Width="100" Margin="0,6,0,0"/>
+                <Button Content="FONDU" Background="#21262D" Foreground="#F0F6FC" FontWeight="Bold" Padding="8,6" Margin="0,4" BorderBrush="#30363D" Click="BtnDissolve_Click"/>
+                <TextBlock Text="Couper et fondu changent l'image programme. Le tally reste un signal séparé." Foreground="#8B949E" FontSize="10" TextWrapping="Wrap" TextAlignment="Center" Width="100" Margin="0,6,0,0"/>
             </StackPanel>
 
             <!-- Moniteur Droit : PROGRAMME DIRECT (Program - Rouge #DC2626) -->
             <Border Grid.Column="2" Background="#0D1117" BorderBrush="#DC2626" BorderThickness="2" CornerRadius="8">
                 <Grid>
-                    <TextBlock Text="PROGRAMME (À L'ANTENNE)" Foreground="#DC2626" FontWeight="Bold" FontSize="12" Margin="12,10" HorizontalAlignment="Left" VerticalAlignment="Top"/>
-                    <TextBlock x:Name="ProgramStatus" Text="Sortie programme non branchée. Le mixage, l'enregistrement et la diffusion externe ne sont pas réalisés. Le tally Programme indique seulement l'état au téléphone." Foreground="#F0F6FC" FontSize="13" TextWrapping="Wrap" Margin="16" HorizontalAlignment="Center" VerticalAlignment="Center" TextAlignment="Center"/>
+                    <Image x:Name="ProgramImage" Stretch="Uniform" Margin="8"/>
+                    <TextBlock x:Name="ProgramStatus" Text="Programme distinct de l'aperçu. Couper pour l'y envoyer." Foreground="#F0F6FC" FontSize="13" TextWrapping="Wrap" Margin="16" HorizontalAlignment="Center" VerticalAlignment="Center" TextAlignment="Center"/>
+                    <TextBlock Text="PROGRAMME" Foreground="#DC2626" FontWeight="Bold" FontSize="12" Margin="12,10" HorizontalAlignment="Left" VerticalAlignment="Top"/>
                 </Grid>
             </Border>
         </Grid>
@@ -132,25 +139,20 @@
                 </Grid.ColumnDefinitions>
 
                 <!-- DOCK 1 : SCÈNES -->
-                <GroupBox Grid.Column="0" Header="Scènes (liste non branchée)" Foreground="#F0F6FC" BorderBrush="#30363D" Margin="4">
-                    <ListBox Background="#0D1117" Foreground="#F0F6FC" BorderThickness="0" Margin="4">
-                        <ListBoxItem IsSelected="True" Content="• Culte — Prédication (Direct)"/>
-                        <ListBoxItem Content="• Culte — Louange &amp; Chœur"/>
-                        <ListBoxItem Content="• Orateur + Diapositive (Split)"/>
-                        <ListBoxItem Content="• Plein Écran Présentation"/>
-                        <ListBoxItem Content="• Attente Avant Culte"/>
-                    </ListBox>
+                <GroupBox Grid.Column="0" Header="Scènes" Foreground="#F0F6FC" BorderBrush="#30363D" Margin="4">
+                    <DockPanel>
+                        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="4">
+                            <Button Content="+" Padding="8,2" Margin="0,0,4,0" Click="MenuNewCameraScene_Click"/>
+                            <Button Content="Fond" Padding="8,2" Margin="0,0,4,0" Click="MenuNewColorScene_Click"/>
+                            <Button Content="Suppr." Padding="8,2" Click="MenuDeleteScene_Click"/>
+                        </StackPanel>
+                        <ListBox x:Name="SceneList" Background="#0D1117" Foreground="#F0F6FC" BorderThickness="0" Margin="4" SelectionChanged="SceneList_SelectionChanged"/>
+                    </DockPanel>
                 </GroupBox>
 
                 <!-- DOCK 2 : SOURCES -->
-                <GroupBox Grid.Column="1" Header="Sources (liste non branchée)" Foreground="#F0F6FC" BorderBrush="#30363D" Margin="4">
-                    <ListBox Background="#0D1117" Foreground="#F0F6FC" BorderThickness="0" Margin="4">
-                        <ListBoxItem Content="[Caméra] EECC Caméra 1 (Mobile sans fil)"/>
-                        <ListBoxItem Content="[Caméra] Caméra Fixe Autel (HDMI Capture)"/>
-                        <ListBoxItem Content="[Capture] Diapositives PowerPoint / Écran"/>
-                        <ListBoxItem Content="[Audio] Micro HF Pasteur"/>
-                        <ListBoxItem Content="[Overlay] Bandeau Titre Prédicateur"/>
-                    </ListBox>
+                <GroupBox Grid.Column="1" Header="Source de la scène" Foreground="#F0F6FC" BorderBrush="#30363D" Margin="4">
+                    <TextBlock x:Name="SourceText" Margin="8" TextWrapping="Wrap" Foreground="#F0F6FC" Text="Caméra EECC reçue, ou fond de couleur généré. HDMI, diapositives et overlay ne sont pas disponibles."/>
                 </GroupBox>
 
                 <!-- DOCK 3 : MIXEUR AUDIO PRO (Paliers solides stricts Vert/Jaune/Rouge) -->
@@ -192,10 +194,11 @@
                 <!-- DOCK 4 : COMMANDES DE DIFFUSION -->
                 <GroupBox Grid.Column="3" Header="Commandes" Foreground="#F0F6FC" BorderBrush="#30363D" Margin="4">
                     <StackPanel Margin="4">
-                        <Button Content="Diffusion externe (non branchée)" Tag="La diffusion vers un service externe n'est pas branchée." Background="#21262D" Foreground="#F0F6FC" Padding="8,6" Margin="0,2" BorderBrush="#30363D" Click="BtnUnwired_Click"/>
-                        <Button Content="Enregistrement (non branché)" Tag="L'enregistrement n'est pas branché." Background="#21262D" Foreground="#F0F6FC" Padding="8,5" Margin="0,2" BorderBrush="#30363D" Click="BtnUnwired_Click"/>
-                        <Button Content="Mode Studio" Tag="Le double moniteur est affiché. La commutation programme n'est pas branchée." Background="#21262D" Foreground="#F0F6FC" FontWeight="SemiBold" Padding="8,5" Margin="0,2" BorderBrush="#30363D" Click="BtnUnwired_Click"/>
-                        <Button Content="Paramètres" Tag="Aucun réglage supplémentaire n'est branché." Background="#21262D" Foreground="#F0F6FC" Padding="8,5" Margin="0,2" BorderBrush="#30363D" Click="BtnUnwired_Click"/>
+                        <Button Content="Enregistrer le programme" Click="MenuRecordStart_Click" Background="#21262D" Foreground="#F0F6FC" Padding="8,6" Margin="0,2" BorderBrush="#30363D"/>
+                        <Button Content="Finaliser l'enregistrement" Click="MenuRecordStop_Click" Background="#21262D" Foreground="#F0F6FC" Padding="8,5" Margin="0,2" BorderBrush="#30363D"/>
+                        <Button Content="Diffuser vers RTMP" Click="MenuStreamStart_Click" Background="#21262D" Foreground="#F0F6FC" Padding="8,5" Margin="0,2" BorderBrush="#30363D"/>
+                        <Button Content="Arrêter la diffusion" Click="MenuStreamStop_Click" Background="#21262D" Foreground="#F0F6FC" Padding="8,5" Margin="0,2" BorderBrush="#30363D"/>
+                        <Button Content="Paramètres" Tag="Le mixage, le plein écran et les profils ne sont pas branchés." Background="#21262D" Foreground="#F0F6FC" Padding="8,5" Margin="0,2" BorderBrush="#30363D" Click="BtnUnwired_Click"/>
                     </StackPanel>
                 </GroupBox>
             </Grid>

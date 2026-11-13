@@ -53,6 +53,10 @@ void main() {
       throwsFormatException,
     );
     expect(
+      PairingPayload.parse(qr(token: 'sess_Aaaaaaaaaaaaaaaaa'), now: DateTime.utc(2026, 1, 1)).token,
+      'sess_Aaaaaaaaaaaaaaaaa',
+    );
+    expect(
       () => PairingPayload.parse(qr(ip: '8.8.8.8'), now: DateTime.utc(2026, 1, 1)),
       throwsFormatException,
     );

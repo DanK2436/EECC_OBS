@@ -13,6 +13,7 @@ class StudioSessionConfig {
   final String studioName;
   final String displayName;
   final DateTime expiresAt;
+  final String path;
   final String codec;
   final int bitrateKbps;
   final int fps;
@@ -24,12 +25,13 @@ class StudioSessionConfig {
     required this.studioName,
     required this.displayName,
     required this.expiresAt,
+    this.path = '/camera/control',
     this.codec = 'jpeg_stream',
     this.bitrateKbps = 4500,
     this.fps = 15,
   });
 
-  String get controlWebSocketUrl => 'ws://$studioIp:$port/camera/control';
+  String get controlWebSocketUrl => 'ws://$studioIp:$port$path';
 
   factory StudioSessionConfig.parseQr(String raw, {DateTime? now}) {
     final payload = PairingPayload.parse(raw, now: now);
@@ -40,6 +42,7 @@ class StudioSessionConfig {
       studioName: payload.studioName,
       displayName: 'Téléphone',
       expiresAt: payload.expiresAt,
+      path: payload.path,
     );
   }
 
@@ -53,6 +56,7 @@ class StudioSessionConfig {
       studioName: studioName,
       displayName: safe,
       expiresAt: expiresAt,
+      path: path,
       codec: codec,
       bitrateKbps: bitrateKbps,
       fps: fps,

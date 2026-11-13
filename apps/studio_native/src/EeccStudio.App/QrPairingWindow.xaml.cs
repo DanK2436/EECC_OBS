@@ -12,8 +12,9 @@ namespace EeccStudio;
 public partial class QrPairingWindow : Window
 {
     private readonly CameraServer _server;
+    private readonly PairingBoard _board = new();
     private readonly DispatcherTimer _timer;
-    private PairingTicket? _ticket;
+    private readonly ShownQr _shownQr = new();
     private bool _loading = true;
 
     public QrPairingWindow(CameraServer server)
@@ -23,7 +24,7 @@ public partial class QrPairingWindow : Window
         _server.OnCameraConnected += OnPhonesChanged;
         _server.OnCameraDisconnected += OnPhoneGone;
         _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
-        _timer.Tick += (_, _) => RefreshCountdown();
+        _timer.Tick += (_, _) => ApplyDisplay();
         Loaded += (_, _) => LoadAddresses();
     }
 
@@ -45,66 +46,38 @@ public partial class QrPairingWindow : Window
 
         CmbLan.SelectedIndex = 0;
         _loading = false;
-        IssueTicket();
+        ApplyDisplay();
         _timer.Start();
     }
 
-    private void IssueTicket()
+    private void ApplyDisplay()
     {
-        if (_ticket != null && !_ticket.Consumed)
-            _server.RevokePairingTicket(_ticket.Token);
-        _ticket = null;
-        ImgQrCode.Source = null;
-
+        RefreshPhones();
         if (!_server.IsRunning)
         {
             ShowUnavailable(_server.StartError ?? "Le serveur d'appairage n'écoute pas.");
             return;
         }
 
-        var address = CmbLan.SelectedItem as string;
-        if (string.IsNullOrWhiteSpace(address))
-        {
-            ShowUnavailable("Choisissez une adresse privée du Studio.");
-            return;
-        }
-
+        PairingDisplay display;
         try
         {
-            _ticket = _server.IssuePairingTicket(_server.StudioName, address);
-            ImgQrCode.Source = QrCodeGenerator.GenerateQrCode(_ticket.ToQrJson(), 260);
-            TxtError.Text = string.Empty;
-            RefreshCountdown();
-            RefreshPhones();
+            display = _board.Refresh(_server, CmbLan.SelectedItem as string);
         }
         catch (Exception ex)
         {
             ShowUnavailable(ex.Message);
-        }
-    }
-
-    private void RefreshCountdown()
-    {
-        RefreshPhones();
-        if (_ticket == null)
-            return;
-        if (_ticket.Consumed)
-        {
-            IssueTicket();
             return;
         }
 
-        var left = _ticket.ExpiresAt - _server.Clock();
-        if (left <= TimeSpan.Zero)
-        {
-            TxtCountdown.Text = "QR expiré — renouvellement";
-            IssueTicket();
+        TxtCountdown.Text = display.Message;
+        TxtServerStatus.Text = display.ShowsQr
+            ? "Le QR change après chaque téléphone validé. Un simple affichage ne consomme pas le jeton. Le même Wi-Fi ne garantit pas que le port soit joignable."
+            : string.Empty;
+        TxtError.Text = display.ShowsQr ? string.Empty : display.Message;
+        if (!_shownQr.Apply(display.QrJson))
             return;
-        }
-
-        TxtCountdown.Text = $"Valable encore {(int)left.TotalMinutes:00}:{left.Seconds:00} · usage unique";
-        TxtServerStatus.Text =
-            $"ws://{_ticket.LanIpv4}:{_ticket.Port}/camera/control · Être sur le même Wi-Fi ne suffit pas si le pare-feu ou l'isolation du point d'accès bloque le port.";
+        ImgQrCode.Source = display.QrJson == null ? null : QrCodeGenerator.GenerateQrCode(display.QrJson);
     }
 
     private void RefreshPhones()
@@ -136,24 +109,29 @@ public partial class QrPairingWindow : Window
         TxtCountdown.Text = string.Empty;
         TxtServerStatus.Text = string.Empty;
         ImgQrCode.Source = null;
+        _shownQr.Apply(null);
         TxtPhones.Text = "Aucun QR tant que le serveur et une adresse privée ne sont pas disponibles.";
     }
 
-    private void OnPhonesChanged(CameraClient _) => Dispatcher.Invoke(RefreshCountdown);
-    private void OnPhoneGone(string _) => Dispatcher.Invoke(RefreshPhones);
+    private void OnPhonesChanged(CameraClient _) => Dispatcher.Invoke(ApplyDisplay);
+    private void OnPhoneGone(string _) => Dispatcher.Invoke(ApplyDisplay);
 
     private void CmbLan_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (_loading || !IsLoaded)
             return;
-        IssueTicket();
+        ApplyDisplay();
     }
 
-    private void BtnRenew_Click(object sender, RoutedEventArgs e) => IssueTicket();
+    private void BtnRenew_Click(object sender, RoutedEventArgs e)
+    {
+        _board.RequestReplacement();
+        ApplyDisplay();
+    }
 
     private void BtnCopy_Click(object sender, RoutedEventArgs e)
     {
-        if (_ticket == null || _ticket.Consumed)
+        if (string.IsNullOrEmpty(_shownQr.Json))
         {
             TxtError.Text = "Aucun code valable à copier.";
             return;
@@ -161,7 +139,7 @@ public partial class QrPairingWindow : Window
 
         try
         {
-            Clipboard.SetText(_ticket.ToQrJson());
+            Clipboard.SetText(_shownQr.Json);
             TxtError.Text = "Code temporaire copié. Il expire et ne sert qu'une fois.";
         }
         catch (Exception ex)
@@ -177,8 +155,7 @@ public partial class QrPairingWindow : Window
         _timer.Stop();
         _server.OnCameraConnected -= OnPhonesChanged;
         _server.OnCameraDisconnected -= OnPhoneGone;
-        if (_ticket != null && !_ticket.Consumed)
-            _server.RevokePairingTicket(_ticket.Token);
+        _board.Refresh(_server, null);
         base.OnClosed(e);
     }
 }

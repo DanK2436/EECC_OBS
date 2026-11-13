@@ -8,6 +8,7 @@ class PairingPayload {
   final String token;
   final DateTime expiresAt;
   final String transport;
+  final String path;
 
   const PairingPayload({
     required this.version,
@@ -17,6 +18,7 @@ class PairingPayload {
     required this.token,
     required this.expiresAt,
     required this.transport,
+    required this.path,
   });
 
   static const rejectedTokens = {
@@ -71,6 +73,11 @@ class PairingPayload {
       throw const FormatException('Jeton refusé. Scannez le QR affiché maintenant dans EECC Studio.');
     }
 
+    final path = data['path'];
+    if (path is! String || path != '/camera/control') {
+      throw const FormatException('Le chemin du QR n\'est pas /camera/control.');
+    }
+
     final exp = data['exp'];
     if (exp is! int) {
       throw const FormatException('La date d\'expiration du QR manque.');
@@ -89,13 +96,14 @@ class PairingPayload {
       token: token,
       expiresAt: expiresAt,
       transport: 'ws-jpeg',
+      path: path,
     );
   }
 
   static bool isAcceptableToken(String token) {
-    if (rejectedTokens.contains(token) || token.startsWith('demo') || token.startsWith('sess_')) {
-      return false;
-    }
+    if (rejectedTokens.contains(token)) return false;
+    // Ancien bouton de démonstration et ancien jeton sess_<heure>, pas un jeton aléatoire.
+    if (token.startsWith('demo_token') || RegExp(r'^sess_\d+$').hasMatch(token)) return false;
     return RegExp(r'^[A-Za-z0-9_-]{22,128}$').hasMatch(token);
   }
 

@@ -31,7 +31,9 @@
         </StackPanel>
 
         <Border Grid.Row="3" Background="#FFFFFF" CornerRadius="16" Padding="12" HorizontalAlignment="Center" Margin="0,4,0,8">
-            <Image x:Name="ImgQrCode" Width="260" Height="260" Stretch="Uniform"/>
+            <Image x:Name="ImgQrCode" Width="280" Height="280" Stretch="Uniform"
+                   SnapsToDevicePixels="True" UseLayoutRounding="True"
+                   RenderOptions.BitmapScalingMode="NearestNeighbor"/>
         </Border>
 
         <StackPanel Grid.Row="4" Margin="0,0,0,8">

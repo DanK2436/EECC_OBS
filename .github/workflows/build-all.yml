@@ -194,6 +194,11 @@ jobs:
           channel: 'stable'
           cache: true
 
+      - name: Setup .NET 8 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
       - name: Flutter Pub Get
         working-directory: apps/camera_mobile
         run: flutter pub get

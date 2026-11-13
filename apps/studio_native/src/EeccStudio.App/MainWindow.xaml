@@ -305,13 +305,12 @@
                 <Border x:Name="BorderPreview" Grid.Column="0" Background="#000000" BorderBrush="#00E676" BorderThickness="2" CornerRadius="10" ClipToBounds="True">
                     <Grid>
                         <!-- Image Sanctuaire Église Réelle (Arrière-Plan Haute Définition) -->
-                        <Image Source="Assets/church_stage.jpg" Stretch="UniformToFill" HorizontalAlignment="Center" VerticalAlignment="Center" Opacity="0.95"/>
+                        <Image Source="Assets/church_stage.jpg" Stretch="UniformToFill" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed"/>
 
-                        <!-- Flux Vidéo Matériel Réel Caméra Smartphone / USB -->
                         <Image x:Name="ImgPreviewVideo" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"/>
 
-                        <!-- Mire Slate de Secours -->
-                        <Grid x:Name="PanelPreviewSlate" Visibility="Collapsed">
+                        <Grid x:Name="PanelPreviewSlate">
+                            <TextBlock x:Name="TxtPreviewEmpty" Text="Aucune image de téléphone reçue." Foreground="#9CA3AF" FontSize="16" HorizontalAlignment="Center" VerticalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap" Margin="24"/>
                             <TextBlock x:Name="TxtPreviewMain" Visibility="Collapsed"/>
                             <TextBlock x:Name="TxtPreviewOverlay" Visibility="Collapsed"/>
                         </Grid>
@@ -383,13 +382,12 @@
                 <Border Grid.Column="2" Background="#000000" BorderBrush="#FF1744" BorderThickness="2" CornerRadius="10" ClipToBounds="True">
                     <Grid>
                         <!-- Image Sanctuaire Église Réelle (Arrière-Plan Haute Définition) -->
-                        <Image Source="Assets/church_stage.jpg" Stretch="UniformToFill" HorizontalAlignment="Center" VerticalAlignment="Center" Opacity="0.95"/>
+                        <Image Source="Assets/church_stage.jpg" Stretch="UniformToFill" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed"/>
 
-                        <!-- Flux Vidéo Matériel Réel Programme Diffusé -->
                         <Image x:Name="ImgProgramVideo" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"/>
 
-                        <!-- Mire Slate Programme de Secours -->
-                        <Grid x:Name="PanelProgramSlate" Visibility="Collapsed">
+                        <Grid x:Name="PanelProgramSlate">
+                            <TextBlock x:Name="TxtProgramEmpty" Text="Aucune image à l'antenne." Foreground="#9CA3AF" FontSize="16" HorizontalAlignment="Center" VerticalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap" Margin="24"/>
                             <TextBlock x:Name="TxtProgramSceneName" Visibility="Collapsed"/>
                             <TextBlock x:Name="TxtProgramMain" Visibility="Collapsed"/>
                             <TextBlock x:Name="TxtProgramSub" Visibility="Collapsed"/>
@@ -412,9 +410,9 @@
                         <Border Background="#D00A0E17" VerticalAlignment="Bottom" HorizontalAlignment="Stretch" Margin="12,0,12,14" CornerRadius="8" Padding="14,8" BorderBrush="#3B1820" BorderThickness="1">
                             <DockPanel LastChildFill="True">
                                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                    <TextBlock Text="((📡)) Diffusion en cours..." Foreground="#FFFFFF" FontWeight="Bold" FontSize="12"/>
+                                    <TextBlock x:Name="TxtProgramBanner" Text="Aucune image à l'antenne" Foreground="#FFFFFF" FontWeight="Bold" FontSize="12"/>
                                 </StackPanel>
-                                <TextBlock x:Name="TxtProgramDetails" Text="00:12:34" Foreground="#FFFFFF" FontSize="13" FontWeight="Black" FontFamily="Consolas" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                                <TextBlock x:Name="TxtProgramDetails" Text="hors antenne" Foreground="#FFFFFF" FontSize="13" FontWeight="Black" FontFamily="Consolas" HorizontalAlignment="Right" VerticalAlignment="Center"/>
                             </DockPanel>
                         </Border>
                     </Grid>

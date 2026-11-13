@@ -2,6 +2,8 @@ using System;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
+using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -45,12 +47,18 @@ namespace EeccStudio
 
             if (_scenes.Count > 0)
             {
-                _programScene = _scenes[0]; // Culte Principal en Antenne
-                _previewScene = _scenes[0]; // Culte Principal en Préparation
+                _programScene = _scenes[0];
+                _previewScene = _scenes[0];
                 ListScenes.SelectedIndex = 0;
                 ListSources.ItemsSource = _scenes[0].Sources;
                 UpdatePreviewDisplay();
                 UpdateProgramDisplay();
+            }
+
+            foreach (var scene in _scenes)
+            {
+                foreach (var source in scene.Sources.Where(source => source.Type == SourceType.PhysicalCamera))
+                    _cameraServer.RegisterPhysicalCamera(source.Id, source.Name);
             }
 
             // 3. Minuteur Broadcast temps réel (Status, LIVE, REC, CPU)
@@ -65,7 +73,9 @@ namespace EeccStudio
         private void UpdateNetworkStatusDisplay()
         {
             var localIp = _cameraServer.GetLocalIpAddress();
-            TxtLanBroadcastStatus.Text = $"LAN : http://{localIp}:{_cameraServer.Port}/live";
+            TxtLanBroadcastStatus.Text = localIp.Length == 0
+                ? "LAN : aucune adresse privée utilisable"
+                : $"LAN : {localIp}:{_cameraServer.ListeningPort}";
         }
 
         private void OnLoaded(object sender, RoutedEventArgs e)
@@ -126,9 +136,9 @@ namespace EeccStudio
             }
             else
             {
-                TxtStatusLive.Text = "LIVE  00:12:34";
+                TxtStatusLive.Text = "HORS ANTENNE";
                 TxtStatusLive.Foreground = (Brush)new BrushConverter().ConvertFrom("#FFFFFF");
-                TxtProgramDetails.Text = "00:12:34";
+                TxtProgramDetails.Text = "hors antenne";
             }
 
             // Mise à jour du timer d'enregistrement (REC)
@@ -144,17 +154,21 @@ namespace EeccStudio
                 TxtStatusRec.Foreground = (Brush)new BrushConverter().ConvertFrom("#8B949E");
             }
 
-            // CPU dynamique réaliste
-            var random = new Random();
-            double cpu = 4.2 + (random.NextDouble() * 1.1);
-            TxtStatusCpu.Text = $"CPU: {cpu:F1}%";
+            TxtStatusCpu.Text = "CPU: non mesuré";
+            TxtCameraStatusFooter.Text =
+                $"Téléphones {_cameraServer.ConnectedPhoneCount}/{CameraServer.MaxPhoneConnections}" +
+                $" · reconnexion {_cameraServer.ReservedPhoneCount}" +
+                $" · physiques {_cameraServer.PhysicalCameraCount} (non comptés)";
         }
 
         private void OnCameraConnected(CameraClient camera)
         {
             Dispatcher.Invoke(() =>
             {
-                TxtCameraStatusFooter.Text = $"Serveur Caméra Actif (Port {_cameraServer.Port}) — {_cameraServer.ConnectedCameras.Count}/15 Caméras ({camera.StreamName})";
+                EnsurePhoneSource(camera);
+                if (_selectedPreviewSlot == "Cam-1" && _cameraServer.GetCameraFrame("Cam-1") == null)
+                    _selectedPreviewSlot = camera.StreamName;
+                _ = PushTalliesAsync();
             });
         }
 
@@ -162,7 +176,19 @@ namespace EeccStudio
         {
             Dispatcher.Invoke(() =>
             {
-                TxtCameraStatusFooter.Text = $"Serveur Caméra Actif (Port {_cameraServer.Port}) — {_cameraServer.ConnectedCameras.Count}/15 Caméras";
+                foreach (var scene in _scenes)
+                {
+                    var source = scene.Sources.FirstOrDefault(item => item.Id == streamName);
+                    if (source != null)
+                        source.Details = "déconnecté — la session peut revenir pendant quelques secondes";
+                }
+
+                if (_selectedPreviewSlot == streamName && _cameraServer.GetCameraFrame(streamName) == null)
+                {
+                    ImgPreviewVideo.Source = null;
+                    PanelPreviewSlate.Visibility = Visibility.Visible;
+                    TxtPreviewEmpty.Text = $"{streamName} : connexion perdue. Aucune image.";
+                }
             });
         }
 
@@ -170,38 +196,30 @@ namespace EeccStudio
         {
             Dispatcher.Invoke(() =>
             {
+                BitmapImage? bitmap;
                 try
                 {
-                    var bitmap = new BitmapImage();
-                    using (var ms = new MemoryStream(jpegBytes))
-                    {
-                        bitmap.BeginInit();
-                        bitmap.CacheOption = BitmapCacheOption.OnLoad;
-                        bitmap.StreamSource = ms;
-                        bitmap.EndInit();
-                        bitmap.Freeze();
-                    }
-
-                    // Aperçu vidéo matériel réel
-                    if (slot == _selectedPreviewSlot || _cameraServer.ConnectedCameras.Count <= 1)
-                    {
-                        ImgPreviewVideo.Source = bitmap;
-                        PanelPreviewSlate.Visibility = Visibility.Collapsed;
-                    }
-
-                    // Programme vidéo matériel réel si à l'antenne sur cette scène
-                    if (_programScene != null && (_programScene.Name.Contains("Orateur") || _programScene.Name.Contains("Chœur") || _programScene.Name.Contains("Plan Large") || _programScene.Name.Contains("Caméra")))
-                    {
-                        if (slot == _selectedProgramSlot || _cameraServer.ConnectedCameras.Count <= 1)
-                        {
-                            ImgProgramVideo.Source = bitmap;
-                            PanelProgramSlate.Visibility = Visibility.Collapsed;
-                            _cameraServer.ActiveProgramFrameBytes = jpegBytes;
-                        }
-                    }
+                    bitmap = new BitmapImage();
+                    using var ms = new MemoryStream(jpegBytes);
+                    bitmap.BeginInit();
+                    bitmap.CacheOption = BitmapCacheOption.OnLoad;
+                    bitmap.StreamSource = ms;
+                    bitmap.EndInit();
+                    bitmap.Freeze();
                 }
                 catch
                 {
+                    return;
+                }
+
+                if (slot == _selectedPreviewSlot)
+                    ShowJpeg(ImgPreviewVideo, PanelPreviewSlate, bitmap);
+
+                if (slot == _selectedProgramSlot)
+                {
+                    ShowJpeg(ImgProgramVideo, PanelProgramSlate, bitmap);
+                    _cameraServer.ActiveProgramFrameBytes = jpegBytes;
+                    TxtProgramBanner.Text = $"Image reçue · {slot}";
                 }
             });
         }
@@ -222,28 +240,27 @@ namespace EeccStudio
         {
             if (ListSources.SelectedItem is StudioSource src)
             {
-                for (int i = 1; i <= 15; i++)
+                var slot = SlotFromSource(src);
+                if (src.Type == SourceType.MobileCamera && slot != null)
                 {
-                    if (src.Name.Contains($"Cam-{i}") || src.Name.Contains($"Caméra Mobile {i}"))
+                    _selectedPreviewSlot = slot;
+                    var frame = _cameraServer.GetCameraFrame(slot);
+                    if (frame != null && TryDecodeJpeg(frame, out var bitmap))
+                        ShowJpeg(ImgPreviewVideo, PanelPreviewSlate, bitmap!);
+                    else
                     {
-                        _selectedPreviewSlot = $"Cam-{i}";
-                        var frame = _cameraServer.GetCameraFrame(_selectedPreviewSlot);
-                        if (frame != null)
-                        {
-                            var bitmap = new BitmapImage();
-                            using (var ms = new MemoryStream(frame))
-                            {
-                                bitmap.BeginInit();
-                                bitmap.CacheOption = BitmapCacheOption.OnLoad;
-                                bitmap.StreamSource = ms;
-                                bitmap.EndInit();
-                                bitmap.Freeze();
-                            }
-                            ImgPreviewVideo.Source = bitmap;
-                            PanelPreviewSlate.Visibility = Visibility.Collapsed;
-                        }
-                        break;
+                        ImgPreviewVideo.Source = null;
+                        PanelPreviewSlate.Visibility = Visibility.Visible;
+                        TxtPreviewEmpty.Text = $"{slot} : aucune image reçue.";
                     }
+
+                    _ = PushTalliesAsync();
+                }
+                else if (src.Type == SourceType.PhysicalCamera)
+                {
+                    ImgPreviewVideo.Source = null;
+                    PanelPreviewSlate.Visibility = Visibility.Visible;
+                    TxtPreviewEmpty.Text = "Caméra physique sélectionnée. Elle n'est pas un téléphone appairé et aucune image n'est inventée.";
                 }
             }
         }
@@ -270,51 +287,26 @@ namespace EeccStudio
             TxtProgramMain.Text = _programScene.Name;
             _cameraServer.ActiveSceneName = _programScene.Name;
 
-            bool isCameraScene = _programScene.Name.Contains("Orateur") || _programScene.Name.Contains("Chœur") || _programScene.Name.Contains("Plan Large") || _programScene.Name.Contains("Caméra");
-
-            if (isCameraScene)
+            var frame = _cameraServer.GetCameraFrame(_selectedProgramSlot);
+            if (frame != null && TryDecodeJpeg(frame, out var bitmap))
             {
-                _selectedProgramSlot = _selectedPreviewSlot;
-                var frame = _cameraServer.GetCameraFrame(_selectedProgramSlot) ?? _cameraServer.LatestCameraFrameBytes;
-                if (frame != null)
-                {
-                    var bitmap = new BitmapImage();
-                    using (var ms = new MemoryStream(frame))
-                    {
-                        bitmap.BeginInit();
-                        bitmap.CacheOption = BitmapCacheOption.OnLoad;
-                        bitmap.StreamSource = ms;
-                        bitmap.EndInit();
-                        bitmap.Freeze();
-                    }
-                    ImgProgramVideo.Source = bitmap;
-                    PanelProgramSlate.Visibility = Visibility.Collapsed;
-                    _cameraServer.ActiveProgramFrameBytes = frame;
-                }
-                else if (ImgPreviewVideo.Source != null)
-                {
-                    ImgProgramVideo.Source = ImgPreviewVideo.Source;
-                    PanelProgramSlate.Visibility = Visibility.Collapsed;
-                    _cameraServer.ActiveProgramFrameBytes = _cameraServer.LatestCameraFrameBytes;
-                }
-                else
-                {
-                    ImgProgramVideo.Source = null;
-                    PanelProgramSlate.Visibility = Visibility.Visible;
-                }
+                ShowJpeg(ImgProgramVideo, PanelProgramSlate, bitmap!);
+                _cameraServer.ActiveProgramFrameBytes = frame;
+                TxtProgramBanner.Text = $"Image reçue · {_selectedProgramSlot}";
             }
             else
             {
                 ImgProgramVideo.Source = null;
                 PanelProgramSlate.Visibility = Visibility.Visible;
                 _cameraServer.ActiveProgramFrameBytes = null;
+                TxtProgramEmpty.Text = $"Aucune image à l'antenne pour {_selectedProgramSlot}.";
+                TxtProgramBanner.Text = "Aucune image à l'antenne";
             }
 
             if (_programScene.Sources.Count > 0)
             {
                 var first = _programScene.Sources[0];
-                TxtProgramSub.Text = $"{first.Name} • Antenne Active";
-                TxtProgramDetails.Text = $"{_cameraServer.ProgramTitle} • 1920x1080 @ 60 FPS • {_cameraServer.ChurchName}";
+                TxtProgramSub.Text = $"{first.Name}";
             }
         }
 
@@ -396,8 +388,18 @@ namespace EeccStudio
             }
             cm.Items.Add(new Separator());
 
-            var miUsb = new MenuItem { Header = "🎥 Caméra Physique USB / Carte SDI (DirectShow)" };
-            miUsb.Click += (s, args) => selected.Sources.Add(new StudioSource { Name = "Caméra USB / SDI", Type = SourceType.PhysicalCamera, Details = "1080p 60 FPS" });
+            var miUsb = new MenuItem { Header = "🎥 Caméra Physique USB / Carte SDI (non comptée dans les 15 téléphones)" };
+            miUsb.Click += (s, args) =>
+            {
+                var physical = new StudioSource
+                {
+                    Name = "Caméra USB / SDI",
+                    Type = SourceType.PhysicalCamera,
+                    Details = "Source physique. Aucune image tant qu'une capture n'est pas branchée."
+                };
+                selected.Sources.Add(physical);
+                _cameraServer.RegisterPhysicalCamera(physical.Id, physical.Name);
+            };
             cm.Items.Add(miUsb);
 
             var miBible = new MenuItem { Header = "📖 Verset Biblique en Direct (Louis Segond)" };
@@ -435,14 +437,18 @@ namespace EeccStudio
         {
             if (_previewScene == null) return;
             _programScene = _previewScene;
+            _selectedProgramSlot = _selectedPreviewSlot;
             UpdateProgramDisplay();
+            _ = PushTalliesAsync();
         }
 
         private void BtnFade_Click(object sender, RoutedEventArgs e)
         {
             if (_previewScene == null) return;
             _programScene = _previewScene;
+            _selectedProgramSlot = _selectedPreviewSlot;
             UpdateProgramDisplay();
+            _ = PushTalliesAsync();
         }
 
         private void BtnFadeToBlack_Click(object sender, RoutedEventArgs e)
@@ -450,8 +456,10 @@ namespace EeccStudio
             ImgProgramVideo.Source = null;
             PanelProgramSlate.Visibility = Visibility.Visible;
             _cameraServer.ActiveProgramFrameBytes = null;
-            TxtProgramMain.Text = "◼ ÉCRAN NOIR (BLACKOUT)";
-            TxtProgramSub.Text = "Signal coupé — Aucune source à l'antenne";
+            TxtProgramEmpty.Text = "Écran noir. Aucune image n'est envoyée.";
+            TxtProgramBanner.Text = "Écran noir";
+            TxtProgramMain.Text = "Écran noir";
+            TxtProgramSub.Text = "Aucune source à l'antenne";
             TxtProgramSceneName.Text = "[ NOIR ]";
         }
 
@@ -628,13 +636,15 @@ namespace EeccStudio
         private void MenuLanStatus_Click(object sender, RoutedEventArgs e)
         {
             var localIp = _cameraServer.GetLocalIpAddress();
+            var addressLine = localIp.Length == 0
+                ? "Aucune adresse IPv4 privée utilisable n'a été détectée."
+                : $"Adresse détectée : http://{localIp}:{_cameraServer.ListeningPort}/live/stream";
             MessageBox.Show(
-                $"Diffusion Locale LAN Activer\n\n" +
-                $"URL de réception EECC TV : http://{localIp}:{_cameraServer.Port}/live/stream\n" +
-                $"Statut API : http://{localIp}:{_cameraServer.Port}/live/status\n" +
-                $"État actuel : {(_cameraServer.IsStreaming ? "DIFFUSION EN DIRECT" : "EN ATTENTE")}\n\n" +
-                $"Les smartphones connectés au Wi-Fi de l'église avec EECC TV peuvent lire ce flux directement.",
-                "Diffusion Locale LAN",
+                addressLine + "\n\n" +
+                "Le même nom de Wi-Fi ne garantit pas que les téléphones joignent Studio. " +
+                "Un pare-feu, un réseau invité ou l'isolation des clients peut bloquer le port. " +
+                "Aucune image n'est affichée tant qu'un téléphone appairé n'en a pas envoyé.",
+                "Réseau local",
                 MessageBoxButton.OK,
                 MessageBoxImage.Information);
         }
@@ -692,6 +702,80 @@ namespace EeccStudio
             _clockTimer.Stop();
             _cameraServer.Stop();
             base.OnClosed(e);
+        }
+
+        private void EnsurePhoneSource(CameraClient camera)
+        {
+            var label = $"{camera.StreamName} · {camera.DisplayName}";
+            foreach (var scene in _scenes)
+            {
+                var existing = scene.Sources.FirstOrDefault(source =>
+                    source.Id == camera.StreamName || SlotFromSource(source) == camera.StreamName);
+                if (existing == null)
+                {
+                    scene.Sources.Add(new StudioSource
+                    {
+                        Id = camera.StreamName,
+                        Name = label,
+                        Type = SourceType.MobileCamera,
+                        Details = camera.RemoteIp,
+                    });
+                }
+                else
+                {
+                    existing.Id = camera.StreamName;
+                    existing.Name = label;
+                    existing.Type = SourceType.MobileCamera;
+                    existing.Details = $"{camera.RemoteIp} · {camera.DeviceModel}";
+                }
+            }
+        }
+
+        private async Task PushTalliesAsync()
+        {
+            foreach (var phone in _cameraServer.ConnectedCameras.Values)
+            {
+                var tally = TallyState.Standby;
+                if (phone.StreamName == _selectedProgramSlot)
+                    tally = TallyState.Program;
+                else if (phone.StreamName == _selectedPreviewSlot)
+                    tally = TallyState.Preview;
+                await _cameraServer.SetTallyAsync(phone.StreamName, tally);
+            }
+        }
+
+        private static void ShowJpeg(System.Windows.Controls.Image target, System.Windows.Controls.Grid slate, BitmapImage bitmap)
+        {
+            target.Source = bitmap;
+            slate.Visibility = Visibility.Collapsed;
+        }
+
+        private static bool TryDecodeJpeg(byte[] jpeg, out BitmapImage? bitmap)
+        {
+            try
+            {
+                bitmap = new BitmapImage();
+                using var ms = new MemoryStream(jpeg);
+                bitmap.BeginInit();
+                bitmap.CacheOption = BitmapCacheOption.OnLoad;
+                bitmap.StreamSource = ms;
+                bitmap.EndInit();
+                bitmap.Freeze();
+                return true;
+            }
+            catch
+            {
+                bitmap = null;
+                return false;
+            }
+        }
+
+        private static string? SlotFromSource(StudioSource source)
+        {
+            if (source.Id.StartsWith("Cam-", StringComparison.OrdinalIgnoreCase))
+                return source.Id;
+            var match = Regex.Match(source.Name, @"Cam-(\d+)");
+            return match.Success ? "Cam-" + match.Groups[1].Value : null;
         }
     }
 }

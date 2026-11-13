@@ -37,6 +37,10 @@ jobs:
       - name: Install Inno Setup
         run: choco install innosetup -y --no-progress
 
+      - name: Test LAN camera pairing
+        working-directory: apps/studio_native
+        run: dotnet test tests/EeccStudio.Core.Tests/EeccStudio.Core.Tests.csproj -c Release --nologo
+
       - name: Publish EECC Studio Native (.NET 8 Win-x64 Self-Contained)
         working-directory: apps/studio_native
         run: |
@@ -197,6 +201,10 @@ jobs:
       - name: Patch Cached Gradle Plugins
         run: |
           find /home/runner/.pub-cache -name "build.gradle" -exec sed -i 's/flutter\.compileSdkVersion/35/g; s/flutter\.minSdkVersion/21/g; s/flutter\.targetSdkVersion/35/g' {} + || true
+
+      - name: Flutter test
+        working-directory: apps/camera_mobile
+        run: flutter test
 
       - name: Build Release APK
         working-directory: apps/camera_mobile

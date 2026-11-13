@@ -22,10 +22,11 @@ class _CameraActiveScreenState extends State<CameraActiveScreen> with WidgetsBin
   bool _isConnected = false;
   bool _isStreamingFrames = false;
   bool _isCapturing = false;
-  String _activeSlotName = 'Cam-1';
-  int _activeSlotNumber = 1;
+  String _activeSlotName = '';
+  int _activeSlotNumber = 0;
   int _measuredFps = 0;
   int _measuredBitrate = 0;
+  String? _linkMessage;
 
   // Contrôleur matériel de la caméra
   CameraController? _cameraController;
@@ -161,6 +162,14 @@ class _CameraActiveScreenState extends State<CameraActiveScreen> with WidgetsBin
           _toggleTorch();
         }
       },
+      onRejected: (code, message) {
+        if (!mounted) return;
+        setState(() => _linkMessage = message);
+      },
+      onStatus: (message) {
+        if (!mounted) return;
+        setState(() => _linkMessage = message);
+      },
     );
     _connectionService.connect();
   }
@@ -232,7 +241,7 @@ class _CameraActiveScreenState extends State<CameraActiveScreen> with WidgetsBin
 
   String _getTallyLabel() {
     if (!_isConnected) {
-      return '🔴 HORS LIGNE (RÉGIE INTROUVABLE)';
+      return _linkMessage ?? 'HORS LIGNE — la régie n\'a pas confirmé la session';
     }
     switch (_tally) {
       case TallyState.program:
@@ -336,7 +345,7 @@ class _CameraActiveScreenState extends State<CameraActiveScreen> with WidgetsBin
                     ),
                     const SizedBox(width: 12),
                     Text(
-                      widget.config.streamName,
+                      '${widget.config.displayName} · n°$_activeSlotNumber',
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 12,
@@ -378,6 +387,7 @@ class _CameraActiveScreenState extends State<CameraActiveScreen> with WidgetsBin
                     isActive: !_isMuted,
                     onTap: () {
                       setState(() => _isMuted = !_isMuted);
+                      if (_isMuted) _connectionService.updateAudioLevel(0);
                     },
                   ),
                   const SizedBox(height: 16),
@@ -411,19 +421,24 @@ class _CameraActiveScreenState extends State<CameraActiveScreen> with WidgetsBin
                         const Icon(Icons.wifi, color: Colors.white, size: 18),
                         const SizedBox(width: 6),
                         Text(
-                          _isConnected ? '$_activeSlotName (${widget.config.studioIp})' : '🔴 Régie Déconnectée',
+                          _isConnected ? '$_activeSlotName (${widget.config.studioIp})' : (_linkMessage ?? 'Régie non confirmée'),
                           style: TextStyle(
                             color: _isConnected ? Colors.white : Colors.redAccent,
                             fontSize: 12,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
+                        if (!_isConnected && _connectionService.canReconnect)
+                          TextButton(
+                            onPressed: () => _connectionService.reconnect(),
+                            child: const Text('Reconnecter'),
+                          ),
                       ],
                     ),
                     Row(
                       children: [
                         Text(
-                          _measuredFps > 0 ? '$_measuredFps FPS' : '${widget.config.fps} FPS',
+                          _measuredFps > 0 ? '$_measuredFps FPS' : 'FPS non mesuré',
                           style: const TextStyle(
                             color: EeccCamColors.telemetryGauge,
                             fontSize: 12,
@@ -432,7 +447,7 @@ class _CameraActiveScreenState extends State<CameraActiveScreen> with WidgetsBin
                         ),
                         const SizedBox(width: 14),
                         Text(
-                          _measuredBitrate > 0 ? '$_measuredBitrate kbps' : '${widget.config.bitrateKbps} kbps',
+                          _measuredBitrate > 0 ? '$_measuredBitrate kbps' : 'débit non mesuré',
                           style: const TextStyle(
                             color: EeccCamColors.telemetryGauge,
                             fontSize: 12,

@@ -44,11 +44,10 @@ export default function App() {
       sources: [
         {
           id: "src-mob1",
-          name: "EECC Caméra (Smartphone 1)",
+          name: "EECC Caméra (aucun téléphone relié)",
           type: "mobile_camera",
           visible: true,
           locked: false,
-          telemetry: { battery: 85, bitrate: 4500, fps: 30, ip: "192.168.1.102" },
         },
         { id: "src-choir", name: "Micros Chœur & Orchestre", type: "audio_input", visible: true, locked: true },
       ],
@@ -236,8 +235,6 @@ export default function App() {
       <CameraPairingModal
         isOpen={isPairingOpen}
         onClose={() => setIsPairingOpen(false)}
-        localIp="192.168.1.50"
-        port={8554}
       />
 
       <TreasuryWithdrawalModal

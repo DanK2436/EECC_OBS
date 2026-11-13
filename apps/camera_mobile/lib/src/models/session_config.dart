@@ -1,83 +1,61 @@
-import 'dart:convert';
+import '../pairing/pairing_payload.dart';
 
 enum TallyState {
-  standby, // Connecté mais pas utilisé à l'écran
-  preview, // En Aperçu dans EECC Studio (prochaine scène)
-  program, // À L'ANTENNE dans EECC Studio (diffusé en direct)
+  standby,
+  preview,
+  program,
 }
 
 class StudioSessionConfig {
   final String studioIp;
   final int port;
   final String token;
-  final String streamName;
+  final String studioName;
+  final String displayName;
+  final DateTime expiresAt;
   final String codec;
   final int bitrateKbps;
   final int fps;
 
-  StudioSessionConfig({
+  const StudioSessionConfig({
     required this.studioIp,
     required this.port,
     required this.token,
-    required this.streamName,
+    required this.studioName,
+    required this.displayName,
+    required this.expiresAt,
     this.codec = 'jpeg_stream',
     this.bitrateKbps = 4500,
-    this.fps = 30,
+    this.fps = 15,
   });
 
   String get controlWebSocketUrl => 'ws://$studioIp:$port/camera/control';
-  String get streamUploadUrl => 'http://$studioIp:$port/camera/upload';
 
-  factory StudioSessionConfig.fromJsonString(String rawInput) {
-    final raw = rawInput.trim();
-    try {
-      if (raw.startsWith('{') && raw.endsWith('}')) {
-        final Map<String, dynamic> data = jsonDecode(raw);
-        return StudioSessionConfig(
-          studioIp: data['studio_ip'] as String? ?? '192.168.1.100',
-          port: data['port'] as int? ?? 8089,
-          token: data['token'] as String? ?? 'EECC-LIVE-4982',
-          streamName: data['requested_slot'] as String? ?? data['stream_name'] as String? ?? 'auto',
-          codec: data['codec'] as String? ?? 'jpeg_stream',
-          bitrateKbps: data['bitrate_kbps'] as int? ?? 4500,
-          fps: data['fps'] as int? ?? 30,
-        );
-      } else if (raw.contains('://')) {
-        final uri = Uri.parse(raw);
-        return StudioSessionConfig(
-          studioIp: uri.host,
-          port: uri.port > 0 ? uri.port : 8089,
-          token: 'EECC-LIVE-4982',
-          streamName: 'auto',
-        );
-      } else if (raw.contains(':')) {
-        final parts = raw.split(':');
-        return StudioSessionConfig(
-          studioIp: parts[0],
-          port: int.tryParse(parts[1]) ?? 8089,
-          token: 'EECC-LIVE-4982',
-          streamName: 'auto',
-        );
-      }
-    } catch (_) {}
-
+  factory StudioSessionConfig.parseQr(String raw, {DateTime? now}) {
+    final payload = PairingPayload.parse(raw, now: now);
     return StudioSessionConfig(
-      studioIp: '192.168.1.100',
-      port: 8089,
-      token: 'EECC-LIVE-4982',
-      streamName: 'auto',
+      studioIp: payload.studioIp,
+      port: payload.port,
+      token: payload.token,
+      studioName: payload.studioName,
+      displayName: 'Téléphone',
+      expiresAt: payload.expiresAt,
     );
   }
 
-  Map<String, dynamic> toJson() {
-    return {
-      'studio_ip': studioIp,
-      'port': port,
-      'token': token,
-      'stream_name': streamName,
-      'codec': codec,
-      'bitrate_kbps': bitrateKbps,
-      'fps': fps,
-    };
+  StudioSessionConfig withDisplayName(String name) {
+    final trimmed = name.trim();
+    final safe = trimmed.isEmpty ? 'Téléphone' : (trimmed.length <= 40 ? trimmed : trimmed.substring(0, 40));
+    return StudioSessionConfig(
+      studioIp: studioIp,
+      port: port,
+      token: token,
+      studioName: studioName,
+      displayName: safe,
+      expiresAt: expiresAt,
+      codec: codec,
+      bitrateKbps: bitrateKbps,
+      fps: fps,
+    );
   }
 }

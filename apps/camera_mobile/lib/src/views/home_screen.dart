@@ -1,12 +1,43 @@
-import 'package:flutter/material.dart';
-import '../constants/colors.dart';
-import '../models/session_config.dart';
-import 'qr_scanner_screen.dart';
-import 'manual_connect_dialog.dart';
-import 'camera_active_screen.dart';
+import 'dart:io';
 
-class CamHomeScreen extends StatelessWidget {
+import 'package:flutter/material.dart';
+
+import '../constants/colors.dart';
+import '../pairing/local_network.dart';
+import 'camera_active_screen.dart';
+import 'manual_connect_dialog.dart';
+import 'qr_scanner_screen.dart';
+
+class CamHomeScreen extends StatefulWidget {
   const CamHomeScreen({super.key});
+
+  @override
+  State<CamHomeScreen> createState() => _CamHomeScreenState();
+}
+
+class _CamHomeScreenState extends State<CamHomeScreen> {
+  String _networkMessage = 'Lecture des adresses du téléphone…';
+
+  @override
+  void initState() {
+    super.initState();
+    _readNetwork();
+  }
+
+  Future<void> _readNetwork() async {
+    try {
+      final interfaces = await NetworkInterface.list(
+        includeLoopback: false,
+        type: InternetAddressType.IPv4,
+      );
+      final addresses = interfaces.expand((interface) => interface.addresses.map((address) => address.address));
+      if (!mounted) return;
+      setState(() => _networkMessage = LocalNetworkStatus.fromAddresses(addresses).message);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _networkMessage = 'Adresses locales illisibles : $error');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -14,29 +45,13 @@ class CamHomeScreen extends StatelessWidget {
       backgroundColor: EeccCamColors.background,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
-        elevation: 0,
-        title: Row(
-          children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(6),
-              child: Image.asset(
-                'assets/images/logo_official.png',
-                width: 28,
-                height: 28,
-                fit: BoxFit.contain,
-              ),
-            ),
-            const SizedBox(width: 10),
-            const Text('EECC Caméra', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
-          ],
-        ),
+        title: const Text('EECC Caméra', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Carte Réseau Local
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
@@ -44,120 +59,69 @@ class CamHomeScreen extends StatelessWidget {
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(color: Colors.white10),
               ),
-              child: const Row(
+              child: Row(
                 children: [
-                  Icon(Icons.wifi_rounded, color: Colors.greenAccent, size: 28),
-                  SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Réseau Local Actif', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                        Text('Connecté au Wi-Fi de la régie', style: TextStyle(color: EeccCamColors.textSecondary, fontSize: 12)),
-                      ],
-                    ),
-                  ),
-                  Icon(Icons.check_circle_rounded, color: Colors.greenAccent, size: 20),
+                  const Icon(Icons.wifi_rounded, color: Colors.white70, size: 28),
+                  const SizedBox(width: 14),
+                  Expanded(child: Text(_networkMessage, style: const TextStyle(color: Colors.white, fontSize: 13))),
                 ],
               ),
             ),
             const SizedBox(height: 30),
-
-            // Bouton Principal : Scanner QR Code
             SizedBox(
               width: double.infinity,
               height: 56,
               child: ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: EeccCamColors.primary,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                  elevation: 4,
-                ),
-                icon: const Icon(Icons.qr_code_scanner_rounded, size: 24, color: Colors.white),
-                label: const Text(
-                  'Scanner le QR Code EECC Studio',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
-                ),
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (context) => const QrScannerScreen()),
+                style: ElevatedButton.styleFrom(backgroundColor: EeccCamColors.primary),
+                icon: const Icon(Icons.qr_code_scanner_rounded, color: Colors.white),
+                label: const Text('Scanner le QR Code EECC Studio', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                onPressed: () async {
+                  final proceed = await showDialog<bool>(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      backgroundColor: EeccCamColors.surface,
+                      title: const Text('Caméra et réseau local', style: TextStyle(color: Colors.white)),
+                      content: const Text(
+                        'Le scan demande l\'autorisation caméra. La liaison utilise ensuite le Wi-Fi local. '
+                        'Le même réseau ne garantit pas l\'accès si le point d\'accès isole les appareils ou si le pare-feu du PC bloque le port.',
+                        style: TextStyle(color: Colors.white70),
+                      ),
+                      actions: [
+                        TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Annuler')),
+                        ElevatedButton(onPressed: () => Navigator.pop(context, true), child: const Text('Continuer')),
+                      ],
+                    ),
                   );
+                  if (proceed == true && context.mounted) {
+                    Navigator.push(context, MaterialPageRoute(builder: (context) => const QrScannerScreen()));
+                  }
                 },
               ),
             ),
             const SizedBox(height: 12),
-
-            // Bouton Secondaire : Connexion manuelle
             SizedBox(
               width: double.infinity,
               height: 50,
               child: OutlinedButton.icon(
-                style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: Colors.white24),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                ),
-                icon: const Icon(Icons.tune_rounded, color: Colors.white70),
-                label: const Text('Connexion manuelle (IP & Port)', style: TextStyle(color: Colors.white70)),
+                icon: const Icon(Icons.paste_rounded, color: Colors.white70),
+                label: const Text('Coller le code copié dans Studio', style: TextStyle(color: Colors.white70)),
                 onPressed: () {
                   ManualConnectDialog.show(context, (config) {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (context) => CameraActiveScreen(config: config)),
-                    );
+                    Navigator.push(context, MaterialPageRoute(builder: (context) => CameraActiveScreen(config: config)));
                   });
                 },
               ),
             ),
-
-            const SizedBox(height: 35),
-
-            // Guide d'appairage rapide
-            Container(
-              padding: const EdgeInsets.all(18),
-              decoration: BoxDecoration(
-                color: EeccCamColors.surface,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.white10),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Row(
-                    children: [
-                      Icon(Icons.help_outline_rounded, color: EeccCamColors.primaryLight, size: 20),
-                      SizedBox(width: 8),
-                      Text('Comment appairer votre caméra ?', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                    ],
-                  ),
-                  const SizedBox(height: 14),
-                  _buildStep('1', 'Lancez EECC Studio sur le PC de la régie.'),
-                  _buildStep('2', 'Assurez-vous que le PC et ce téléphone sont sur le même réseau Wi-Fi.'),
-                  _buildStep('3', 'Dans Studio, ajoutez la source "EECC Caméra" et cliquez sur "Appairer".'),
-                  _buildStep('4', 'Scannez le QR code affiché à l\'écran du PC.'),
-                ],
-              ),
+            const SizedBox(height: 28),
+            const Text(
+              '1. Ouvrez EECC Studio sur le PC.\n'
+              '2. Affichez le QR « Connecter un téléphone ».\n'
+              '3. Scannez-le et confirmez le nom du Studio.\n'
+              '4. L\'image n\'est envoyée qu\'après l\'accusé de réception de la régie.',
+              style: TextStyle(color: EeccCamColors.textSecondary, height: 1.4),
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildStep(String number, String text) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          CircleAvatar(
-            radius: 10,
-            backgroundColor: EeccCamColors.primaryLight.withOpacity(0.2),
-            child: Text(number, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: EeccCamColors.primaryLight)),
-          ),
-          const SizedBox(width: 10),
-          Expanded(child: Text(text, style: const TextStyle(color: EeccCamColors.textSecondary, fontSize: 13))),
-        ],
       ),
     );
   }

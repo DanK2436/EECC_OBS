@@ -3,6 +3,7 @@
 Régie audiovisuelle officielle de l'église EECC pour Windows 10/11 64 bits.
 
 ## Fonctionnalités principales
+- Cette interface Electron n'écoute pas le réseau local. L'appairage QR des téléphones est dans `apps/studio_native` (voir son README).
 - Composition multi-scènes et multi-sources (caméras physiques, flux smartphone EECC Caméra, diaporama, versets).
 - Mode Studio (Aperçu / Programme) avec transitions professionnelles.
 - Mixeur audio avec chaîne de filtres DSP (Noise Gate, EQ paramétrique, Compresseur, Limiteur).

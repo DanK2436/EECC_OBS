@@ -2,7 +2,7 @@ name: Build & Release EECC Ecosystem
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ main, master, cursor/studio-scenes-record-stream-01b2 ]
     tags:
       - 'v*'
   pull_request:

@@ -8,5 +8,7 @@ Licence FFmpeg : GNU LGPL 2.1 ou ultérieure.
 Sources : https://github.com/FFmpeg/FFmpeg (branche release/8.1) et https://github.com/BtbN/FFmpeg-Builds/tree/autobuild-2026-11-12-15-40
 Les sources des dépendances de cette compilation se reconstruisent à partir de ces révisions.
 
-Le flux RTMP de cette version est encodé avec l'encodeur natif FLV1 et AAC, pas en H.264.
-Il est prévu pour un récepteur RTMP local. Il n'est pas lancé tout seul.
+Le direct RTMP est en H.264 et AAC. Sur Windows, FFmpeg utilise l'encodeur du système h264_mf
+(Media Foundation), sans bibliothèque H.264 ajoutée. Si le binaire FFmpeg présent contient libx264,
+celui-ci est utilisé à la place : ce binaire-là est un programme séparé, pas une bibliothèque liée
+dans EECC Studio. La diffusion n'est pas lancée toute seule.

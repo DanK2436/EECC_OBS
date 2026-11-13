@@ -21,6 +21,7 @@ namespace EeccStudio
         private CameraFrame? _camera;
         private readonly List<byte> _pcm = new();
         private FfmpegProgramSink? _recording;
+        private FfmpegProgramSink? _publishing;
         private string? _recordDirectory;
         private bool _loadingScenes;
         private bool _playbackMuted;
@@ -114,8 +115,8 @@ namespace EeccStudio
         {
             if (App.IsSmokeTest) return;
             MessageBox.Show(
-                "EECC Studio affiche le QR, reçoit l'image et le son du téléphone, coupe vers le programme, enregistre un fichier local et peut envoyer ce programme vers une adresse RTMP.\n\n" +
-                "Le mixage, le plein écran et les profils ne sont pas branchés. La diffusion n'est pas lancée toute seule et n'utilise pas le H.264.",
+                "EECC Studio affiche le QR, reçoit l'image et le son du téléphone, coupe vers le programme, enregistre un fichier local et peut encoder ce programme en direct vers une adresse RTMP.\n\n" +
+                "Le mixage, le plein écran et les profils ne sont pas branchés. La diffusion n'est pas lancée toute seule.",
                 "À propos d'EECC Studio",
                 MessageBoxButton.OK,
                 MessageBoxImage.Information);
@@ -162,7 +163,7 @@ namespace EeccStudio
             Show(ProgramImage, program);
             PreviewPlaceholder.Visibility = Visibility.Collapsed;
             ProgramStatus.Visibility = Visibility.Collapsed;
-            if (_recording == null) return;
+            if (_recording == null && _publishing == null) return;
             var audio = new byte[FfmpegProgramSink.SamplesPerFrame * 2];
             lock (_pcm)
             {
@@ -173,11 +174,23 @@ namespace EeccStudio
                     _pcm.RemoveRange(0, count);
                 }
             }
-            try { _recording.Push(program, audio); }
-            catch (Exception ex)
+            if (_recording != null)
             {
-                StatusServerText.Text = "Enregistrement interrompu (" + ex.GetType().Name + ")";
-                _recording = null;
+                try { _recording.Push(program, audio); }
+                catch (Exception ex)
+                {
+                    StatusServerText.Text = "Enregistrement interrompu (" + ex.GetType().Name + ")";
+                    _recording = null;
+                }
+            }
+            if (_publishing != null)
+            {
+                try { _publishing.Push(program, audio); }
+                catch (Exception ex)
+                {
+                    StatusServerText.Text = "Diffusion interrompue (" + ex.GetType().Name + ")";
+                    _publishing = null;
+                }
             }
         }
 
@@ -289,30 +302,45 @@ namespace EeccStudio
 
         private async void MenuStreamStart_Click(object sender, RoutedEventArgs e)
         {
-            if (_recordDirectory == null || _recording != null)
+            if (_publishing != null)
             {
-                StatusServerText.Text = "Finalisez d'abord un enregistrement. La diffusion envoie ce fichier vers le RTMP, elle n'est pas un direct public.";
+                StatusServerText.Text = "Une diffusion est déjà en cours.";
                 return;
             }
             var url = AskStreamUrl();
             if (string.IsNullOrWhiteSpace(url)) return;
             var ffmpeg = FfmpegProgramSink.Locate(AppContext.BaseDirectory);
             if (ffmpeg == null) { StatusServerText.Text = "Diffusion impossible : FFmpeg est introuvable."; return; }
+            var encoder = await FfmpegProgramSink.ResolveH264EncoderAsync(ffmpeg);
+            if (encoder == null)
+            {
+                StatusServerText.Text = "Diffusion impossible : aucun encodeur H.264 redistribuable (libx264 ou h264_mf).";
+                return;
+            }
             try
             {
-                StatusServerText.Text = "Envoi RTMP en cours.";
-                await FfmpegProgramSink.PublishRawAsync(ffmpeg, _recordDirectory, url);
-                StatusServerText.Text = "Diffusion terminée. Le récepteur a fermé ou le fichier a été envoyé.";
+                var directory = Path.Combine(Path.GetTempPath(), "eecc-live-" + Guid.NewGuid().ToString("N"));
+                _publishing = await FfmpegProgramSink.BeginRtmpAsync(ffmpeg, directory, url, CancellationToken.None);
+                StatusServerText.Text = "Diffusion en cours (" + encoder + "). Le programme est encodé au fur et à mesure.";
             }
             catch (Exception ex)
             {
-                StatusServerText.Text = "Diffusion arrêtée (" + ex.GetType().Name + ")";
+                _publishing = null;
+                StatusServerText.Text = "Diffusion non démarrée (" + ex.GetType().Name + ")";
             }
         }
 
-        private void MenuStreamStop_Click(object sender, RoutedEventArgs e)
+        private async void MenuStreamStop_Click(object sender, RoutedEventArgs e)
         {
-            StatusServerText.Text = "Aucun envoi continu n'est en cours. L'envoi RTMP s'arrête quand le fichier est fini ou quand l'encodeur échoue.";
+            var sink = _publishing;
+            _publishing = null;
+            if (sink == null)
+            {
+                StatusServerText.Text = "Aucune diffusion en cours.";
+                return;
+            }
+            await sink.StopAsync();
+            StatusServerText.Text = sink.Status == "failed" ? "Diffusion interrompue par l'encodeur." : "Diffusion arrêtée.";
         }
 
         private string? AskStreamUrl()
@@ -348,6 +376,7 @@ namespace EeccStudio
         {
             _measureTimer.Stop();
             _programTimer.Stop();
+            if (_publishing != null) await _publishing.DisposeAsync();
             _link.StatusChanged -= OnLinkStatus;
             _link.VideoFrame -= OnVideoFrame;
             _link.PcmDecoded -= OnPcm;

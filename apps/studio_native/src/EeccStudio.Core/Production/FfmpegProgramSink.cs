@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Globalization;
 using System.Text;
@@ -20,6 +21,10 @@ public sealed class FfmpegProgramSink : IAsyncDisposable
     private Process? _live;
     private Stream? _liveVideo;
     private Stream? _liveAudio;
+    private readonly BlockingCollection<byte[]> _videoQueue = new(3);
+    private readonly BlockingCollection<byte[]> _audioQueue = new(3);
+    private Task? _videoWriter;
+    private Task? _audioWriter;
     private int _frames;
     private string? _outputPath;
     private readonly StringBuilder _log = new();
@@ -31,6 +36,8 @@ public sealed class FfmpegProgramSink : IAsyncDisposable
     }
 
     public string Status { get; private set; } = "idle";
+    public string? VideoEncoder { get; private set; }
+    public bool EncoderRunning => _live is { HasExited: false };
     public void Observe()
     {
         if (_live is { HasExited: true }) Status = "failed";
@@ -80,29 +87,81 @@ public sealed class FfmpegProgramSink : IAsyncDisposable
         return sink;
     }
 
+    public static async Task<string?> ResolveH264EncoderAsync(string ffmpeg)
+    {
+        var process = new Process
+        {
+            StartInfo = new ProcessStartInfo(ffmpeg, "-hide_banner -encoders")
+            {
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+            },
+        };
+        process.Start();
+        var text = await process.StandardOutput.ReadToEndAsync();
+        await process.WaitForExitAsync();
+        if (text.Contains(" libx264 ", StringComparison.Ordinal)) return "libx264";
+        if (text.Contains(" h264_mf ", StringComparison.Ordinal)) return "h264_mf";
+        return null;
+    }
+
     public static async Task<FfmpegProgramSink> BeginRtmpAsync(string ffmpeg, string directory, string url, CancellationToken cancellationToken)
     {
         var allowed = url.StartsWith("rtmp://", StringComparison.OrdinalIgnoreCase) || url.StartsWith("rtmps://", StringComparison.OrdinalIgnoreCase);
         if (string.IsNullOrWhiteSpace(url) || !allowed)
-        {
             throw new InvalidOperationException("URL RTMP absente ou non reconnue.");
-        }
+        var encoder = await ResolveH264EncoderAsync(ffmpeg);
+        if (encoder == null)
+            throw new InvalidOperationException("Aucun encodeur H.264 redistribuable : ni libx264, ni l'encodeur Windows h264_mf.");
         Directory.CreateDirectory(directory);
-        var audioName = "eecc-audio-" + Guid.NewGuid().ToString("N");
-        var audioPath = OperatingSystem.IsWindows() ? @"\\.\pipe\" + audioName : Path.Combine(directory, audioName + ".fifo");
+        var id = Guid.NewGuid().ToString("N");
+        var audioPath = OperatingSystem.IsWindows() ? @"\\.\pipe\eecc-a-" + id : Path.Combine(directory, "a-" + id + ".fifo");
+        var videoPath = OperatingSystem.IsWindows() ? @"\\.\pipe\eecc-v-" + id : Path.Combine(directory, "v-" + id + ".fifo");
         if (!OperatingSystem.IsWindows())
         {
-            using var mkfifo = Process.Start(new ProcessStartInfo("mkfifo", audioPath) { UseShellExecute = false, RedirectStandardError = true });
-            mkfifo?.WaitForExit(2000);
+            foreach (var path in new[] { audioPath, videoPath })
+            {
+                using var mkfifo = Process.Start(new ProcessStartInfo("mkfifo", path) { UseShellExecute = false, RedirectStandardError = true });
+                mkfifo?.WaitForExit(2000);
+            }
         }
-        var sink = new FfmpegProgramSink(ffmpeg, directory) { Status = "starting" };
-        System.IO.Pipes.NamedPipeServerStream? server = null;
+        var sink = new FfmpegProgramSink(ffmpeg, directory) { Status = "starting", VideoEncoder = encoder };
+        System.IO.Pipes.NamedPipeServerStream? audioPipe = null;
+        System.IO.Pipes.NamedPipeServerStream? videoPipe = null;
         if (OperatingSystem.IsWindows())
         {
-            server = new System.IO.Pipes.NamedPipeServerStream(audioName, System.IO.Pipes.PipeDirection.Out, 1, System.IO.Pipes.PipeTransmissionMode.Byte, System.IO.Pipes.PipeOptions.Asynchronous);
+            audioPipe = new System.IO.Pipes.NamedPipeServerStream("eecc-a-" + id, System.IO.Pipes.PipeDirection.Out, 1, System.IO.Pipes.PipeTransmissionMode.Byte, System.IO.Pipes.PipeOptions.Asynchronous);
+            videoPipe = new System.IO.Pipes.NamedPipeServerStream("eecc-v-" + id, System.IO.Pipes.PipeDirection.Out, 1, System.IO.Pipes.PipeTransmissionMode.Byte, System.IO.Pipes.PipeOptions.Asynchronous);
         }
-        var process = new Process { StartInfo = new ProcessStartInfo(ffmpeg) { UseShellExecute = false, RedirectStandardInput = true, RedirectStandardError = true, RedirectStandardOutput = true } };
-        foreach (var arg in new[] { "-hide_banner", "-loglevel", "error", "-xerror", "-rw_timeout", "3000000", "-f", "s16le", "-ar", SampleRate.ToString(CultureInfo.InvariantCulture), "-ac", "1", "-i", audioPath, "-f", "rawvideo", "-pix_fmt", "bgr24", "-video_size", Width + "x" + Height, "-framerate", FramesPerSecond.ToString(CultureInfo.InvariantCulture), "-i", "pipe:0", "-c:v", "flv", "-c:a", "aac", "-f", "flv", url })
+        var process = new Process { StartInfo = new ProcessStartInfo(ffmpeg) { UseShellExecute = false, RedirectStandardError = true, RedirectStandardOutput = true } };
+        var rate = FramesPerSecond.ToString(CultureInfo.InvariantCulture);
+        var sampleRate = SampleRate.ToString(CultureInfo.InvariantCulture);
+        foreach (var arg in new[]
+        {
+            "-hide_banner", "-loglevel", "error", "-xerror",
+            "-probesize", "32", "-analyzeduration", "0", "-fflags", "nobuffer",
+            "-f", "s16le", "-ar", sampleRate, "-ac", "1", "-i", audioPath,
+            "-probesize", "32", "-analyzeduration", "0", "-fflags", "nobuffer",
+            "-f", "rawvideo", "-pix_fmt", "bgr24", "-video_size", Width + "x" + Height, "-framerate", rate, "-i", videoPath,
+        })
+            process.StartInfo.ArgumentList.Add(arg);
+        if (encoder == "libx264")
+        {
+            foreach (var arg in new[] { "-c:v", "libx264", "-preset", "ultrafast", "-tune", "zerolatency", "-profile:v", "baseline", "-pix_fmt", "yuv420p", "-g", rate, "-bf", "0" })
+                process.StartInfo.ArgumentList.Add(arg);
+        }
+        else
+        {
+            foreach (var arg in new[] { "-c:v", "h264_mf", "-pix_fmt", "yuv420p" })
+                process.StartInfo.ArgumentList.Add(arg);
+        }
+        foreach (var arg in new[]
+        {
+            "-c:a", "aac", "-b:a", "64k", "-ar", "44100",
+            "-flush_packets", "1", "-max_interleave_delta", "0", "-muxdelay", "0", "-muxpreload", "0",
+            "-f", "flv", "-flvflags", "no_duration_filesize", "-rw_timeout", "3000000", url,
+        })
             process.StartInfo.ArgumentList.Add(arg);
         process.ErrorDataReceived += (_, eventArgs) => sink.AppendLog(eventArgs.Data, url);
         if (!process.Start()) throw new InvalidOperationException("FFmpeg n'a pas démarré.");
@@ -112,27 +171,58 @@ public sealed class FfmpegProgramSink : IAsyncDisposable
         timeout.CancelAfter(TimeSpan.FromSeconds(6));
         try
         {
-            if (server != null)
+            if (audioPipe != null && videoPipe != null)
             {
-                await server.WaitForConnectionAsync(timeout.Token);
-                sink._liveAudio = server;
+                await audioPipe.WaitForConnectionAsync(timeout.Token);
+                var prime = new byte[SamplesPerFrame * 2];
+                await audioPipe.WriteAsync(prime, timeout.Token);
+                await audioPipe.FlushAsync(timeout.Token);
+                await videoPipe.WaitForConnectionAsync(timeout.Token);
+                sink._liveAudio = audioPipe;
+                sink._liveVideo = videoPipe;
             }
             else
             {
                 sink._liveAudio = await OpenFifoAsync(audioPath, timeout.Token);
+                var prime = new byte[SamplesPerFrame * 2];
+                await sink._liveAudio.WriteAsync(prime, timeout.Token);
+                await sink._liveAudio.FlushAsync(timeout.Token);
+                sink._liveVideo = await OpenFifoAsync(videoPath, timeout.Token);
             }
         }
         catch (OperationCanceledException)
         {
             if (!process.HasExited) process.Kill(entireProcessTree: true);
             sink.Status = "failed";
-            throw new TimeoutException("FFmpeg n'a pas ouvert l'audio dans le délai. " + sink.SafeLog);
+            throw new TimeoutException("FFmpeg n'a pas ouvert les deux flux dans le délai. " + sink.SafeLog);
         }
-        sink._liveVideo = process.StandardInput.BaseStream;
-        await Task.Delay(200, CancellationToken.None);
-        sink.Status = process.HasExited ? "failed" : "publishing";
-        if (process.HasExited) throw new InvalidOperationException("Encodeur arrêté avant la diffusion (code " + process.ExitCode + ").");
+        if (process.HasExited)
+        {
+            sink.Status = "failed";
+            throw new InvalidOperationException("Encodeur arrêté avant la diffusion (code " + process.ExitCode + "). " + sink.SafeLog);
+        }
+        var videoStream = sink._liveVideo;
+        var audioStream = sink._liveAudio;
+        sink._videoWriter = Task.Run(() => WriteQueue(sink, sink._videoQueue, videoStream));
+        sink._audioWriter = Task.Run(() => WriteQueue(sink, sink._audioQueue, audioStream));
+        sink.Status = "publishing";
         return sink;
+    }
+
+    private static void WriteQueue(FfmpegProgramSink sink, BlockingCollection<byte[]> queue, Stream stream)
+    {
+        try
+        {
+            foreach (var chunk in queue.GetConsumingEnumerable())
+            {
+                stream.Write(chunk);
+                stream.Flush();
+            }
+        }
+        catch (Exception)
+        {
+            sink.Status = "failed";
+        }
     }
 
     public async Task PushAsync(byte[] bgr, byte[] pcm, CancellationToken cancellationToken)
@@ -157,11 +247,14 @@ public sealed class FfmpegProgramSink : IAsyncDisposable
         pcm[..copy].CopyTo(audio);
         if (_liveVideo != null && _liveAudio != null)
         {
-            var videoStream = _liveVideo;
-            var audioStream = _liveAudio;
-            var videoWrite = Task.Run(() => { videoStream.Write(bgr); videoStream.Flush(); });
-            var audioWrite = Task.Run(() => { audioStream.Write(audio); audioStream.Flush(); });
-            if (!Task.WaitAll(new[] { videoWrite, audioWrite }, 2000))
+            if (_live is { HasExited: true })
+            {
+                Status = "failed";
+                throw new InvalidOperationException("L'encodeur s'est arrêté.");
+            }
+            var picture = new byte[bgr.Length];
+            bgr.CopyTo(picture, 0);
+            if (!_audioQueue.TryAdd(audio, 4000) || !_videoQueue.TryAdd(picture, 4000))
             {
                 Status = "failed";
                 try { if (_live is { HasExited: false }) _live.Kill(entireProcessTree: true); } catch { /* déjà arrêté */ }
@@ -229,13 +322,17 @@ public sealed class FfmpegProgramSink : IAsyncDisposable
             _liveAudio = null;
             _live = null;
         }
-        if (video != null) await video.DisposeAsync();
-        if (audio != null) await audio.DisposeAsync();
+        _videoQueue.CompleteAdding();
+        _audioQueue.CompleteAdding();
+        try { if (video != null) await video.DisposeAsync(); } catch { /* fermeture */ }
+        try { if (audio != null) await audio.DisposeAsync(); } catch { /* fermeture */ }
+        if (_videoWriter != null) await Task.WhenAny(_videoWriter, Task.Delay(1000));
+        if (_audioWriter != null) await Task.WhenAny(_audioWriter, Task.Delay(1000));
         if (live != null && !live.HasExited)
         {
             if (!live.WaitForExit(4000)) live.Kill(entireProcessTree: true);
         }
-        Status = live is { ExitCode: > 0 } ? "failed" : "stopped";
+        if (Status != "failed") Status = live is { ExitCode: > 0 } ? "failed" : "stopped";
         live?.Dispose();
     }
 
@@ -245,25 +342,6 @@ public sealed class FfmpegProgramSink : IAsyncDisposable
         var finished = await Task.WhenAny(open, Task.Delay(Timeout.Infinite, cancellationToken));
         if (finished != open) throw new OperationCanceledException(cancellationToken);
         return await open;
-    }
-
-    public static async Task<int> PublishRawAsync(string ffmpeg, string directory, string url)
-    {
-        var process = new Process { StartInfo = new ProcessStartInfo(ffmpeg) { UseShellExecute = false, RedirectStandardError = true, RedirectStandardOutput = true } };
-        foreach (var arg in new[]
-        {
-            "-y", "-hide_banner", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "bgr24", "-video_size", Width + "x" + Height,
-            "-framerate", FramesPerSecond.ToString(CultureInfo.InvariantCulture), "-i", Path.Combine(directory, "video.raw"),
-            "-f", "s16le", "-ar", SampleRate.ToString(CultureInfo.InvariantCulture), "-ac", "1", "-i", Path.Combine(directory, "audio.raw"),
-            "-c:v", "flv", "-c:a", "aac", "-f", "flv", url,
-        })
-            process.StartInfo.ArgumentList.Add(arg);
-        process.Start();
-        var error = await process.StandardError.ReadToEndAsync();
-        await process.WaitForExitAsync();
-        if (process.ExitCode != 0)
-            throw new InvalidOperationException("Diffusion RTMP arrêtée (code " + process.ExitCode + "). " + error.Replace(url, "[cible]", StringComparison.Ordinal));
-        return process.ExitCode;
     }
 
     public static async Task<int> RunAsync(string ffmpeg, string arguments, string? secret)
@@ -297,11 +375,16 @@ public sealed class FfmpegProgramSink : IAsyncDisposable
         };
         process.Start();
         var json = await process.StandardOutput.ReadToEndAsync();
+        var error = await process.StandardError.ReadToEndAsync();
         await process.WaitForExitAsync();
+        if (string.IsNullOrWhiteSpace(json) || !json.TrimStart().StartsWith('{'))
+            throw new InvalidOperationException("ffprobe n'a pas décrit le média. " + error);
         using var document = System.Text.Json.JsonDocument.Parse(json);
-        var streams = document.RootElement.GetProperty("streams").EnumerateArray().Select(item => item.GetProperty("codec_type").GetString() ?? "").ToArray();
+        var items = document.RootElement.GetProperty("streams").EnumerateArray().ToArray();
+        var streams = items.Select(item => item.GetProperty("codec_type").GetString() ?? "").ToArray();
+        var names = items.Select(item => item.TryGetProperty("codec_name", out var name) ? name.GetString() ?? "" : "").ToArray();
         var duration = document.RootElement.GetProperty("format").TryGetProperty("duration", out var value) ? double.Parse(value.GetString() ?? "0", CultureInfo.InvariantCulture) : 0;
-        return new MediaProbe(streams, duration);
+        return new MediaProbe(streams, duration, names);
     }
 
     private void AppendLog(string? line, string secret)
@@ -323,4 +406,4 @@ public sealed class FfmpegProgramSink : IAsyncDisposable
     }
 }
 
-public sealed record MediaProbe(string[] CodecTypes, double DurationSeconds);
+public sealed record MediaProbe(string[] CodecTypes, double DurationSeconds, string[] CodecNames);

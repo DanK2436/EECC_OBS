@@ -10,15 +10,9 @@
     <ApplicationIcon>Assets\eecc.ico</ApplicationIcon>
     <RootNamespace>EeccStudio</RootNamespace>
     <Version>1.0.0</Version>
-    <Company>EECC — Église Évangélique les Cohéritiers du Christ</Company>
+    <Company>EECC</Company>
     <Product>EECC Studio — Régie Broadcast Native</Product>
-    <ApplicationIcon>Assets\eecc.ico</ApplicationIcon>
   </PropertyGroup>
-
-  <ItemGroup>
-    <Resource Include="Assets\eecc.ico" />
-    <Resource Include="Assets\logo.png" />
-  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\EeccStudio.Core\EeccStudio.Core.csproj" />

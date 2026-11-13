@@ -20,8 +20,8 @@ public static class QrCodeGenerator
         bitmap.CreateOptions = BitmapCreateOptions.IgnoreColorProfile;
         bitmap.StreamSource = stream;
         bitmap.EndInit();
-        bitmap.Freeze();
         RenderOptions.SetBitmapScalingMode(bitmap, BitmapScalingMode.NearestNeighbor);
+        bitmap.Freeze();
         return bitmap;
     }
 }

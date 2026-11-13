@@ -77,7 +77,14 @@ public partial class QrPairingWindow : Window
         TxtError.Text = display.ShowsQr ? string.Empty : display.Message;
         if (!_shownQr.Apply(display.QrJson))
             return;
-        ImgQrCode.Source = display.QrJson == null ? null : QrCodeGenerator.GenerateQrCode(display.QrJson);
+        try
+        {
+            ImgQrCode.Source = display.QrJson == null ? null : QrCodeGenerator.GenerateQrCode(display.QrJson);
+        }
+        catch (Exception ex)
+        {
+            ShowUnavailable("Erreur lors de la génération du QR : " + ex.Message);
+        }
     }
 
     private void RefreshPhones()

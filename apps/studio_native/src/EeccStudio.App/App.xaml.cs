@@ -37,12 +37,22 @@ namespace EeccStudio
                 WriteLog("DispatcherUnhandledException " + args.Exception);
                 if (!IsSmokeTest)
                 {
+                    try
+                    {
+                        Clipboard.SetText(args.Exception.ToString());
+                    }
+                    catch
+                    {
+                        // Le presse-papiers peut échouer si occupé par un autre processus
+                    }
+
                     MessageBox.Show(
                         args.Exception.ToString(),
-                        "EECC Studio — erreur au démarrage",
+                        "EECC Studio — Erreur (détails copiés dans le presse-papiers)",
                         MessageBoxButton.OK,
                         MessageBoxImage.Error);
                 }
+                args.Handled = true;
             };
             base.OnStartup(e);
         }

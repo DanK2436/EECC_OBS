@@ -663,8 +663,20 @@ namespace EeccStudio
 
         private void BtnPairQr_Click(object sender, RoutedEventArgs e)
         {
-            var dlg = new QrPairingWindow(_cameraServer) { Owner = this };
-            dlg.ShowDialog();
+            try
+            {
+                var dlg = new QrPairingWindow(_cameraServer) { Owner = this };
+                dlg.ShowDialog();
+            }
+            catch (Exception ex)
+            {
+                App.WriteLog("BtnPairQr_Click error: " + ex);
+                MessageBox.Show(
+                    "Impossible d'afficher la fenêtre d'appairage QR :\n" + ex.Message,
+                    "EECC Studio — Code QR",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+            }
         }
 
         private void AudioSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)

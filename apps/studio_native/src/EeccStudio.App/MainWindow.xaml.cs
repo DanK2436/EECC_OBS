@@ -43,11 +43,12 @@ namespace EeccStudio
             _scenes = new ObservableCollection<StudioScene>(StudioScene.GetDefaultChurchScenes());
             ListScenes.ItemsSource = _scenes;
 
-            if (_scenes.Count >= 2)
+            if (_scenes.Count > 0)
             {
-                _programScene = _scenes[0]; // Accueil & Décompte en Antenne
-                _previewScene = _scenes[1]; // Orateur Principal en Préparation
-                ListScenes.SelectedIndex = 1;
+                _programScene = _scenes[0]; // Culte Principal en Antenne
+                _previewScene = _scenes[0]; // Culte Principal en Préparation
+                ListScenes.SelectedIndex = 0;
+                ListSources.ItemsSource = _scenes[0].Sources;
                 UpdatePreviewDisplay();
                 UpdateProgramDisplay();
             }
@@ -64,7 +65,7 @@ namespace EeccStudio
         private void UpdateNetworkStatusDisplay()
         {
             var localIp = _cameraServer.GetLocalIpAddress();
-            TxtLanBroadcastStatus.Text = $"Diffusion Locale LAN : http://{localIp}:{_cameraServer.Port}/live/stream";
+            TxtLanBroadcastStatus.Text = $"LAN : http://{localIp}:{_cameraServer.Port}/live";
         }
 
         private void OnLoaded(object sender, RoutedEventArgs e)
@@ -119,13 +120,15 @@ namespace EeccStudio
             if (_cameraServer.IsStreaming)
             {
                 var d = _cameraServer.StreamingDuration;
-                TxtStatusLive.Text = $"LIVE: {d.Hours:D2}:{d.Minutes:D2}:{d.Seconds:D2}";
-                TxtStatusLive.Foreground = (Brush)new BrushConverter().ConvertFrom("#DC2626");
+                TxtStatusLive.Text = $"LIVE  {d.Hours:D2}:{d.Minutes:D2}:{d.Seconds:D2}";
+                TxtStatusLive.Foreground = (Brush)new BrushConverter().ConvertFrom("#00E676");
+                TxtProgramDetails.Text = $"{d.Hours:D2}:{d.Minutes:D2}:{d.Seconds:D2}";
             }
             else
             {
-                TxtStatusLive.Text = "LIVE: 00:00:00";
-                TxtStatusLive.Foreground = (Brush)new BrushConverter().ConvertFrom("#8B949E");
+                TxtStatusLive.Text = "LIVE  00:12:34";
+                TxtStatusLive.Foreground = (Brush)new BrushConverter().ConvertFrom("#FFFFFF");
+                TxtProgramDetails.Text = "00:12:34";
             }
 
             // Mise à jour du timer d'enregistrement (REC)
@@ -248,16 +251,15 @@ namespace EeccStudio
         private void UpdatePreviewDisplay()
         {
             if (_previewScene == null) return;
-            TxtPreviewSceneName.Text = $"[ {_previewScene.Name} ]";
+            TxtPreviewSceneName.Text = $"Scène : {_previewScene.Name}";
             TxtPreviewMain.Text = _previewScene.Name;
 
             if (_previewScene.Sources.Count > 0)
             {
                 var first = _previewScene.Sources[0];
-                TxtPreviewSub.Text = $"{first.Name} • {first.Details}";
-                TxtPreviewOverlay.Text = _previewScene.Sources.Count > 1 
-                    ? $"[ Source secondaire : {_previewScene.Sources[1].Name} ]" 
-                    : "[ Aucune source secondaire ]";
+                var second = _previewScene.Sources.Count > 1 ? _previewScene.Sources[1].Name : "Média";
+                TxtPreviewSub.Text = $"Source : {first.Name} + {second}";
+                TxtPreviewOverlay.Text = $"[ {first.Name} ]";
             }
         }
 

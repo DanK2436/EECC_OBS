@@ -1,10 +1,13 @@
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Net;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Net.WebSockets;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
@@ -38,19 +41,19 @@ namespace EeccStudio.Core.Network
 
     /// <summary>
     /// Serveur Broadcast & Matrice Multi-Caméra Haute Performance pour EECC Studio.
-    /// Gère jusqu'à 15 smartphones simultanés (Cam-1 à Cam-15), la diffusion locale LAN pour EECC TV,
-    /// et les endpoints HTTP/WebSocket pour l'ensemble de l'écosystème.
+    /// Basé sur TcpListener brut (0.0.0.0) + WebSocket RFC 6455 natif pour garantir un fonctionnement à 100%
+    /// sur le réseau Wi-Fi local sans dépendance aux permissions administrateur Windows (urlacl).
     /// </summary>
     public class CameraServer
     {
         public const int MaxCameraSlots = 15;
-        private HttpListener? _listener;
+        private TcpListener? _tcpListener;
         private readonly ConcurrentDictionary<string, CameraClient> _connectedCameras = new();
         private readonly ConcurrentDictionary<string, byte[]> _cameraFrames = new();
         private CancellationTokenSource? _cts;
         private bool _isRunning;
 
-        // Image JPEG standard broadcast (640x360) pré-encodée sans dépendance GDI+/System.Drawing
+        // Image JPEG de secours
         private static readonly byte[] StaticJpegFrame = new byte[] {
             0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46, 0x00, 0x01, 0x01, 0x01, 0x00, 0x48,
             0x00, 0x48, 0x00, 0x00, 0xFF, 0xDB, 0x00, 0x43, 0x00, 0x08, 0x06, 0x06, 0x07, 0x06, 0x05, 0x08,
@@ -80,7 +83,7 @@ namespace EeccStudio.Core.Network
         public string ChurchName { get; set; } = "Église Évangélique les Cohéritiers du Christ (EECC)";
         public string ProgramTitle { get; set; } = "Grand Culte d'Adoration et d'Enseignement";
         public string Speaker { get; set; } = "Pasteur Principal";
-        public string ActiveSceneName { get; set; } = "Orateur Principal (Pupitre)";
+        public string ActiveSceneName { get; set; } = "Culte Principal";
 
         public bool IsStreaming { get; private set; }
         public bool IsRecording { get; private set; }
@@ -98,6 +101,11 @@ namespace EeccStudio.Core.Network
 
         public IReadOnlyDictionary<string, CameraClient> ConnectedCameras => _connectedCameras;
         public IReadOnlyDictionary<string, byte[]> CameraFrames => _cameraFrames;
+
+        public CameraServer(int port = 8089)
+        {
+            Port = port;
+        }
 
         public byte[]? GetCameraFrame(string slotName)
         {
@@ -123,26 +131,33 @@ namespace EeccStudio.Core.Network
             return $"Cam-{MaxCameraSlots}";
         }
 
-        public CameraServer(int port = 8089)
-        {
-            Port = port;
-        }
-
+        /// <summary>
+        /// Détecte l'adresse IP locale Wi-Fi ou Ethernet du PC en éliminant les adaptateurs virtuels (WSL, Docker, VirtualBox).
+        /// </summary>
         public string GetLocalIpAddress()
         {
             try
             {
-                foreach (var netInterface in NetworkInterface.GetAllNetworkInterfaces())
-                {
-                    if (netInterface.OperationalStatus != OperationalStatus.Up ||
-                        netInterface.NetworkInterfaceType == NetworkInterfaceType.Loopback)
-                        continue;
+                var interfaces = NetworkInterface.GetAllNetworkInterfaces()
+                    .Where(nic => nic.OperationalStatus == OperationalStatus.Up &&
+                                  nic.NetworkInterfaceType != NetworkInterfaceType.Loopback &&
+                                  !nic.Description.Contains("Virtual", StringComparison.OrdinalIgnoreCase) &&
+                                  !nic.Description.Contains("VMware", StringComparison.OrdinalIgnoreCase) &&
+                                  !nic.Description.Contains("WSL", StringComparison.OrdinalIgnoreCase) &&
+                                  !nic.Description.Contains("Hyper-V", StringComparison.OrdinalIgnoreCase) &&
+                                  !nic.Description.Contains("TAP", StringComparison.OrdinalIgnoreCase) &&
+                                  !nic.Name.Contains("vEthernet", StringComparison.OrdinalIgnoreCase) &&
+                                  !nic.Name.Contains("VirtualBox", StringComparison.OrdinalIgnoreCase) &&
+                                  !nic.Name.Contains("Docker", StringComparison.OrdinalIgnoreCase))
+                    .OrderByDescending(nic => nic.NetworkInterfaceType == NetworkInterfaceType.Wireless80211 ? 2 :
+                                              nic.NetworkInterfaceType == NetworkInterfaceType.Ethernet ? 1 : 0);
 
+                foreach (var netInterface in interfaces)
+                {
                     var ipProps = netInterface.GetIPProperties();
                     foreach (var addr in ipProps.UnicastAddresses)
                     {
-                        if (addr.Address.AddressFamily == AddressFamily.InterNetwork &&
-                            !IPAddress.IsLoopback(addr.Address))
+                        if (addr.Address.AddressFamily == AddressFamily.InterNetwork && !IPAddress.IsLoopback(addr.Address))
                         {
                             var ipStr = addr.Address.ToString();
                             if (ipStr.StartsWith("192.168.") || ipStr.StartsWith("10.") || ipStr.StartsWith("172."))
@@ -155,7 +170,6 @@ namespace EeccStudio.Core.Network
             }
             catch
             {
-                // Fallback silencieux
             }
             return "192.168.1.100";
         }
@@ -168,48 +182,29 @@ namespace EeccStudio.Core.Network
                 return true;
             }
 
-            if (TryListen($"http://+:{Port}/", out detail))
+            try
             {
+                _cts = new CancellationTokenSource();
+                _tcpListener = new TcpListener(IPAddress.Any, Port);
+                _tcpListener.Server.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
+                _tcpListener.Start();
+                _isRunning = true;
                 detail = string.Empty;
+
+                Task.Run(() => AcceptTcpClientsLoopAsync(_cts.Token));
                 return true;
             }
-
-            var wideError = detail;
-            if (TryListen($"http://127.0.0.1:{Port}/", out detail))
+            catch (Exception ex)
             {
-                detail = "écoute locale uniquement (" + wideError + ")";
-                return true;
+                detail = ex.GetType().Name + ": " + ex.Message;
+                _isRunning = false;
+                return false;
             }
-
-            detail = wideError + " | " + detail;
-            return false;
         }
 
         public void Start()
         {
             TryStart(out _);
-        }
-
-        private bool TryListen(string prefix, out string error)
-        {
-            error = string.Empty;
-            var listener = new HttpListener();
-            try
-            {
-                listener.Prefixes.Add(prefix);
-                listener.Start();
-                _listener = listener;
-                _cts = new CancellationTokenSource();
-                _isRunning = true;
-                Task.Run(() => ListenLoopAsync(_cts.Token));
-                return true;
-            }
-            catch (Exception ex)
-            {
-                error = ex.GetType().Name + ": " + ex.Message;
-                try { listener.Close(); } catch { }
-                return false;
-            }
         }
 
         public void Stop()
@@ -218,8 +213,7 @@ namespace EeccStudio.Core.Network
             _cts?.Cancel();
             try
             {
-                _listener?.Stop();
-                _listener?.Close();
+                _tcpListener?.Stop();
             }
             catch
             {
@@ -255,24 +249,14 @@ namespace EeccStudio.Core.Network
             OnRecordingStateChanged?.Invoke(false);
         }
 
-        private async Task ListenLoopAsync(CancellationToken token)
+        private async Task AcceptTcpClientsLoopAsync(CancellationToken token)
         {
-            while (!token.IsCancellationRequested)
+            while (!token.IsCancellationRequested && _isRunning)
             {
-                var listener = _listener;
-                if (listener is not { IsListening: true }) break;
-
                 try
                 {
-                    var context = await listener.GetContextAsync();
-                    if (context.Request.IsWebSocketRequest)
-                    {
-                        _ = ProcessWebSocketAsync(context, token);
-                    }
-                    else
-                    {
-                        _ = ProcessHttpRequestAsync(context, token);
-                    }
+                    var tcpClient = await _tcpListener!.AcceptTcpClientAsync(token);
+                    _ = ProcessIncomingConnectionAsync(tcpClient, token);
                 }
                 catch when (token.IsCancellationRequested)
                 {
@@ -284,239 +268,94 @@ namespace EeccStudio.Core.Network
             }
         }
 
-        private async Task ProcessHttpRequestAsync(HttpListenerContext context, CancellationToken token)
+        private async Task ProcessIncomingConnectionAsync(TcpClient tcpClient, CancellationToken token)
         {
-            var req = context.Request;
-            var res = context.Response;
-            var path = req.Url?.AbsolutePath.ToLowerInvariant() ?? "/";
+            using var client = tcpClient;
+            client.NoDelay = true;
+            using var stream = client.GetStream();
 
-            res.Headers.Add("Access-Control-Allow-Origin", "*");
-            res.Headers.Add("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-            res.Headers.Add("Access-Control-Allow-Headers", "Content-Type, Authorization");
-
-            if (req.HttpMethod == "OPTIONS")
-            {
-                res.StatusCode = 200;
-                res.Close();
-                return;
-            }
+            var remoteEndpoint = client.Client.RemoteEndPoint?.ToString() ?? "inconnu";
+            var headerBuffer = new byte[8192];
+            int totalRead = 0;
+            string requestText = string.Empty;
 
             try
             {
-                if (path == "/live/status" || path == "/status" || path == "/api/status")
+                // Lecture de l'en-tête HTTP
+                while (totalRead < headerBuffer.Length)
                 {
-                    res.StatusCode = 200;
-                    res.ContentType = "application/json; charset=utf-8";
-
-                    var localIp = GetLocalIpAddress();
-                    var slotsList = new List<object>();
-                    for (int i = 1; i <= MaxCameraSlots; i++)
-                    {
-                        var sName = $"Cam-{i}";
-                        bool isConn = _connectedCameras.TryGetValue(sName, out var cam);
-                        slotsList.Add(new
-                        {
-                            slot = sName,
-                            slot_number = i,
-                            is_connected = isConn,
-                            battery = isConn ? cam!.BatteryLevel : 0,
-                            is_charging = isConn && cam!.IsCharging,
-                            fps = isConn ? cam!.Fps : 0,
-                            bitrate_kbps = isConn ? cam!.BitrateKbps : 0,
-                            tally = isConn ? cam!.CurrentTally.ToString().ToLowerInvariant() : "offline",
-                            has_frame = _cameraFrames.ContainsKey(sName)
-                        });
-                    }
-
-                    var statusData = new
-                    {
-                        service = "EECC Studio Broadcast Server",
-                        church = ChurchName,
-                        is_live = IsStreaming,
-                        status = IsStreaming ? "live" : "standby",
-                        title = ProgramTitle,
-                        speaker = Speaker,
-                        active_scene = ActiveSceneName,
-                        live_stream_url = $"http://{localIp}:{Port}/live/stream",
-                        resolution = "1920x1080",
-                        fps = 60,
-                        bitrate_kbps = 5850,
-                        audio = "48kHz Stéréo",
-                        viewers = ViewersCount,
-                        uptime_seconds = (int)StreamingDuration.TotalSeconds,
-                        cameras_connected = _connectedCameras.Count,
-                        max_cameras = MaxCameraSlots,
-                        slots = slotsList
-                    };
-
-                    var jsonBytes = JsonSerializer.SerializeToUtf8Bytes(statusData, new JsonSerializerOptions { WriteIndented = true });
-                    res.ContentLength64 = jsonBytes.Length;
-                    await res.OutputStream.WriteAsync(jsonBytes, token);
+                    int read = await stream.ReadAsync(headerBuffer.AsMemory(totalRead, headerBuffer.Length - totalRead), token);
+                    if (read <= 0) return;
+                    totalRead += read;
+                    requestText = Encoding.UTF8.GetString(headerBuffer, 0, totalRead);
+                    if (requestText.Contains("\r\n\r\n")) break;
                 }
-                else if (path == "/camera/pair" || path == "/camera/config" || path == "/api/pair")
+
+                if (string.IsNullOrEmpty(requestText)) return;
+
+                var firstLine = requestText.Split(new[] { "\r\n" }, StringSplitOptions.None)[0];
+                var parts = firstLine.Split(' ');
+                if (parts.Length < 2) return;
+
+                var method = parts[0].ToUpperInvariant();
+                var path = parts[1];
+
+                // 1. DÉTECTION DU WEBSOCKET (EECC Caméra)
+                if (requestText.IndexOf("Upgrade: websocket", StringComparison.OrdinalIgnoreCase) >= 0)
                 {
-                    res.StatusCode = 200;
-                    res.ContentType = "application/json; charset=utf-8";
-
-                    var localIp = GetLocalIpAddress();
-                    var suggestedSlot = AllocateSlot("auto");
-                    var pairData = new
-                    {
-                        studio_ip = localIp,
-                        port = Port,
-                        token = PairingToken,
-                        suggested_slot = suggestedSlot,
-                        max_slots = MaxCameraSlots,
-                        stream_name = $"Caméra Mobile {suggestedSlot.Replace("Cam-", "")}",
-                        church = ChurchName,
-                        codec = "jpeg_stream",
-                        bitrate_kbps = 4500,
-                        fps = 30
-                    };
-
-                    var jsonBytes = JsonSerializer.SerializeToUtf8Bytes(pairData);
-                    res.ContentLength64 = jsonBytes.Length;
-                    await res.OutputStream.WriteAsync(jsonBytes, token);
+                    await HandleWebSocketUpgradeAsync(stream, requestText, remoteEndpoint, token);
+                    return;
                 }
-                else if (path.StartsWith("/camera/slot/") && path.EndsWith("/frame.jpg"))
-                {
-                    // Ex: /camera/slot/cam-1/frame.jpg ou /camera/slot/2/frame.jpg
-                    var rawSlot = path.Replace("/camera/slot/", "").Replace("/frame.jpg", "").Trim();
-                    if (!rawSlot.StartsWith("cam-", StringComparison.OrdinalIgnoreCase))
-                    {
-                        rawSlot = "cam-" + rawSlot;
-                    }
-                    var matchSlot = rawSlot.ToUpperInvariant().Replace("CAM-", "Cam-");
 
-                    res.StatusCode = 200;
-                    res.ContentType = "image/jpeg";
-                    res.Headers.Add("Cache-Control", "no-cache, no-store, must-revalidate");
-
-                    byte[] outBytes = _cameraFrames.TryGetValue(matchSlot, out var sf) ? sf : (LatestCameraFrameBytes ?? StaticJpegFrame);
-                    res.ContentLength64 = outBytes.Length;
-                    await res.OutputStream.WriteAsync(outBytes, token);
-                }
-                else if (path == "/camera/frame" || path == "/camera/upload")
-                {
-                    if (req.HttpMethod == "POST")
-                    {
-                        var qSlot = req.QueryString["slot"] ?? "Cam-1";
-                        if (!qSlot.StartsWith("Cam-", StringComparison.OrdinalIgnoreCase)) qSlot = "Cam-" + qSlot;
-                        var slotName = qSlot.ToUpperInvariant().Replace("CAM-", "Cam-");
-
-                        using var memStream = new MemoryStream();
-                        await req.InputStream.CopyToAsync(memStream, token);
-                        var frameBytes = memStream.ToArray();
-                        if (frameBytes.Length > 0)
-                        {
-                            _cameraFrames[slotName] = frameBytes;
-                            LatestCameraFrameBytes = frameBytes;
-                            TotalFramesReceived++;
-                            OnCameraFrameReceived?.Invoke(slotName, frameBytes);
-                        }
-                        res.StatusCode = 200;
-                        res.Close();
-                        return;
-                    }
-                }
-                else if (path == "/live/frame.jpg" || path == "/frame.jpg" || path == "/snapshot.jpg")
-                {
-                    res.StatusCode = 200;
-                    res.ContentType = "image/jpeg";
-                    res.Headers.Add("Cache-Control", "no-cache, no-store, must-revalidate");
-                    var currentBytes = ActiveProgramFrameBytes ?? LatestCameraFrameBytes ?? StaticJpegFrame;
-                    res.ContentLength64 = currentBytes.Length;
-                    await res.OutputStream.WriteAsync(currentBytes, token);
-                }
-                else if (path == "/live/stream" || path == "/stream")
-                {
-                    res.StatusCode = 200;
-                    res.ContentType = "multipart/x-mixed-replace; boundary=--frame";
-
-                    var boundaryBytes = Encoding.ASCII.GetBytes("\r\n--frame\r\nContent-Type: image/jpeg\r\n\r\n");
-
-                    try
-                    {
-                        while (!token.IsCancellationRequested && res.OutputStream.CanWrite)
-                        {
-                            var frame = ActiveProgramFrameBytes ?? LatestCameraFrameBytes ?? StaticJpegFrame;
-                            await res.OutputStream.WriteAsync(boundaryBytes, token);
-                            await res.OutputStream.WriteAsync(frame, token);
-                            await res.OutputStream.FlushAsync(token);
-                            await Task.Delay(66, token);
-                        }
-                    }
-                    catch
-                    {
-                    }
-                }
-                else
-                {
-                    res.StatusCode = 200;
-                    res.ContentType = "text/html; charset=utf-8";
-
-                    var localIp = GetLocalIpAddress();
-                    var html = $@"<!DOCTYPE html>
-<html lang=""fr"">
-<head>
-  <meta charset=""UTF-8"">
-  <title>EECC Studio — Diffusion Directe</title>
-  <style>
-    body {{ background: #0A0D14; color: #F0F6FC; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 30px; text-align: center; }}
-    .badge {{ display: inline-block; padding: 6px 14px; border-radius: 20px; font-weight: bold; font-size: 13px; margin-bottom: 15px; }}
-    .live {{ background: #DC2626; color: white; }}
-    .standby {{ background: #30363D; color: #8B949E; }}
-    .card {{ background: #161B22; border: 1px solid #30363D; border-radius: 16px; max-width: 680px; margin: 0 auto; padding: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }}
-    h1 {{ font-size: 24px; margin-bottom: 6px; color: #FFFFFF; }}
-    p.sub {{ color: #8B949E; font-size: 14px; margin-bottom: 20px; }}
-  </style>
-</head>
-<body>
-  <div class=""card"">
-    <div class=""badge {(IsStreaming ? "live" : "standby")}"">
-      {(IsStreaming ? "● DIFFUSION EN DIRECT ACTIVER" : "○ STUDIO EN ATTENTE")}
-    </div>
-    <h1>{ChurchName}</h1>
-    <p class=""sub"">{ProgramTitle} — {Speaker}</p>
-    <div style=""display:flex; justify-content:space-around; color:#8B949E; font-size:12px; margin-top:20px;"">
-      <div>Scène active : <strong style=""color:#F0F6FC;"">{ActiveSceneName}</strong></div>
-      <div>Résolution : <strong style=""color:#16A34A;"">1080p60</strong></div>
-      <div>Serveur : <strong style=""color:#38BDF8;"">http://{localIp}:{Port}</strong></div>
-    </div>
-  </div>
-</body>
-</html>";
-                    var htmlBytes = Encoding.UTF8.GetBytes(html);
-                    res.ContentLength64 = htmlBytes.Length;
-                    await res.OutputStream.WriteAsync(htmlBytes, token);
-                }
+                // 2. GESTION DES REQUÊTES HTTP (EECC TV & Web)
+                await HandleHttpRequestAsync(stream, method, path, requestText, totalRead, headerBuffer, token);
             }
             catch
             {
-                res.StatusCode = 500;
-            }
-            finally
-            {
-                try { res.Close(); } catch { }
             }
         }
 
-        private async Task ProcessWebSocketAsync(HttpListenerContext context, CancellationToken token)
+        private async Task HandleWebSocketUpgradeAsync(NetworkStream stream, string requestText, string remoteEndpoint, CancellationToken token)
         {
-            HttpListenerWebSocketContext wsContext;
-            try
+            string secWebSocketKey = string.Empty;
+            foreach (var line in requestText.Split(new[] { "\r\n" }, StringSplitOptions.None))
             {
-                wsContext = await context.AcceptWebSocketAsync(subProtocol: null);
-            }
-            catch
-            {
-                context.Response.StatusCode = 500;
-                context.Response.Close();
-                return;
+                if (line.StartsWith("Sec-WebSocket-Key:", StringComparison.OrdinalIgnoreCase))
+                {
+                    secWebSocketKey = line.Substring("Sec-WebSocket-Key:".Length).Trim();
+                    break;
+                }
             }
 
-            var socket = wsContext.WebSocket;
-            var buffer = new byte[32768];
+            if (string.IsNullOrEmpty(secWebSocketKey)) return;
+
+            // Calcul du hash RFC 6455
+            string acceptKey;
+            using (var sha1 = SHA1.Create())
+            {
+                var combined = secWebSocketKey + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
+                var hash = sha1.ComputeHash(Encoding.UTF8.GetBytes(combined));
+                acceptKey = Convert.ToBase64String(hash);
+            }
+
+            var responseHeaders =
+                "HTTP/1.1 101 Switching Protocols\r\n" +
+                "Upgrade: websocket\r\n" +
+                "Connection: Upgrade\r\n" +
+                $"Sec-WebSocket-Accept: {acceptKey}\r\n\r\n";
+
+            var responseBytes = Encoding.UTF8.GetBytes(responseHeaders);
+            await stream.WriteAsync(responseBytes, token);
+            await stream.FlushAsync(token);
+
+            // Création de l'objet WebSocket .NET natif à partir du flux TCP
+            var ws = WebSocket.CreateFromStream(stream, isServer: true, subProtocol: null, keepAliveInterval: TimeSpan.FromSeconds(30));
+            await ProcessWebSocketSessionAsync(ws, remoteEndpoint, token);
+        }
+
+        private async Task ProcessWebSocketSessionAsync(WebSocket socket, string remoteEndpoint, CancellationToken token)
+        {
+            var buffer = new byte[65536];
             CameraClient? client = null;
             using var msgStream = new MemoryStream();
 
@@ -567,6 +406,7 @@ namespace EeccStudio.Core.Network
                                 Token = pairingToken,
                                 Socket = socket,
                                 DeviceModel = model,
+                                RemoteIp = remoteEndpoint,
                                 SlotNumber = int.TryParse(assignedSlot.Replace("Cam-", ""), out var n) ? n : 1,
                                 CurrentTally = TallyState.Standby,
                             };
@@ -623,8 +463,146 @@ namespace EeccStudio.Core.Network
                     _cameraFrames.TryRemove(client.StreamName, out _);
                     OnCameraDisconnected?.Invoke(client.StreamName);
                 }
-                socket.Dispose();
+                try { socket.Dispose(); } catch { }
             }
+        }
+
+        private async Task HandleHttpRequestAsync(NetworkStream stream, string method, string path, string requestText, int totalHeaderRead, byte[] headerBuffer, CancellationToken token)
+        {
+            var cleanPath = path.Split('?')[0].ToLowerInvariant();
+
+            if (method == "OPTIONS")
+            {
+                var optResponse = "HTTP/1.1 200 OK\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods: GET, POST, OPTIONS\r\nAccess-Control-Allow-Headers: *\r\nContent-Length: 0\r\n\r\n";
+                await stream.WriteAsync(Encoding.UTF8.GetBytes(optResponse), token);
+                return;
+            }
+
+            if (cleanPath == "/live/status" || cleanPath == "/status" || cleanPath == "/api/status")
+            {
+                var localIp = GetLocalIpAddress();
+                var slotsList = new List<object>();
+                for (int i = 1; i <= MaxCameraSlots; i++)
+                {
+                    var sName = $"Cam-{i}";
+                    bool isConn = _connectedCameras.TryGetValue(sName, out var cam);
+                    slotsList.Add(new
+                    {
+                        slot = sName,
+                        slot_number = i,
+                        is_connected = isConn,
+                        battery = isConn ? cam!.BatteryLevel : 0,
+                        is_charging = isConn && cam!.IsCharging,
+                        fps = isConn ? cam!.Fps : 0,
+                        bitrate_kbps = isConn ? cam!.BitrateKbps : 0,
+                        tally = isConn ? cam!.CurrentTally.ToString().ToLowerInvariant() : "offline",
+                        has_frame = _cameraFrames.ContainsKey(sName)
+                    });
+                }
+
+                var statusData = new
+                {
+                    service = "EECC Studio Broadcast Server",
+                    church = ChurchName,
+                    is_live = IsStreaming,
+                    status = IsStreaming ? "live" : "standby",
+                    title = ProgramTitle,
+                    speaker = Speaker,
+                    active_scene = ActiveSceneName,
+                    live_stream_url = $"http://{localIp}:{Port}/live/stream",
+                    resolution = "1920x1080",
+                    fps = 60,
+                    bitrate_kbps = 5850,
+                    audio = "48kHz Stéréo",
+                    viewers = ViewersCount,
+                    uptime_seconds = (int)StreamingDuration.TotalSeconds,
+                    cameras_connected = _connectedCameras.Count,
+                    max_cameras = MaxCameraSlots,
+                    slots = slotsList
+                };
+
+                var jsonBytes = JsonSerializer.SerializeToUtf8Bytes(statusData);
+                var header = $"HTTP/1.1 200 OK\r\nContent-Type: application/json; charset=utf-8\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: {jsonBytes.Length}\r\n\r\n";
+                await stream.WriteAsync(Encoding.UTF8.GetBytes(header), token);
+                await stream.WriteAsync(jsonBytes, token);
+                return;
+            }
+
+            if (cleanPath == "/live/frame.jpg" || cleanPath == "/frame.jpg")
+            {
+                var frame = ActiveProgramFrameBytes ?? LatestCameraFrameBytes ?? StaticJpegFrame;
+                var header = $"HTTP/1.1 200 OK\r\nContent-Type: image/jpeg\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: {frame.Length}\r\n\r\n";
+                await stream.WriteAsync(Encoding.UTF8.GetBytes(header), token);
+                await stream.WriteAsync(frame, token);
+                return;
+            }
+
+            if (cleanPath.StartsWith("/camera/slot/") && cleanPath.EndsWith("/frame.jpg"))
+            {
+                var segments = cleanPath.Split('/');
+                var slot = segments.Length >= 4 ? segments[3] : "cam-1";
+                var frame = GetCameraFrame(slot) ?? StaticJpegFrame;
+                var header = $"HTTP/1.1 200 OK\r\nContent-Type: image/jpeg\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: {frame.Length}\r\n\r\n";
+                await stream.WriteAsync(Encoding.UTF8.GetBytes(header), token);
+                await stream.WriteAsync(frame, token);
+                return;
+            }
+
+            if (cleanPath == "/live/stream")
+            {
+                var boundary = "eecc_boundary_frame";
+                var mjpegHeader = $"HTTP/1.1 200 OK\r\nContent-Type: multipart/x-mixed-replace; boundary=--{boundary}\r\nAccess-Control-Allow-Origin: *\r\nCache-Control: no-cache, no-store, must-revalidate\r\n\r\n";
+                await stream.WriteAsync(Encoding.UTF8.GetBytes(mjpegHeader), token);
+
+                while (!token.IsCancellationRequested && _isRunning)
+                {
+                    var frame = ActiveProgramFrameBytes ?? LatestCameraFrameBytes ?? StaticJpegFrame;
+                    var partHeader = $"--{boundary}\r\nContent-Type: image/jpeg\r\nContent-Length: {frame.Length}\r\n\r\n";
+                    await stream.WriteAsync(Encoding.UTF8.GetBytes(partHeader), token);
+                    await stream.WriteAsync(frame, token);
+                    await stream.WriteAsync(Encoding.UTF8.GetBytes("\r\n"), token);
+                    await stream.FlushAsync(token);
+                    await Task.Delay(66, token); // ~15 FPS
+                }
+                return;
+            }
+
+            // Page HTML par défaut
+            var localIpDefault = GetLocalIpAddress();
+            var html = $@"<!DOCTYPE html>
+<html lang=""fr"">
+<head>
+  <meta charset=""UTF-8"">
+  <title>EECC Studio — Diffusion Directe</title>
+  <style>
+    body {{ background: #0A0D14; color: #F0F6FC; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 30px; text-align: center; }}
+    .badge {{ display: inline-block; padding: 6px 14px; border-radius: 20px; font-weight: bold; font-size: 13px; margin-bottom: 15px; }}
+    .live {{ background: #DC2626; color: white; }}
+    .standby {{ background: #30363D; color: #8B949E; }}
+    .card {{ background: #161B22; border: 1px solid #30363D; border-radius: 16px; max-width: 680px; margin: 0 auto; padding: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }}
+    h1 {{ font-size: 24px; margin-bottom: 6px; color: #FFFFFF; }}
+    p.sub {{ color: #8B949E; font-size: 14px; margin-bottom: 20px; }}
+  </style>
+</head>
+<body>
+  <div class=""card"">
+    <div class=""badge {(IsStreaming ? "live" : "standby")}"">
+      {(IsStreaming ? "● DIFFUSION EN DIRECT ACTIVÉE" : "○ STUDIO EN ATTENTE DU CULTE")}
+    </div>
+    <h1>{ChurchName}</h1>
+    <p class=""sub"">{ProgramTitle} — {Speaker}</p>
+    <div style=""display:flex; justify-content:space-around; color:#8B949E; font-size:12px; margin-top:20px;"">
+      <div>Scène active : <strong style=""color:#F0F6FC;"">{ActiveSceneName}</strong></div>
+      <div>Résolution : <strong style=""color:#16A34A;"">1080p60</strong></div>
+      <div>Serveur : <strong style=""color:#38BDF8;"">http://{localIpDefault}:{Port}</strong></div>
+    </div>
+  </div>
+</body>
+</html>";
+            var htmlBytes = Encoding.UTF8.GetBytes(html);
+            var defaultResp = $"HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: {htmlBytes.Length}\r\n\r\n";
+            await stream.WriteAsync(Encoding.UTF8.GetBytes(defaultResp), token);
+            await stream.WriteAsync(htmlBytes, token);
         }
 
         public async Task SetTallyAsync(string streamName, TallyState tally)

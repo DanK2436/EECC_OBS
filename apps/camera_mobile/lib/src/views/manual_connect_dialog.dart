@@ -19,8 +19,8 @@ class ManualConnectDialog extends StatefulWidget {
 }
 
 class _ManualConnectDialogState extends State<ManualConnectDialog> {
-  final TextEditingController _ipController = TextEditingController(text: '192.168.1.50');
-  final TextEditingController _portController = TextEditingController(text: '8554');
+  final TextEditingController _ipController = TextEditingController(text: '192.168.1.100');
+  final TextEditingController _portController = TextEditingController(text: '8089');
   final TextEditingController _nameController = TextEditingController(text: 'Caméra Smartphone');
 
   @override

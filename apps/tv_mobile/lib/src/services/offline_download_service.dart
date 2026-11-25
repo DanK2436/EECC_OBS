@@ -1,6 +1,4 @@
 import 'dart:io';
-import 'package:http/http.dart' as http;
-import 'package:path_provider/path_provider.dart';
 
 class DownloadItem {
   final String id;
@@ -33,17 +31,26 @@ class OfflineDownloadService {
     required String fileExtension,
   }) async {
     try {
-      final dir = await getApplicationDocumentsDirectory();
-      final targetPath = '${dir.path}/eecc_offline_${id}.$fileExtension';
+      final baseDir = Directory('${Directory.systemTemp.path}/eecc_offline');
+      if (!await baseDir.exists()) {
+        await baseDir.create(recursive: true);
+      }
+      final targetPath = '${baseDir.path}/eecc_offline_${id}.$fileExtension';
 
       final file = File(targetPath);
       if (await file.exists()) {
         return targetPath;
       }
 
-      final res = await http.get(Uri.parse(url));
-      if (res.statusCode == 200) {
-        await file.writeAsBytes(res.bodyBytes);
+      final client = HttpClient();
+      final request = await client.getUrl(Uri.parse(url));
+      final response = await request.close();
+      if (response.statusCode == 200) {
+        final sink = file.openWrite();
+        await response.pipe(sink);
+        await sink.close();
+        client.close();
+
         _downloads.add(DownloadItem(
           id: id,
           title: title,
@@ -52,6 +59,7 @@ class OfflineDownloadService {
         ));
         return targetPath;
       }
+      client.close();
     } catch (_) {}
     return null;
   }

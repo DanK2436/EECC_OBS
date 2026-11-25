@@ -222,9 +222,8 @@ class _DonationModalState extends State<DonationModal> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 30),
-            ],
-          ),
+            const SizedBox(height: 30),
+          ],
         ),
       ),
     );

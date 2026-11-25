@@ -52,13 +52,16 @@ jobs:
       - name: Publish EECC Studio Native (.NET 8 Win-x64 Self-Contained)
         working-directory: apps/studio_native
         run: |
-          dotnet publish src/EeccStudio.App/EeccStudio.App.csproj `
-            -c Release `
-            -r win-x64 `
-            --self-contained true `
-            -p:PublishSingleFile=false `
-            -p:IncludeNativeLibrariesForSelfExtract=true `
-            -o publish/win-x64
+          dotnet publish src/EeccStudio.App/EeccStudio.App.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=false -p:IncludeNativeLibrariesForSelfExtract=true -o publish/win-x64 2>&1 | Tee-Object -FilePath publish_studio.txt
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Upload Studio Publish Log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: EECC_Studio_Publish_Log
+          path: apps/studio_native/publish_studio.txt
+          if-no-files-found: ignore
 
       - name: Compile Windows Installer (.exe) with Inno Setup
         working-directory: apps/studio_native

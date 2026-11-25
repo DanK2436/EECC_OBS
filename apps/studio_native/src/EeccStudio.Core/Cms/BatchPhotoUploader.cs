@@ -110,7 +110,7 @@ namespace EeccStudio.Core.Cms
                                 token: token
                             ).ConfigureAwait(false);
                         }
-                        catch (Exception ex) when (attempts < 3)
+                        catch (Exception) when (attempts < 3)
                         {
                             await Task.Delay(500 * attempts, token).ConfigureAwait(false);
                         }

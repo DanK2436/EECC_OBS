@@ -78,7 +78,7 @@ namespace EeccStudio.Core.WebRtc
             return receiver;
         }
 
-        public IReadOnlyCollection<WebRtcCameraReceiver> ActiveReceivers => _receivers.Values;
+        public IReadOnlyCollection<WebRtcCameraReceiver> ActiveReceivers => _receivers.Values.ToList();
 
         public void Dispose()
         {

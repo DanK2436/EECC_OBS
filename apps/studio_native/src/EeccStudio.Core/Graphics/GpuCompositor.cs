@@ -225,12 +225,15 @@ namespace EeccStudio.Core.Graphics
             {
                 fixed (byte* pA = a.Data, pB = b.Data, pD = dest.Data)
                 {
+                    byte* rawA = pA;
+                    byte* rawB = pB;
+                    byte* rawD = pD;
                     Parallel.For(0, h, y =>
                     {
                         int rowOffset = y * w * 4;
-                        byte* rowA = pA + rowOffset;
-                        byte* rowB = pB + rowOffset;
-                        byte* rowD = pD + rowOffset;
+                        byte* rowA = rawA + rowOffset;
+                        byte* rowB = rawB + rowOffset;
+                        byte* rowD = rawD + rowOffset;
 
                         for (int x = 0; x < w * 4; x++)
                         {
@@ -322,11 +325,13 @@ namespace EeccStudio.Core.Graphics
             {
                 fixed (byte* pA = a.Data, pD = dest.Data)
                 {
+                    byte* rawA = pA;
+                    byte* rawD = pD;
                     Parallel.For(0, h, y =>
                     {
                         int rowOffset = y * w * 4;
-                        byte* rowA = pA + rowOffset;
-                        byte* rowD = pD + rowOffset;
+                        byte* rowA = rawA + rowOffset;
+                        byte* rowD = rawD + rowOffset;
 
                         for (int x = 0; x < w * 4; x += 4)
                         {

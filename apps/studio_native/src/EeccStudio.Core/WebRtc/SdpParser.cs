@@ -23,8 +23,6 @@ namespace EeccStudio.Core.WebRtc
             sb.Append("a=group:BUNDLE audio video\r\n");
             sb.Append("a=msid-semantic: WMS\r\n");
 
-            bool inAudio = false;
-            bool inVideo = false;
             int audioPayloadType = 111; // Opus par défaut
             int videoPayloadType = 96;  // H.264 par défaut
 
@@ -32,16 +30,12 @@ namespace EeccStudio.Core.WebRtc
             {
                 if (line.StartsWith("m=audio"))
                 {
-                    inAudio = true;
-                    inVideo = false;
                     var parts = line.Split(' ');
                     if (parts.Length > 3 && int.TryParse(parts[3], out var pt))
                         audioPayloadType = pt;
                 }
                 else if (line.StartsWith("m=video"))
                 {
-                    inVideo = true;
-                    inAudio = false;
                     var parts = line.Split(' ');
                     if (parts.Length > 3 && int.TryParse(parts[3], out var pt))
                         videoPayloadType = pt;

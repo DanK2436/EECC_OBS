@@ -126,10 +126,11 @@ namespace EeccStudio.Core.Graphics
             {
                 fixed (byte* ptr = buffer.Data)
                 {
+                    byte* raw = ptr;
                     Parallel.For(0, h, y =>
                     {
                         int rowOffset = y * w * 4;
-                        byte* row = ptr + rowOffset;
+                        byte* row = raw + rowOffset;
                         byte bg = (byte)(16 + (y * 20) / h);
 
                         for (int x = 0; x < w * 4; x += 4)

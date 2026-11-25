@@ -400,3 +400,31 @@ jobs:
             ---
             *Conçu avec des technologies natives et une charte graphique professionnelle 0% dégradé.*
           files: release_assets/*
+
+  # ========================================================
+  # 7. PUBLICATION DES LOGS SUR LA BRANCHE CI-LOGS
+  # ========================================================
+  publish-logs:
+    name: Publier les logs de build et de tests
+    runs-on: ubuntu-latest
+    if: always()
+    needs: [build-studio-windows, build-tv-apk, build-camera-apk, build-web-portal]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: all_logs/
+
+      - name: Push logs to ci-logs branch
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -B ci-logs
+          rm -rf *
+          cp -r all_logs/* . || true
+          git add -A
+          git commit -m "ci: publish latest build logs [skip ci]" || exit 0
+          git push -f origin ci-logs

@@ -40,23 +40,14 @@ jobs:
       - name: Test LAN camera pairing
         working-directory: apps/studio_native
         run: |
-          dotnet test tests/EeccStudio.Core.Tests/EeccStudio.Core.Tests.csproj -c Release -v normal > test_studio.log 2>&1
-        continue-on-error: true
+          dotnet test tests/EeccStudio.Core.Tests/EeccStudio.Core.Tests.csproj -c Release -v normal | Tee-Object -FilePath test_studio.txt
 
       - name: Upload Studio Test Log
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: studio_test_log
-          path: apps/studio_native/test_studio.log
-
-      - name: Verify Studio Tests Succeeded
-        working-directory: apps/studio_native
-        run: |
-          Get-Content test_studio.log
-          if ((Select-String -Path test_studio.log -Pattern "Failed:").Line -match "Failed:\s+[1-9]") {
-            throw "Tests studio failed!"
-          }
+          path: apps/studio_native/test_studio.txt
 
       - name: Publish EECC Studio Native (.NET 8 Win-x64 Self-Contained)
         working-directory: apps/studio_native
@@ -176,24 +167,15 @@ jobs:
       - name: Build Release APK
         working-directory: apps/tv_mobile
         run: |
-          flutter build apk --release -v > build_tv.log 2>&1
-        continue-on-error: true
+          set -o pipefail
+          flutter build apk --release -v 2>&1 | tee build_tv.txt
 
       - name: Upload TV Build Log
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: tv_build_log
-          path: apps/tv_mobile/build_tv.log
-
-      - name: Verify TV APK Built
-        working-directory: apps/tv_mobile
-        run: |
-          if [ ! -f build/app/outputs/flutter-apk/app-release.apk ]; then
-            echo "=== BUILD FAILED - LAST 300 LINES ==="
-            tail -n 300 build_tv.log
-            exit 1
-          fi
+          path: apps/tv_mobile/build_tv.txt
 
       - name: Prepare Artifact
         working-directory: apps/tv_mobile
@@ -245,23 +227,15 @@ jobs:
       - name: Flutter test
         working-directory: apps/camera_mobile
         run: |
-          flutter test --reporter=expanded > test_camera.log 2>&1
-        continue-on-error: true
+          set -o pipefail
+          flutter test --reporter=expanded 2>&1 | tee test_camera.txt
 
       - name: Upload Camera Test Log
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: camera_test_log
-          path: apps/camera_mobile/test_camera.log
-
-      - name: Verify Camera Tests Succeeded
-        working-directory: apps/camera_mobile
-        run: |
-          cat test_camera.log
-          if grep -q "Some tests failed" test_camera.log; then
-            exit 1
-          fi
+          path: apps/camera_mobile/test_camera.txt
 
       - name: Build Release APK
         working-directory: apps/camera_mobile
@@ -417,14 +391,16 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: all_logs/
+          merge-multiple: true
 
       - name: Push logs to ci-logs branch
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git checkout -B ci-logs
-          rm -rf *
-          cp -r all_logs/* . || true
-          git add -A
+          git rm -rf . || true
+          mkdir -p logs
+          cp -r all_logs/* logs/ || true
+          git add -f logs/
           git commit -m "ci: publish latest build logs [skip ci]" || exit 0
           git push -f origin ci-logs

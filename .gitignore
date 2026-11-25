@@ -42,3 +42,7 @@ Thumbs.db
 # Supabase
 .branches
 .temp
+
+monitor_run.ps1
+*.log
+

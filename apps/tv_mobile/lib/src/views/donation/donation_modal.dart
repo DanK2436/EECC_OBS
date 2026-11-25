@@ -1,7 +1,13 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
-import '../../constants/colors.dart';
-import '../../constants/config.dart';
+import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
+
+import 'package:eecc_tv/config.dart';
+import 'package:eecc_tv/constants/colors.dart';
 
 class DonationModal extends StatefulWidget {
   const DonationModal({super.key});
@@ -24,8 +30,16 @@ class _DonationModalState extends State<DonationModal> {
   String _selectedMethod = 'Mobile Money (Airtel, M-Pesa, Orange)';
   final TextEditingController _customAmountController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
+  final TextEditingController _donorNameController = TextEditingController();
+  final TextEditingController _donorEmailController = TextEditingController();
 
   final List<double> _predefinedAmounts = [5.0, 10.0, 20.0, 50.0, 100.0];
+
+  // État du don
+  String? _donationReference;
+  String? _donationStatus;
+  bool _isProcessing = false;
+  String? _errorMessage;
 
   @override
   Widget build(BuildContext context) {
@@ -166,39 +180,168 @@ class _DonationModalState extends State<DonationModal> {
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
               ),
             ),
-            const SizedBox(height: 25),
-            SizedBox(
-              width: double.infinity,
-              height: 50,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: EeccColors.primary,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-                onPressed: () async {
-                  Navigator.pop(context);
-                  final amount = _selectedAmount.toStringAsFixed(0);
-                  final phone = Uri.encodeComponent(_phoneController.text.trim());
-                  final paymentUrl = Uri.parse(
-                    'https://maishapay.online/api/checkout?amount=$amount&currency=USD&phone=$phone&merchant_key=${Uri.encodeComponent(EeccConfig.maishapayPublicKey)}'
-                  );
-                  try {
-                    await launchUrl(paymentUrl, mode: LaunchMode.externalApplication);
-                  } catch (_) {
-                    try {
-                      await launchUrl(Uri.parse(EeccConfig.churchWebsite), mode: LaunchMode.externalApplication);
-                    } catch (_) {}
-                  }
-                },
-                child: Text(
-                  'Faire un don de ${_selectedAmount.toStringAsFixed(0)} \$',
-                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
-                ),
+            const SizedBox(height: 15),
+            TextField(
+              controller: _donorNameController,
+              decoration: InputDecoration(
+                labelText: 'Nom complet (pour le reçu)',
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
               ),
             ),
-          ],
+            const SizedBox(height: 15),
+            TextField(
+              controller: _donorEmailController,
+              decoration: InputDecoration(
+                labelText: 'E-mail (pour le reçu électronique)',
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+            const SizedBox(height: 25),
+            _isProcessing
+                ? const Padding(
+                    padding: EdgeInsets.all(16),
+                    child: CircularProgressIndicator(
+                      color: EeccColors.primary,
+                    ),
+                  )
+                : SizedBox(
+                    width: double.infinity,
+                    height: 50,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: EeccColors.primary,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      onPressed: () => _processDonation(context),
+                      child: const Text(
+                        'Faire un don de ${_selectedAmount.toStringAsFixed(0)} \$',
+                        style: TextStyle(
+                            fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 30),
+            ],
+          ),
         ),
       ),
     );
+  }
+
+  Future<void> _processDonation(BuildContext context) async {
+    setState(() {
+      _isProcessing = true;
+      _errorMessage = null;
+    });
+
+    final amount = double.tryParse(_selectedAmount.toStringAsFixed(2)) ?? 0.0;
+    final phone = _phoneController.text.trim();
+    final donorName = _donorNameController.text.trim();
+    final donorEmail = _donorEmailController.text.trim();
+    final method = _selectedMethod;
+
+    if (amount <= 0) {
+      setState(() {
+        _isProcessing = false;
+        _errorMessage = 'Veuillez entrer un montant valide.';
+      });
+      return;
+    }
+
+    if (method == 'Mobile Money (Airtel, M-Pesa, Orange)' && phone.isEmpty) {
+      setState(() {
+        _isProcessing = false;
+        _errorMessage = 'Veuillez entrer votre numéro de téléphone.';
+      });
+      return;
+    }
+
+    // 1. Appel au backend pour créer l'intention de don
+    try {
+      final uri = Uri.parse('${EeccConfig.supabaseUrl}/functions/v1/create-donation-intent');
+      final response = await http.post(
+        uri,
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': EeccConfig.supabaseAnonKey,
+          'Authorization': 'Bearer ${EeccConfig.supabaseAnonKey}',
+        },
+        body: jsonEncode({
+          'amount': _selectedAmount,
+          'currency': 'USD',
+          'donor_name': donorName.isNotEmpty ? donorName : null,
+          'donor_email': donorEmail.isNotEmpty ? donorEmail : null,
+          'donor_phone': phone.isNotEmpty ? phone : null,
+          'method': method,
+        },
+      );
+
+      if (response.statusCode != 200) {
+        final errorBody = response.body;
+        throw Exception('Erreur backend: ${response.statusCode} - $errorBody');
+      }
+
+      final data = jsonDecode(response.body);
+
+      if (!data['success']) {
+        throw Exception(data['error'] ?? 'Erreur inconnue du backend');
+      }
+
+      final donation = data['donation'];
+      _donationReference = donation['reference'];
+      _donationStatus = donation['status'];
+
+      // 2. Rediriger vers le checkout Maishapay
+      final checkoutUrl = data['checkout_url'] as String?;
+      if (checkoutUrl != null && checkoutUrl.isNotEmpty) {
+        final paymentUri = Uri.parse(checkoutUrl);
+        if (await canLaunchUrl(paymentUri)) {
+          // On ouvre dans une vue externe; on passe aussi les infos utiles
+          // Note: pour un usage réel, il faudrait passer par un navigateur WebView
+          // ou stocker le reference côté client et laisser Maishapay y accéder.
+          // Ici on redirige car c'est le pattern le plus simple.
+          if (!mounted) return;
+          Navigator.of(context).pop(); // fermer le modal
+          if (!await launchUrl(paymentUri, mode: LaunchMode.externalApplication)) {
+            if (!mounted) return;
+            // fallback vers le site de l'église
+            if (!mounted) return;
+            // ignore: use_build_context_safely
+            // ignore: avoid_print
+            print('Impossible d\'ouvrir le lien de paiement, redirection vers le site');
+          }
+        }
+      } else {
+        throw Exception('URL de checkout introuvable');
+      }
+    } catch (e) {
+      // 3. En cas d'erreur, fallback : construire manuellement l'URL Maishapay
+      // (pour ne pas bloquer l'utilisateur si le backend ne répond pas)
+      if (!mounted) return;
+      final amountFmt = _selectedAmount.toStringAsFixed(0);
+      final paymentUrl = Uri.parse(
+        'https://maishapay.online/api/checkout?amount=$amountFmt&currency=USD&phone=${Uri.encodeComponent(_phoneController.text.trim())}&merchant_key=${Uri.encodeComponent(EeccConfig.maishapayPublicKey)}'
+      );
+      try {
+        if (await launchUrl(paymentUri, mode: LaunchMode.externalApplication)) {
+          // fermer le modal
+          if (!mounted) return;
+          Navigator.of(context).pop();
+        }
+      } catch (_) {
+        if (!mounted) return;
+        setState(() {
+          _isProcessing = false;
+          _errorMessage =
+              'Impossible d\'ouvrir le paiement. Veuillez réessayer ou contactez l\'administrateur.';
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isProcessing = false);
+      }
+    }
   }
 }

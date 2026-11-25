@@ -11,7 +11,7 @@ export default function HomePage() {
   return (
     <>
       <Navbar />
-      <main className="flex-grow">
+      <main className="flex-grow bg-slate-50">
         <HeroBanner />
         <LiveCard isLive={false} />
         <SchedulesSection />

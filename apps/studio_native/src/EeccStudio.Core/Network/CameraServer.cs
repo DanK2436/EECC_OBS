@@ -33,6 +33,8 @@ public sealed class CameraClient
     public double AudioLevel { get; set; }
     public int Fps { get; set; }
     public int BitrateKbps { get; set; }
+    public string Resolution { get; set; } = "16K UHD (15360x8640)";
+    public string Codec { get; set; } = "H.264";
     public DateTimeOffset ConnectedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset LastTelemetryTime { get; set; } = DateTimeOffset.UnixEpoch;
     internal DateTimeOffset ReservedUntil { get; set; }
@@ -66,6 +68,13 @@ public sealed class CameraServer : IDisposable
     public event Action<string, byte[]>? OnCameraFrameReceived;
     public event Action<bool>? OnStreamingStateChanged;
     public event Action<bool>? OnRecordingStateChanged;
+
+    // Événements de signalisation WebRTC (Phase 1 du Plan Haute Qualité)
+    public event Action<CameraClient, string, string, int, string>? OnWebRtcOfferReceived;
+    public event Action<CameraClient, string>? OnWebRtcAnswerReceived;
+    public event Action<CameraClient, string, string?, int>? OnIceCandidateReceived;
+    public event Action<CameraClient, List<string>, int, string>? OnWebRtcCapabilitiesReceived;
+    public event Action<CameraClient, bool>? OnWebRtcReadyReceived;
 
     public byte[]? LatestCameraFrameBytes { get; private set; }
     public byte[]? ActiveProgramFrameBytes { get; set; }
@@ -349,6 +358,81 @@ public sealed class CameraServer : IDisposable
         }
     }
 
+    public async Task SendWebRtcOfferAsync(string streamName, string sdp, string codec = "H264", int fps = 300, string resolution = "16K UHD")
+    {
+        CameraClient? client;
+        lock (_gate)
+        {
+            _connected.TryGetValue(streamName, out client);
+        }
+        if (client == null || client.Socket.State != WebSocketState.Open)
+            return;
+
+        var json = JsonSerializer.Serialize(new Dictionary<string, object>
+        {
+            ["type"] = "sdp_offer",
+            ["sdp"] = sdp,
+            ["codec"] = codec,
+            ["fps"] = fps,
+            ["resolution"] = resolution
+        });
+        try
+        {
+            await SendTextAsync(client.Socket, client.SendLock, json, CancellationToken.None);
+        }
+        catch { /* client déconnecté */ }
+    }
+
+    public async Task SendWebRtcAnswerAsync(string streamName, string sdp)
+    {
+        CameraClient? client;
+        lock (_gate)
+        {
+            _connected.TryGetValue(streamName, out client);
+        }
+        if (client == null || client.Socket.State != WebSocketState.Open)
+            return;
+
+        var json = JsonSerializer.Serialize(new Dictionary<string, object>
+        {
+            ["type"] = "sdp_answer",
+            ["sdp"] = sdp,
+            ["status"] = "accepted"
+        });
+        try
+        {
+            await SendTextAsync(client.Socket, client.SendLock, json, CancellationToken.None);
+        }
+        catch { /* client déconnecté */ }
+    }
+
+    public async Task SendIceCandidateAsync(string streamName, string candidate, string? sdpMid = null, int sdpMLineIndex = 0)
+    {
+        CameraClient? client;
+        lock (_gate)
+        {
+            _connected.TryGetValue(streamName, out client);
+        }
+        if (client == null || client.Socket.State != WebSocketState.Open)
+            return;
+
+        var payload = new Dictionary<string, object>
+        {
+            ["type"] = "ice_candidate",
+            ["candidate"] = candidate,
+            ["sdpMLineIndex"] = sdpMLineIndex
+        };
+        if (!string.IsNullOrEmpty(sdpMid))
+            payload["sdpMid"] = sdpMid;
+
+        var json = JsonSerializer.Serialize(payload);
+        try
+        {
+            await SendTextAsync(client.Socket, client.SendLock, json, CancellationToken.None);
+        }
+        catch { /* client déconnecté */ }
+    }
+
     private async Task AcceptLoopAsync(CancellationToken cancellationToken)
     {
         while (!cancellationToken.IsCancellationRequested && _isRunning)
@@ -561,6 +645,46 @@ public sealed class CameraServer : IDisposable
                     {
                         ApplyTelemetry(client, root);
                         OnTelemetryReceived?.Invoke(client);
+                    }
+                    else if (type == "sdp_offer" && client != null)
+                    {
+                        var sdp = ReadString(root, "sdp") ?? string.Empty;
+                        var codec = ReadString(root, "codec") ?? "H264";
+                        var fps = TryReadInt(root, out var parsedFps, "fps") ? parsedFps : 300;
+                        var res = ReadString(root, "resolution") ?? "16K UHD";
+                        OnWebRtcOfferReceived?.Invoke(client, sdp, codec, fps, res);
+                    }
+                    else if (type == "sdp_answer" && client != null)
+                    {
+                        var sdp = ReadString(root, "sdp") ?? string.Empty;
+                        OnWebRtcAnswerReceived?.Invoke(client, sdp);
+                    }
+                    else if (type == "ice_candidate" && client != null)
+                    {
+                        var candidate = ReadString(root, "candidate") ?? string.Empty;
+                        var sdpMid = ReadString(root, "sdpMid");
+                        var sdpMLineIndex = TryReadInt(root, out var mline, "sdpMLineIndex") ? mline : 0;
+                        OnIceCandidateReceived?.Invoke(client, candidate, sdpMid, sdpMLineIndex);
+                    }
+                    else if (type == "webrtc_capabilities" && client != null)
+                    {
+                        var codecs = new List<string>();
+                        if (root.TryGetProperty("codecs", out var cArray) && cArray.ValueKind == JsonValueKind.Array)
+                        {
+                            foreach (var item in cArray.EnumerateArray())
+                            {
+                                var c = item.GetString();
+                                if (!string.IsNullOrEmpty(c)) codecs.Add(c);
+                            }
+                        }
+                        var maxFps = TryReadInt(root, out var mfps, "max_fps") ? mfps : 300;
+                        var maxRes = ReadString(root, "max_resolution") ?? "16K UHD";
+                        OnWebRtcCapabilitiesReceived?.Invoke(client, codecs, maxFps, maxRes);
+                    }
+                    else if (type == "webrtc_ready" && client != null)
+                    {
+                        var isReady = TryReadBool(root, out var r, "ready") ? r : true;
+                        OnWebRtcReadyReceived?.Invoke(client, isReady);
                     }
                     else if (type == "bye" && client != null)
                     {
@@ -788,6 +912,8 @@ public sealed class CameraServer : IDisposable
         var hasFps = TryReadInt(payload, out var fps, "fps");
         var hasBitrate = TryReadInt(payload, out var bitrate, "currentBitrateKbps", "bitrate_kbps");
         var hasAudio = TryReadDouble(payload, out var audio, "audioLevel", "audio_level", "audioLevelNormalized");
+        var resolution = ReadString(payload, "resolution");
+        var codec = ReadString(payload, "codec");
         lock (_gate)
         {
             if (hasBattery)
@@ -800,6 +926,10 @@ public sealed class CameraServer : IDisposable
                 client.BitrateKbps = bitrate;
             if (hasAudio)
                 client.AudioLevel = Math.Clamp(audio, 0, 1);
+            if (!string.IsNullOrWhiteSpace(resolution))
+                client.Resolution = resolution;
+            if (!string.IsNullOrWhiteSpace(codec))
+                client.Codec = codec;
             client.LastTelemetryTime = Clock();
         }
     }

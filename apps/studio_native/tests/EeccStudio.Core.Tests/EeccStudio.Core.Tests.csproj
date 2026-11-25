@@ -16,6 +16,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\EeccStudio.Core\EeccStudio.Core.csproj" />
+    <ProjectReference Include="..\..\src\EeccStudio.Broadcast\EeccStudio.Broadcast.csproj" />
   </ItemGroup>
 
 </Project>

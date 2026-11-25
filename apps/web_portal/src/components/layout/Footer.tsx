@@ -13,7 +13,7 @@ export const Footer = () => {
           <div>
             <div className="flex items-center space-x-3 mb-5">
               <div className="w-10 h-10 rounded-xl overflow-hidden bg-white flex items-center justify-center p-0.5 shadow-md">
-                <img src="/logo.png" alt="Logo EECC" className="w-full h-full object-contain" />
+                <img src="/icon-64.png" alt="Logo EECC" className="w-full h-full object-contain" />
               </div>
               <span className="text-xl font-bold tracking-tight">EECC</span>
             </div>

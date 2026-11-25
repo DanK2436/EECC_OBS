@@ -15,14 +15,23 @@ namespace EeccStudio.Core.Audio
     }
 
     /// <summary>
-    /// Moteur Audio Broadcast WASAPI / Multi-Pistes 32-bit float
-    /// Gère les faders de mixage et fournit les niveaux réels pour les vu-mètres à paliers solides.
+    /// Moteur Audio Broadcast WASAPI / Multi-Pistes 32-bit float :
+    /// - Chaîne DSP par canal (Coupe-bas 80 Hz, Noise Gate, Compresseur, Limiteur -1 dBFS, Lipsync Delay)
+    /// - Mesure de sonie normalisée EBU R128 / LUFS
+    /// - Enregistrement multipiste ISO indépendant WAV
+    /// - Mixage master temps réel pour le streaming
     /// </summary>
     public class AudioEngine
     {
         private readonly List<AudioChannel> _channels = new();
         private readonly ProgramAudioMix _mix = new();
+        private readonly ConcurrentDictionary<string, DspChain> _dspChains = new();
+        private readonly LufsMeter _lufsMeter = new();
+        private readonly IsoAudioRecorder _isoRecorder = new();
         private readonly object _lock = new();
+
+        public LufsMeter LufsMeter => _lufsMeter;
+        public IsoAudioRecorder IsoRecorder => _isoRecorder;
 
         public IReadOnlyList<AudioChannel> Channels
         {
@@ -58,6 +67,17 @@ namespace EeccStudio.Core.Audio
             }
         }
 
+        public DspChain GetOrCreateDsp(string channelId)
+        {
+            return _dspChains.GetOrAdd(channelId, _ => new DspChain());
+        }
+
+        public void SetChannelDelay(string channelId, int delayMs)
+        {
+            var dsp = GetOrCreateDsp(channelId);
+            dsp.DelayMs = Math.Clamp(delayMs, 0, 1000);
+        }
+
         public void SetVolume(string channelId, float volumeLinear)
         {
             var volume = Math.Clamp(volumeLinear, 0.0f, 1.0f);
@@ -81,16 +101,38 @@ namespace EeccStudio.Core.Audio
             }
         }
 
-        /// <summary>Ajoute des échantillons stéréo entrelacés sur une piste du bus.</summary>
+        /// <summary>
+        /// Ajoute des échantillons stéréo entrelacés sur une piste du bus en appliquant la chaîne DSP
+        /// et l'enregistrement ISO indépendant.
+        /// </summary>
         public void SubmitPcm(string channelId, ReadOnlySpan<short> interleavedStereo)
         {
-            _mix.Submit(channelId, interleavedStereo);
+            if (interleavedStereo.Length == 0) return;
+
+            // 1. Chaîne de traitement DSP par canal (Noise Gate, Coupe-bas, Compresseur, Lipsync)
+            var dsp = GetOrCreateDsp(channelId);
+            short[] processed = interleavedStereo.ToArray();
+            dsp.Process(processed);
+
+            // 2. Enregistrement multipiste ISO
+            _isoRecorder.SubmitIsoTrack(channelId, processed);
+
+            // 3. Soumission au mixeur master
+            _mix.Submit(channelId, processed);
         }
 
         /// <summary>Lit le bus master pour une destination. Le résultat suit les échantillons réellement soumis.</summary>
         public byte[] RenderMaster(int frames)
         {
             var bytes = _mix.Render(frames);
+
+            if (bytes.Length >= 4)
+            {
+                short[] samples = new short[bytes.Length / 2];
+                Buffer.BlockCopy(bytes, 0, samples, 0, bytes.Length);
+                _lufsMeter.ProcessSamples(samples);
+            }
+
             lock (_lock)
             {
                 var master = _channels.Find(channel => channel.Id == "master");

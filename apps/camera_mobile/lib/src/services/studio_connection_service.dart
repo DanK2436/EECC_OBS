@@ -23,6 +23,10 @@ class StudioConnectionService {
   final void Function(String code, String message)? onRejected;
   final void Function(String message)? onStatus;
   final void Function(StudioLinkPhase phase)? onPhaseChanged;
+  final void Function(String sdp, String codec, int fps, String resolution)? onWebRtcOfferReceived;
+  final void Function(String sdp)? onWebRtcAnswerReceived;
+  final void Function(String candidate, String? sdpMid, int sdpMLineIndex)? onIceCandidateReceived;
+  final void Function(bool ready)? onWebRtcReadyReceived;
   final Duration handshakeTimeout;
 
   final Battery _battery = Battery();
@@ -64,6 +68,10 @@ class StudioConnectionService {
     this.onRejected,
     this.onStatus,
     this.onPhaseChanged,
+    this.onWebRtcOfferReceived,
+    this.onWebRtcAnswerReceived,
+    this.onIceCandidateReceived,
+    this.onWebRtcReadyReceived,
     this.handshakeTimeout = const Duration(seconds: 8),
   });
 
@@ -76,6 +84,11 @@ class StudioConnectionService {
   int get slotNumber => _slotNumber;
   int get realFps => _currentRealFps;
   int get realBitrateKbps => _currentRealBitrateKbps;
+  String currentResolution = '16K Ultra-HD';
+
+  void setResolution(String res) {
+    currentResolution = res;
+  }
 
   Future<void> connect({bool useSession = false}) async {
     _userLeft = false;
@@ -186,6 +199,78 @@ class StudioConnectionService {
     }
   }
 
+  /// Émet une offre SDP WebRTC vers EECC Studio
+  void sendWebRtcOffer(String sdp, {String codec = 'H264', int fps = 300, String resolution = '16K UHD'}) {
+    if (!_isConnected || _wsChannel == null) return;
+    try {
+      _wsChannel?.sink.add(jsonEncode({
+        'type': 'sdp_offer',
+        'sdp': sdp,
+        'codec': codec,
+        'fps': fps,
+        'resolution': resolution,
+      }));
+    } catch (_) {
+      _onSocketClosed();
+    }
+  }
+
+  /// Émet une réponse SDP WebRTC vers EECC Studio
+  void sendWebRtcAnswer(String sdp) {
+    if (!_isConnected || _wsChannel == null) return;
+    try {
+      _wsChannel?.sink.add(jsonEncode({
+        'type': 'sdp_answer',
+        'sdp': sdp,
+      }));
+    } catch (_) {
+      _onSocketClosed();
+    }
+  }
+
+  /// Émet un candidat ICE vers EECC Studio
+  void sendIceCandidate(String candidate, {String? sdpMid, int sdpMLineIndex = 0}) {
+    if (!_isConnected || _wsChannel == null) return;
+    try {
+      _wsChannel?.sink.add(jsonEncode({
+        'type': 'ice_candidate',
+        'candidate': candidate,
+        'sdpMid': sdpMid,
+        'sdpMLineIndex': sdpMLineIndex,
+      }));
+    } catch (_) {
+      _onSocketClosed();
+    }
+  }
+
+  /// Annonce les capacités matérielles du smartphone (codecs, FPS max, résolution max)
+  void sendWebRtcCapabilities({List<String> codecs = const ['H264', 'HEVC'], int maxFps = 300, String maxResolution = '16K UHD'}) {
+    if (!_isConnected || _wsChannel == null) return;
+    try {
+      _wsChannel?.sink.add(jsonEncode({
+        'type': 'webrtc_capabilities',
+        'codecs': codecs,
+        'max_fps': maxFps,
+        'max_resolution': maxResolution,
+      }));
+    } catch (_) {
+      _onSocketClosed();
+    }
+  }
+
+  /// Confirme l'état de préparation du flux WebRTC
+  void sendWebRtcReady(bool isReady) {
+    if (!_isConnected || _wsChannel == null) return;
+    try {
+      _wsChannel?.sink.add(jsonEncode({
+        'type': 'webrtc_ready',
+        'ready': isReady,
+      }));
+    } catch (_) {
+      _onSocketClosed();
+    }
+  }
+
   void _handleIncomingMessage(dynamic rawData) {
     if (rawData is! String) return;
     try {
@@ -245,6 +330,23 @@ class StudioConnectionService {
         onTallyChanged(_currentTally);
       } else if (type == 'command') {
         onRemoteCommandReceived?.call(message['command'] as String? ?? '', message['payload']);
+      } else if (type == 'sdp_offer') {
+        onWebRtcOfferReceived?.call(
+          message['sdp'] as String? ?? '',
+          message['codec'] as String? ?? 'H264',
+          (message['fps'] as int?) ?? 300,
+          message['resolution'] as String? ?? '16K UHD',
+        );
+      } else if (type == 'sdp_answer') {
+        onWebRtcAnswerReceived?.call(message['sdp'] as String? ?? '');
+      } else if (type == 'ice_candidate') {
+        onIceCandidateReceived?.call(
+          message['candidate'] as String? ?? '',
+          message['sdpMid'] as String?,
+          (message['sdpMLineIndex'] as int?) ?? 0,
+        );
+      } else if (type == 'webrtc_ready') {
+        onWebRtcReadyReceived?.call(message['ready'] as bool? ?? true);
       }
     } catch (_) {}
   }
@@ -292,7 +394,8 @@ class StudioConnectionService {
         currentBitrateKbps: _currentRealBitrateKbps,
         fps: _currentRealFps,
         droppedFrames: 0,
-        resolution: 'capteur',
+        resolution: currentResolution,
+        codec: 'H.264 / WebRTC',
       );
       try {
         _wsChannel?.sink.add(jsonEncode({

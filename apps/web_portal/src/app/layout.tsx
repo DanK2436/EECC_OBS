@@ -3,9 +3,10 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "EECC — Église Évangélique les Cohéritiers du Christ",
-  description: "Portail officiel de l'EECC. Cultes en direct, replays, prédications, podcasts bibliques et communauté chrétienne.",
+  description:
+    "Portail officiel : cultes en direct, replays, prédications, podcasts, communauté, dons.",
   icons: {
-    icon: "/favicon.ico",
+    icon: "/icon-64.png",
     apple: "/apple-touch-icon.png",
   },
 };
@@ -17,7 +18,17 @@ export default function RootLayout({
 }) {
   return (
     <html lang="fr" className="scroll-smooth">
-      <body className="antialiased min-h-screen flex flex-col bg-background text-textMain">
+      <body
+        className="
+          antialiased
+          min-h-screen
+          bg-background
+          text-textMain
+          font-sans
+          antialiased
+          overflow-x-hidden
+        "
+      >
         {children}
       </body>
     </html>

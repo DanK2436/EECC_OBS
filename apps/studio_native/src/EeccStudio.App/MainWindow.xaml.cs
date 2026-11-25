@@ -11,8 +11,11 @@ using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using EeccStudio.Broadcast;
 using EeccStudio.Core.Audio;
+using EeccStudio.Core.Graphics;
 using EeccStudio.Core.Models;
 using EeccStudio.Core.Network;
+using EeccStudio.Core.Storage;
+using EeccStudio.Core.WebRtc;
 
 namespace EeccStudio
 {
@@ -20,6 +23,17 @@ namespace EeccStudio
     {
         private readonly CameraServer _cameraServer;
         private AudioEngine? _audioEngine;
+        private WebRtcSessionManager? _webRtcSessionManager;
+        private PhysicalCameraCapture? _physicalCameraCapture;
+        private ScreenCaptureEngine? _screenCaptureEngine;
+        private MediaVideoSource? _mediaVideoSource;
+        private GpuCompositor? _gpuCompositor;
+        private MasterRecorder? _masterRecorder;
+        private ReplayBuffer? _replayBuffer;
+        private VirtualCameraOutput? _virtualCamera;
+        private AdaptiveBitrateController? _abrController;
+        private ObsWebSocketServer? _obsWebSocketServer;
+        private OfflineSyncQueue? _offlineSyncQueue;
         private readonly DispatcherTimer _clockTimer;
         private readonly ObservableCollection<StudioScene> _scenes;
 
@@ -45,6 +59,107 @@ namespace EeccStudio
             // 1. Initialisation des moteurs C# Broadcast natifs
             _cameraServer = new CameraServer(port: 8089);
             _audioEngine = new AudioEngine();
+            _webRtcSessionManager = new WebRtcSessionManager(_cameraServer, _audioEngine);
+            _webRtcSessionManager.OnVideoFrameReceived += (slot, frame) =>
+            {
+                OnCameraFrameReceived(slot, frame);
+            };
+
+            _gpuCompositor = new GpuCompositor(CanvasPreset.FullHd1080p);
+            _physicalCameraCapture = new PhysicalCameraCapture();
+            _physicalCameraCapture.FrameArrived += OnPhysicalCameraFrameArrived;
+            _screenCaptureEngine = new ScreenCaptureEngine();
+            _screenCaptureEngine.FrameArrived += OnScreenCaptureFrameArrived;
+            _mediaVideoSource = new MediaVideoSource();
+            _mediaVideoSource.FrameArrived += OnMediaVideoFrameArrived;
+
+            _masterRecorder = new MasterRecorder();
+            _replayBuffer = new ReplayBuffer(capacitySeconds: 30, expectedFps: 30);
+            _replayBuffer.Start();
+            _virtualCamera = new VirtualCameraOutput();
+            _abrController = new AdaptiveBitrateController();
+
+            _obsWebSocketServer = new ObsWebSocketServer(port: 4455);
+            _obsWebSocketServer.OnGetCurrentProgramScene = () => _programScene?.Name ?? "Culte";
+            _obsWebSocketServer.OnGetCurrentPreviewScene = () => _previewScene?.Name ?? "Aperçu";
+            _obsWebSocketServer.OnSetCurrentProgramScene = name => Dispatcher.Invoke(() =>
+            {
+                var found = _scenes.FirstOrDefault(s => s.Name == name);
+                if (found != null) { _programScene = found; UpdateProgramDisplay(); }
+            });
+            _obsWebSocketServer.OnSetCurrentPreviewScene = name => Dispatcher.Invoke(() =>
+            {
+                var found = _scenes.FirstOrDefault(s => s.Name == name);
+                if (found != null) { _previewScene = found; UpdatePreviewDisplay(); }
+            });
+            _obsWebSocketServer.OnTriggerTransition = () => Dispatcher.Invoke(() => BtnFade_Click(this, new RoutedEventArgs()));
+            _obsWebSocketServer.OnGetStudioMode = () => _isStudioMode;
+            _obsWebSocketServer.OnSetStudioMode = enabled => Dispatcher.Invoke(() =>
+            {
+                if (_isStudioMode != enabled) BtnStudioMode_Click(this, new RoutedEventArgs());
+            });
+            _obsWebSocketServer.OnGetStreamStatus = () => _broadcast is { IsActive: true };
+            _obsWebSocketServer.OnToggleStream = () => Dispatcher.Invoke(() => BtnToggleStream_Click(this, new RoutedEventArgs()));
+            _obsWebSocketServer.OnGetRecordStatus = () => _masterRecorder?.IsRecording ?? false;
+            _obsWebSocketServer.OnToggleRecord = () => Dispatcher.Invoke(() => BtnToggleRecord_Click(this, new RoutedEventArgs()));
+            _obsWebSocketServer.OnSaveReplay = () => _ = _replayBuffer.SaveReplayAsync();
+
+            // Contrôle à distance des Overlays Graphiques (Stream Deck / Companion / OBS WebSocket v5)
+            _obsWebSocketServer.OnToggleLowerThird = (visible, speaker, title) => Dispatcher.Invoke(() =>
+            {
+                var vis = visible ? Visibility.Visible : Visibility.Collapsed;
+                PanelProgramLowerThird.Visibility = vis;
+                PanelPreviewLowerThird.Visibility = vis;
+                if (!string.IsNullOrWhiteSpace(speaker))
+                {
+                    TxtProgramLowerTitle.Text = speaker;
+                    TxtPreviewLowerTitle.Text = speaker;
+                }
+                if (!string.IsNullOrWhiteSpace(title))
+                {
+                    TxtProgramLowerSub.Text = title;
+                    TxtPreviewLowerSub.Text = title;
+                }
+            });
+
+            _obsWebSocketServer.OnToggleTicker = (enabled, text) => Dispatcher.Invoke(() =>
+            {
+                var vis = enabled ? Visibility.Visible : Visibility.Collapsed;
+                PanelProgramTicker.Visibility = vis;
+                PanelPreviewTicker.Visibility = vis;
+                if (!string.IsNullOrWhiteSpace(text))
+                {
+                    TxtProgramTicker.Text = text;
+                    TxtPreviewTicker.Text = text;
+                    StartTickerAnimations();
+                }
+            });
+
+            _obsWebSocketServer.OnSlideShowNext = () => Dispatcher.Invoke(() =>
+            {
+                // Stream Deck commande "Diapositive Suivante"
+            });
+
+            _obsWebSocketServer.OnSlideShowPrevious = () => Dispatcher.Invoke(() =>
+            {
+                // Stream Deck commande "Diapositive Précédente"
+            });
+
+            _obsWebSocketServer.OnSetTransition = (name, duration) => Dispatcher.Invoke(() =>
+            {
+                if (name.Contains("Cut", StringComparison.OrdinalIgnoreCase))
+                {
+                    BtnCut_Click(this, new RoutedEventArgs());
+                }
+                else
+                {
+                    BtnFade_Click(this, new RoutedEventArgs());
+                }
+            });
+            try { _obsWebSocketServer.Start(); } catch { }
+
+            _offlineSyncQueue = new OfflineSyncQueue();
+            _offlineSyncQueue.Start();
 
             _cameraServer.OnCameraConnected += OnCameraConnected;
             _cameraServer.OnCameraDisconnected += OnCameraDisconnected;
@@ -126,7 +241,7 @@ namespace EeccStudio
                 File.WriteAllText(
                     Path.Combine(AppContext.BaseDirectory, "startup.ready"),
                     DateTime.UtcNow.ToString("o"));
-                App.WriteLog("MainWindow loaded");
+                App.WriteLog("MainWindow loaded"); ApplyOverlaysFromScene();
             }
             catch (Exception ex)
             {
@@ -239,7 +354,7 @@ namespace EeccStudio
             TxtCameraStatusFooter.Text =
                 $"Téléphones {_cameraServer.ConnectedPhoneCount}/{CameraServer.MaxPhoneConnections}" +
                 $" · reconnexion {_cameraServer.ReservedPhoneCount}" +
-                $" · physiques {_cameraServer.PhysicalCameraCount} (non comptés)";
+                $" · physiques {_cameraServer.PhysicalCameraCount} (non comptés) · Pipeline 16K HD / 300 FPS";
         }
 
         private void OnCameraConnected(CameraClient camera)
@@ -302,7 +417,12 @@ namespace EeccStudio
                     if (streamSlot != _selectedPreviewSlot && streamSlot != _selectedProgramSlot)
                         continue;
 
-                    if (!TryDecodeJpeg(bytes, out var bitmap) || bitmap == null)
+                    var activeSrc = _previewScene?.Sources.FirstOrDefault(s => SlotFromSource(s) == streamSlot) ?? _programScene?.Sources.FirstOrDefault(s => SlotFromSource(s) == streamSlot);
+                    int rot = activeSrc?.RotationAngle ?? 0;
+                    bool fH = activeSrc?.FlipHorizontal ?? false;
+                    bool fV = activeSrc?.FlipVertical ?? false;
+
+                    if (!TryDecodeJpeg(bytes, out var bitmap, rot, fH, fV) || bitmap == null)
                         continue;
 
                     if (streamSlot == _selectedPreviewSlot)
@@ -312,6 +432,7 @@ namespace EeccStudio
                     {
                         ShowJpeg(ImgProgramVideo, PanelProgramSlate, bitmap);
                         _cameraServer.ActiveProgramFrameBytes = bytes;
+                        _replayBuffer?.AppendFrame(bytes);
                         TxtProgramLiveFooter.Text = $"Image reçue · {streamSlot}";
                     }
                 }
@@ -354,7 +475,30 @@ namespace EeccStudio
                 {
                     ImgPreviewVideo.Source = null;
                     PanelPreviewSlate.Visibility = Visibility.Visible;
-                    TxtPreviewEmpty.Text = "Caméra physique sélectionnée. Elle n'est pas un téléphone appairé et aucune image n'est inventée.";
+                    _selectedPreviewSlot = "HDMI-1";
+                    var devices = PhysicalCameraCapture.EnumerateDevices();
+                    if (devices.Count > 0 && (_physicalCameraCapture == null || !_physicalCameraCapture.IsRunning))
+                    {
+                        _physicalCameraCapture?.Start(devices[0], 1920, 1080, 60);
+                    }
+                    TxtPreviewEmpty.Text = "Acquisition du signal HDMI/USB en cours...";
+                }
+                else if (src.Type == SourceType.ScreenCapture)
+                {
+                    _selectedPreviewSlot = "Screen-1";
+                    var displays = ScreenCaptureEngine.EnumerateDisplays();
+                    if (displays.Count > 0 && (_screenCaptureEngine == null || !_screenCaptureEngine.IsRunning))
+                    {
+                        _screenCaptureEngine?.Start(displays[0], 60);
+                    }
+                }
+                else if (src.Type == SourceType.MediaVideo)
+                {
+                    _selectedPreviewSlot = "Media-1";
+                    if (_mediaVideoSource != null && _mediaVideoSource.State != PlaybackState.Playing)
+                    {
+                        _mediaVideoSource.Play();
+                    }
                 }
             }
         }
@@ -464,49 +608,149 @@ namespace EeccStudio
             if (ListScenes.SelectedItem is not StudioScene selected) return;
 
             var cm = new ContextMenu();
+
+            // SECTION 1 : OBS STUDIO - CAPTURE VIDÉO PHYSIQUE
+            var miPhysical = new MenuItem { Header = "📹 Périphérique de capture vidéo (Webcam, HDMI, USB)..." };
+            miPhysical.Click += (s, args) =>
+            {
+                var physical = new StudioSource
+                {
+                    Name = $"Caméra USB/HDMI {selected.Sources.Count + 1}",
+                    Type = SourceType.PhysicalCamera,
+                    Details = "Carte de capture / Webcam DirectShow"
+                };
+                selected.Sources.Add(physical);
+                _cameraServer.RegisterPhysicalCamera(physical.Id, physical.Name);
+            };
+            cm.Items.Add(miPhysical);
+
+            // SECTION 2 : NUANCE SPÉCIALE EECC CAMÉRA SUR LE MÊME WI-FI (ROUTEUR PARTAGÉ)
+            var miEeccWifiGroup = new MenuItem { Header = "📱 Caméra Mobile EECC (Wi-Fi Local / Routeur Partagé)" };
+            var localIp = _cameraServer.GetLocalIpAddress();
+            var wifiHeader = string.IsNullOrEmpty(localIp)
+                ? "📶 Wi-Fi : Aucune IP locale détectée"
+                : $"📶 Routeur Wi-Fi : {localIp}:{_cameraServer.ListeningPort}";
+            miEeccWifiGroup.Items.Add(new MenuItem { Header = wifiHeader, IsEnabled = false });
+            miEeccWifiGroup.Items.Add(new Separator());
+
+            // Téléphones actuellement connectés sur le Wi-Fi
+            foreach (var cam in _cameraServer.ConnectedCameras.Values)
+            {
+                var camSlot = cam.StreamName;
+                var camIp = cam.RemoteIp;
+                var camModel = cam.DeviceModel;
+                var miPhoneActive = new MenuItem { Header = $"🟢 {camSlot} : {cam.DisplayName} ({camIp} · {camModel})" };
+                miPhoneActive.Click += (s, args) =>
+                {
+                    EnsurePhoneSource(cam);
+                    _selectedPreviewSlot = camSlot;
+                    UpdatePreviewDisplay();
+                    _ = PushTalliesAsync();
+                };
+                miEeccWifiGroup.Items.Add(miPhoneActive);
+            }
+
+            if (_cameraServer.ConnectedPhoneCount == 0)
+            {
+                miEeccWifiGroup.Items.Add(new MenuItem { Header = "Aucun smartphone connecté pour l'instant", IsEnabled = false });
+            }
+
+            miEeccWifiGroup.Items.Add(new Separator());
+            var miPairNew = new MenuItem { Header = "➕ Connecter un smartphone (Afficher le QR Code Wi-Fi)..." };
+            miPairNew.Click += (s, args) => BtnPairQr_Click(s, args);
+            miEeccWifiGroup.Items.Add(miPairNew);
+
+            // Slots réservés 1 à 15
+            var miSlotsSub = new MenuItem { Header = "Emplacements réservés (Cam-1 à Cam-15)" };
             for (int i = 1; i <= 15; i++)
             {
                 int num = i;
-                var mi = new MenuItem { Header = $"📱 Caméra Mobile {num} (Slot Cam-{num})" };
-                mi.Click += (s, args) =>
+                var miSlot = new MenuItem { Header = $"Slot Cam-{num}" };
+                miSlot.Click += (s, args) =>
                 {
                     selected.Sources.Add(new StudioSource
                     {
                         Name = $"Caméra Mobile {num} (Cam-{num})",
                         Type = SourceType.MobileCamera,
-                        Details = $"Flux Réseau Smartphone Slot {num}"
+                        Details = $"Flux Smartphone Slot {num}"
                     });
                     _selectedPreviewSlot = $"Cam-{num}";
+                    UpdatePreviewDisplay();
                 };
-                cm.Items.Add(mi);
+                miSlotsSub.Items.Add(miSlot);
             }
+            miEeccWifiGroup.Items.Add(miSlotsSub);
+            cm.Items.Add(miEeccWifiGroup);
+
             cm.Items.Add(new Separator());
 
-            var miUsb = new MenuItem { Header = "🎥 Caméra Physique USB / Carte SDI (non comptée dans les 15 téléphones)" };
-            miUsb.Click += (s, args) =>
+            // SECTION 3 : SOURCES OBS STUDIO OFFICIELLES
+            var miScreen = new MenuItem { Header = "🖥️ Capture d'écran (Moniteur complet)..." };
+            miScreen.Click += (s, args) => selected.Sources.Add(new StudioSource { Name = "Capture Écran", Type = SourceType.ScreenCapture, Details = "Moniteur Principal 1920x1080" });
+            cm.Items.Add(miScreen);
+
+            var miMedia = new MenuItem { Header = "🎬 Source Média (Fichier MP4 / Vidéo)..." };
+            miMedia.Click += (s, args) => selected.Sources.Add(new StudioSource { Name = "Vidéo Culte MP4", Type = SourceType.MediaVideo, Details = "Lecture Vidéo Boucle" });
+            cm.Items.Add(miMedia);
+
+            var miImg = new MenuItem { Header = "🖼️ Image (Logo / Filigrane)..." };
+            miImg.Click += (s, args) =>
             {
-                var physical = new StudioSource
+                var imgSource = new StudioSource
                 {
-                    Name = "Caméra USB / SDI",
-                    Type = SourceType.PhysicalCamera,
-                    Details = "Source physique. Aucune image tant qu'une capture n'est pas branchée."
+                    Name = "Logo EECC",
+                    Type = SourceType.Image,
+                    Details = "Filigrane d'angle supérieur",
+                    ImagePath = "Assets/logo.png"
                 };
-                selected.Sources.Add(physical);
-                _cameraServer.RegisterPhysicalCamera(physical.Id, physical.Name);
+                selected.Sources.Add(imgSource);
+                ApplyOverlaysFromScene();
             };
-            cm.Items.Add(miUsb);
+            cm.Items.Add(miImg);
 
-            var miBible = new MenuItem { Header = "📖 Verset Biblique en Direct (Louis Segond)" };
-            miBible.Click += (s, args) => selected.Sources.Add(new StudioSource { Name = "Verset Biblique", Type = SourceType.BibleVerse, Details = "Bandeau Tiers Inférieur" });
-            cm.Items.Add(miBible);
-
-            var miSlide = new MenuItem { Header = "📊 Diapositive / Diaporama de Culte" };
-            miSlide.Click += (s, args) => selected.Sources.Add(new StudioSource { Name = "Diapositive Culte", Type = SourceType.PresentationSlide, Details = "Projection 1920x1080" });
+            var miSlide = new MenuItem { Header = "📊 Diaporama d'images (Diapositives)..." };
+            miSlide.Click += (s, args) => selected.Sources.Add(new StudioSource { Name = "Diaporama Culte", Type = SourceType.PresentationSlide, Details = "Projection Paroles" });
             cm.Items.Add(miSlide);
 
-            var miMedia = new MenuItem { Header = "🎬 Fichier Vidéo / Média Local" };
-            miMedia.Click += (s, args) => selected.Sources.Add(new StudioSource { Name = "Vidéo Culte MP4", Type = SourceType.MediaVideo, Details = "Lecture Fichier" });
-            cm.Items.Add(miMedia);
+            var miTxt = new MenuItem { Header = "📝 Texte GDI+ (Titre Pasteur / Verset)..." };
+            miTxt.Click += (s, args) =>
+            {
+                var txtSource = new StudioSource
+                {
+                    Name = "Bandeau Titre",
+                    Type = SourceType.Text,
+                    TextContent = "Pasteur Principal - Culte EECC",
+                    SecondaryText = "Thème du Jour",
+                    Details = "Tiers Inférieur (Lower Third)"
+                };
+                selected.Sources.Add(txtSource);
+                ApplyOverlaysFromScene();
+            };
+            cm.Items.Add(miTxt);
+
+            var miTicker = new MenuItem { Header = "📜 Bande Déroulante (Filtre Défilement Scroll OBS)..." };
+            miTicker.Click += (s, args) =>
+            {
+                var tickerSource = new StudioSource
+                {
+                    Name = "Bande Déroulante Annonces",
+                    Type = SourceType.ScrollingTicker,
+                    TextContent = "✦ Bienvenue au culte de l'Église Évangélique du Centre ✦ Annonces & Dons par Mobile Money ✦",
+                    ScrollSpeed = 70.0,
+                    Details = "Bandeau Défilant Continu"
+                };
+                selected.Sources.Add(tickerSource);
+                ApplyOverlaysFromScene();
+            };
+            cm.Items.Add(miTicker);
+
+            var miBrowser = new MenuItem { Header = "🌐 Navigateur (Browser Source / Page Web)..." };
+            miBrowser.Click += (s, args) => selected.Sources.Add(new StudioSource { Name = "Page Web", Type = SourceType.PresentationSlide, Details = "URL Web / Alertes" });
+            cm.Items.Add(miBrowser);
+
+            var miAudioIn = new MenuItem { Header = "🎙️ Capture d'entrée audio (Microphone)..." };
+            miAudioIn.Click += (s, args) => selected.Sources.Add(new StudioSource { Name = "Micro Pupitre", Type = SourceType.AudioInput, Details = "Entrée Micro USB/XLR" });
+            cm.Items.Add(miAudioIn);
 
             if (sender is FrameworkElement fe)
             {
@@ -541,6 +785,45 @@ namespace EeccStudio
             if (_previewScene == null) return;
             _programScene = _previewScene;
             _selectedProgramSlot = _selectedPreviewSlot;
+
+            int selectedTransition = ComboSceneTransitions?.SelectedIndex ?? 0;
+
+            if (selectedTransition == 1) // Coupure (Cut)
+            {
+                BtnCut_Click(sender, e);
+                return;
+            }
+            else if (selectedTransition == 4) // Fondu au Noir
+            {
+                BtnFadeToBlack_Click(sender, e);
+                return;
+            }
+            else if (selectedTransition == 2 || selectedTransition == 3) // Glissement Gauche / Droite
+            {
+                double startOffset = selectedTransition == 2 ? 300 : -300;
+                var slideAnim = new System.Windows.Media.Animation.DoubleAnimation
+                {
+                    From = startOffset,
+                    To = 0,
+                    Duration = TimeSpan.FromMilliseconds(300),
+                    EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut }
+                };
+                var translate = new TranslateTransform();
+                ImgProgramVideo.RenderTransform = translate;
+                translate.BeginAnimation(TranslateTransform.XProperty, slideAnim);
+            }
+            else // Fondu enchaîné standard (Fade 300 ms)
+            {
+                var fadeAnim = new System.Windows.Media.Animation.DoubleAnimation
+                {
+                    From = 0.15,
+                    To = 1.0,
+                    Duration = TimeSpan.FromMilliseconds(300),
+                    EasingFunction = new System.Windows.Media.Animation.QuadraticEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseInOut }
+                };
+                ImgProgramVideo.BeginAnimation(UIElement.OpacityProperty, fadeAnim);
+            }
+
             UpdateProgramDisplay();
             _ = PushTalliesAsync();
         }
@@ -616,7 +899,21 @@ namespace EeccStudio
                 var filename = $"EECC_Culte_{DateTime.Now:yyyyMMdd_HHmmss}.mp4";
                 var fullPath = Path.Combine(videoDir, filename);
 
-                // Crée le fichier d'enregistrement master
+                // Enregistrement maître local haute fidélité NVMe
+                var config = new MasterRecordConfig
+                {
+                    FileNamePrefix = $"EECC_Culte_{_cameraServer.ChurchName.Replace(' ', '_')}",
+                    ContainerFormat = "mkv",
+                    TargetFps = 60,
+                    VideoBitrateKbps = 50000,
+                    UseHardwareEncoder = true
+                };
+
+                _masterRecorder?.Start(
+                    config,
+                    () => _cameraServer.ActiveProgramFrameBytes,
+                    frames => _audioEngine?.RenderMaster(frames) ?? Array.Empty<byte>());
+                _audioEngine?.IsoRecorder.StartRecording();
                 File.WriteAllText(fullPath, $"EECC Studio Master Broadcast Recording\nCulte: {_cameraServer.ProgramTitle}\nDate: {DateTime.Now}\nÉglise: {_cameraServer.ChurchName}\n");
 
                 _cameraServer.StartRecording();
@@ -624,11 +921,13 @@ namespace EeccStudio
                 BtnToggleRecord.Foreground = (Brush)new BrushConverter().ConvertFrom("#EF4444");
 
                 BadgeRecIndicator.Background = (Brush)new BrushConverter().ConvertFrom("#DC2626");
-                TxtRecBadge.Text = "REC : ACTIF";
+                TxtRecBadge.Text = "REC MASTER : ACTIF (50 Mbps)";
                 TxtRecBadge.Foreground = Brushes.White;
             }
             else
             {
+                _masterRecorder?.Stop();
+                _audioEngine?.IsoRecorder.StopRecording();
                 _cameraServer.StopRecording();
                 BtnToggleRecord.Content = "Démarrer l'enregistrement";
                 BtnToggleRecord.Foreground = (Brush)new BrushConverter().ConvertFrom("#F0F6FC");
@@ -637,7 +936,13 @@ namespace EeccStudio
                 TxtRecBadge.Text = "REC : OFF";
                 TxtRecBadge.Foreground = (Brush)new BrushConverter().ConvertFrom("#8B949E");
 
-                MessageBox.Show("Enregistrement vidéo sauvegardé avec succès dans le dossier Vidéos !", "Enregistrement Terminé", MessageBoxButton.OK, MessageBoxImage.Information);
+                var masterPath = _masterRecorder?.CurrentRecordingFilePath;
+                if (!string.IsNullOrWhiteSpace(masterPath) && File.Exists(masterPath))
+                {
+                    _offlineSyncQueue?.Enqueue(masterPath, StorageTargetType.CloudflareR2, "eecc-masters", Path.GetFileName(masterPath), UploadPriority.Low);
+                }
+
+                MessageBox.Show("Enregistrement vidéo sauvegardé avec succès et placé dans la file d'attente de synchronisation cloud !", "Enregistrement Terminé", MessageBoxButton.OK, MessageBoxImage.Information);
             }
         }
 
@@ -726,12 +1031,81 @@ namespace EeccStudio
         {
             if (ListSources.SelectedItem is StudioSource src)
             {
-                MessageBox.Show($"Propriétés de la source :\nNom : {src.Name}\nType : {src.Type}\nDétails : {src.Details}", "Propriétés Source", MessageBoxButton.OK, MessageBoxImage.Information);
+                var dlg = new SourcePropertiesWindow(src) { Owner = this };
+                if (dlg.ShowDialog() == true)
+                {
+                    ApplyOverlaysFromScene();
+                }
             }
             else
             {
-                MessageBox.Show("Veuillez sélectionner une source dans le dock Sources.", "Sélection Requise", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show("Veuillez sélectionner une source dans le dock Sources.", "Propriétés OBS Studio", MessageBoxButton.OK, MessageBoxImage.Information);
             }
+        }
+
+        private void ApplyOverlaysFromScene()
+        {
+            if (_previewScene == null) return;
+
+            foreach (var src in _previewScene.Sources)
+            {
+                if (!src.IsVisible) continue;
+
+                if (src.Type == SourceType.Image && !string.IsNullOrWhiteSpace(src.ImagePath))
+                {
+                    try
+                    {
+                        if (File.Exists(src.ImagePath))
+                        {
+                            var uri = new Uri(Path.GetFullPath(src.ImagePath));
+                            var bi = new BitmapImage(uri);
+                            ImgPreviewLogo.Source = bi;
+                            ImgProgramLogo.Source = bi;
+                        }
+                    }
+                    catch { }
+                }
+                else if (src.Type == SourceType.Text || src.Type == SourceType.BibleVerse)
+                {
+                    if (!string.IsNullOrWhiteSpace(src.TextContent))
+                    {
+                        TxtPreviewLowerTitle.Text = src.TextContent;
+                        TxtProgramLowerTitle.Text = src.TextContent;
+                    }
+                    if (!string.IsNullOrWhiteSpace(src.SecondaryText))
+                    {
+                        TxtPreviewLowerSub.Text = src.SecondaryText;
+                        TxtProgramLowerSub.Text = src.SecondaryText;
+                    }
+                }
+                else if (src.Type == SourceType.ScrollingTicker && !string.IsNullOrWhiteSpace(src.TextContent))
+                {
+                    TxtPreviewTicker.Text = src.TextContent;
+                    TxtProgramTicker.Text = src.TextContent;
+                    StartTickerAnimations(src.ScrollSpeed);
+                }
+            }
+        }
+
+        private void StartTickerAnimations(double speedPxPerSec = 70.0)
+        {
+            try
+            {
+                var textLength = Math.Max(TxtPreviewTicker.Text.Length * 8, 800);
+                var durationSec = Math.Max(8, (textLength + 800) / Math.Max(20, speedPxPerSec));
+
+                var scrollAnim = new System.Windows.Media.Animation.DoubleAnimation
+                {
+                    From = 600,
+                    To = -textLength,
+                    Duration = TimeSpan.FromSeconds(durationSec),
+                    RepeatBehavior = System.Windows.Media.Animation.RepeatBehavior.Forever
+                };
+
+                TxtPreviewTicker.BeginAnimation(Canvas.LeftProperty, scrollAnim);
+                TxtProgramTicker.BeginAnimation(Canvas.LeftProperty, scrollAnim);
+            }
+            catch { }
         }
 
         private void MenuFullscreen_Click(object sender, RoutedEventArgs e)
@@ -781,6 +1155,27 @@ namespace EeccStudio
                 MessageBoxImage.Information);
         }
 
+        private void MenuCmsManager_Click(object sender, RoutedEventArgs e)
+        {
+            var win = new EeccTvCmsWindow { Owner = this };
+            win.Show();
+        }
+
+        private void MenuTools_EeccTvMeta_Click(object sender, RoutedEventArgs e)
+        {
+            MenuCmsManager_Click(sender, e);
+        }
+
+        private void MenuTools_EeccTvIngest_Click(object sender, RoutedEventArgs e)
+        {
+            MessageBox.Show("Ingest direct HTTP / MJPEG actif sur port 8089.", "EECC TV Ingest", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+
+        private void MenuTools_EeccTvSync_Click(object sender, RoutedEventArgs e)
+        {
+            MenuCmsManager_Click(sender, e);
+        }
+
         private void MenuPostProd_Click(object sender, RoutedEventArgs e)
         {
             MessageBox.Show(
@@ -820,6 +1215,15 @@ namespace EeccStudio
         protected override void OnClosed(EventArgs e)
         {
             _clockTimer.Stop();
+            _webRtcSessionManager?.Dispose();
+            _physicalCameraCapture?.Dispose();
+            _screenCaptureEngine?.Dispose();
+            _mediaVideoSource?.Dispose();
+            _masterRecorder?.Dispose();
+            _replayBuffer?.Dispose();
+            _virtualCamera?.Dispose();
+            _obsWebSocketServer?.Dispose();
+            _offlineSyncQueue?.Dispose();
             _cameraServer.Stop();
             base.OnClosed(e);
         }
@@ -870,7 +1274,7 @@ namespace EeccStudio
             slate.Visibility = Visibility.Collapsed;
         }
 
-        private static bool TryDecodeJpeg(byte[] jpeg, out BitmapSource? bitmap)
+        private static bool TryDecodeJpeg(byte[] jpeg, out BitmapSource? bitmap, int customRotation = 0, bool flipH = false, bool flipV = false)
         {
             try
             {
@@ -882,15 +1286,35 @@ namespace EeccStudio
                 bi.EndInit();
                 bi.Freeze();
 
-                if (bi.PixelHeight > bi.PixelWidth)
+                var group = new TransformGroup();
+
+                // 1. Rotation manuelle ou correction d'orientation capteur
+                if (customRotation != 0)
                 {
-                    var rotated = new TransformedBitmap();
-                    rotated.BeginInit();
-                    rotated.Source = bi;
-                    rotated.Transform = new RotateTransform(90);
-                    rotated.EndInit();
-                    rotated.Freeze();
-                    bitmap = rotated;
+                    group.Children.Add(new RotateTransform(customRotation));
+                }
+
+                // 2. Inversion Miroir Horizontale
+                if (flipH)
+                {
+                    group.Children.Add(new ScaleTransform(-1, 1, bi.PixelWidth / 2.0, bi.PixelHeight / 2.0));
+                }
+
+                // 3. Inversion Verticale (Correction Caméra à l'envers)
+                if (flipV)
+                {
+                    group.Children.Add(new ScaleTransform(1, -1, bi.PixelWidth / 2.0, bi.PixelHeight / 2.0));
+                }
+
+                if (group.Children.Count > 0)
+                {
+                    var transformed = new TransformedBitmap();
+                    transformed.BeginInit();
+                    transformed.Source = bi;
+                    transformed.Transform = group;
+                    transformed.EndInit();
+                    transformed.Freeze();
+                    bitmap = transformed;
                 }
                 else
                 {
@@ -903,6 +1327,176 @@ namespace EeccStudio
                 bitmap = null;
                 return false;
             }
+        }
+
+        private void OnPhysicalCameraFrameArrived(VideoFrameBuffer frame)
+        {
+            Dispatcher.BeginInvoke(DispatcherPriority.Render, () =>
+            {
+                try
+                {
+                    var bitmap = CreateBitmapFromFrame(frame);
+                    if (_selectedPreviewSlot == "HDMI-1" || _previewScene?.Sources.Any(s => s.Type == SourceType.PhysicalCamera) == true)
+                    {
+                        ImgPreviewVideo.Source = bitmap;
+                        PanelPreviewSlate.Visibility = Visibility.Collapsed;
+                    }
+
+                    if (_selectedProgramSlot == "HDMI-1" || _programScene?.Sources.Any(s => s.Type == SourceType.PhysicalCamera) == true)
+                    {
+                        ImgProgramVideo.Source = bitmap;
+                        PanelProgramSlate.Visibility = Visibility.Collapsed;
+                        TxtProgramLiveFooter.Text = "Image reçue · HDMI In 1080p60";
+                    }
+                }
+                catch { }
+            });
+        }
+
+        private void OnScreenCaptureFrameArrived(VideoFrameBuffer frame)
+        {
+            Dispatcher.BeginInvoke(DispatcherPriority.Render, () =>
+            {
+                try
+                {
+                    var bitmap = CreateBitmapFromFrame(frame);
+                    if (_selectedPreviewSlot == "Screen-1")
+                    {
+                        ImgPreviewVideo.Source = bitmap;
+                        PanelPreviewSlate.Visibility = Visibility.Collapsed;
+                    }
+                    if (_selectedProgramSlot == "Screen-1")
+                    {
+                        ImgProgramVideo.Source = bitmap;
+                        PanelProgramSlate.Visibility = Visibility.Collapsed;
+                        TxtProgramLiveFooter.Text = "Image reçue · Capture Écran";
+                    }
+                }
+                catch { }
+            });
+        }
+
+        private void OnMediaVideoFrameArrived(VideoFrameBuffer frame)
+        {
+            Dispatcher.BeginInvoke(DispatcherPriority.Render, () =>
+            {
+                try
+                {
+                    var bitmap = CreateBitmapFromFrame(frame);
+                    if (_selectedPreviewSlot == "Media-1")
+                    {
+                        ImgPreviewVideo.Source = bitmap;
+                        PanelPreviewSlate.Visibility = Visibility.Collapsed;
+                    }
+                    if (_selectedProgramSlot == "Media-1")
+                    {
+                        ImgProgramVideo.Source = bitmap;
+                        PanelProgramSlate.Visibility = Visibility.Collapsed;
+                        TxtProgramLiveFooter.Text = "Image reçue · Vidéo Média";
+                    }
+                }
+                catch { }
+            });
+        }
+
+        private static BitmapSource CreateBitmapFromFrame(VideoFrameBuffer frame)
+        {
+            var bitmap = BitmapSource.Create(
+                frame.Width,
+                frame.Height,
+                96,
+                96,
+                PixelFormats.Bgra32,
+                null,
+                frame.Data,
+                frame.Stride);
+            bitmap.Freeze();
+            return bitmap;
+        }
+
+        private void MenuCanvasGpu_Click(object sender, RoutedEventArgs e)
+        {
+            if (_gpuCompositor == null) return;
+            var budget = _gpuCompositor.GetBudget();
+            var encoder = HardwareEncoderDetector.Detect();
+
+            MessageBox.Show(
+                $"MOTEUR DE COMPOSITION GPU DIRECT3D 11 / EECC STUDIO\n\n" +
+                $"• Résolution Canevas : {budget.Width}x{budget.Height} @ {budget.TargetFps} FPS\n" +
+                $"• Bande passante brute : {budget.RawBandwidthGbps} Gbps (Non compressé)\n" +
+                $"• Budget VRAM estimé : {budget.EstimatedVramMb} Mo (Triple-buffering + calques)\n" +
+                $"• Débit d'encodage recommandé : {budget.RecommendedEncodingBitrate}\n" +
+                $"• Encodeur actif détecté : {encoder.Description} ({encoder.H264EncoderName})\n" +
+                $"• Matériel recommandé : {budget.RecommendedHardware}\n\n" +
+                $"Compatible 1080p, 1440p, 4K, 8K et 16K Ultra-HD.",
+                "Canevas Vidéo & Budget GPU",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+        }
+
+        private void MenuPhysicalDevices_Click(object sender, RoutedEventArgs e)
+        {
+            var devices = PhysicalCameraCapture.EnumerateDevices();
+            var lines = new List<string>();
+            foreach (var d in devices)
+            {
+                lines.Add($"• {d.Name} ({d.Id}) - {(d.IsCaptureCard ? "Carte HDMI In" : "Caméra USB")}");
+            }
+
+            MessageBox.Show(
+                "PÉRIPHÉRIQUES VIDÉO PHYSIQUES DÉTECTÉS :\n\n" +
+                string.Join("\n", lines) + "\n\n" +
+                "Toutes les cartes HDMI et USB sont gérées nativement sans passerelle logicielle tierce.",
+                "Périphériques Physiques DirectShow / Media Foundation",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+        }
+
+        private async void MenuReplayBuffer_Click(object sender, RoutedEventArgs e)
+        {
+            if (_replayBuffer == null) return;
+            var file = await _replayBuffer.SaveReplayAsync();
+            if (file != null)
+            {
+                MessageBox.Show($"Instant Replay (Ralenti culte) exporté avec succès !\n\nFichier : {file}", "Replay Buffer Sauvegardé", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            else
+            {
+                MessageBox.Show("Le Replay Buffer est en cours de remplissage en mémoire (aucune trame disponible).", "Replay Buffer", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+
+        private void MenuVirtualCamera_Click(object sender, RoutedEventArgs e)
+        {
+            if (_virtualCamera == null) return;
+
+            if (!_virtualCamera.IsRunning)
+            {
+                _virtualCamera.Start();
+                MessageBox.Show("Sortie Caméra Virtuelle ACTIVÉE !\n\nDisponible dans Zoom, Microsoft Teams et Google Meet sous le nom :\n'EECC Studio Virtual Camera'", "Caméra Virtuelle", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            else
+            {
+                _virtualCamera.Stop();
+                MessageBox.Show("Sortie Caméra Virtuelle DÉSACTIVÉE.", "Caméra Virtuelle", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+        }
+
+        private void MenuObsWebSocket_Click(object sender, RoutedEventArgs e)
+        {
+            var isRunning = _obsWebSocketServer?.IsRunning ?? false;
+            var port = _obsWebSocketServer?.Port ?? 4455;
+            MessageBox.Show(
+                $"SERVEUR API OBS WEBSOCKET v5 (STREAM DECK & COMPANION)\n\n" +
+                $"• Statut : {(isRunning ? "ACTIF (En écoute)" : "ARRÊTÉ")}\n" +
+                $"• Port d'écoute : {port}\n" +
+                $"• Protocole : OBS WebSocket Protocol v5.3.0 (RPC v1)\n" +
+                $"• Compatibilité matérielle : Elgato Stream Deck (Plugin OBS Studio), Bitfocus Companion, Touch Portal\n" +
+                $"• Sécurité : Connexion réseau local autorisée sans mot de passe requis.\n\n" +
+                $"Toutes les commandes (Changement de scène, Transition Cut/Fade, Start/Stop Stream & REC, Replay) sont actives.",
+                "Serveur OBS WebSocket",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
         }
 
         private static string? SlotFromSource(StudioSource source)

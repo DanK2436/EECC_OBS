@@ -1,0 +1,105 @@
+<Window x:Class="EeccStudio.SourcePropertiesWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Propriétés de la source - OBS Studio" 
+        Height="460" Width="520"
+        Background="{StaticResource ObsWindowBackground}"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize">
+    
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="Theme/StudioColors.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Window.Resources>
+
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/> <!-- En-tête -->
+            <RowDefinition Height="*"/>    <!-- Champs de configuration -->
+            <RowDefinition Height="Auto"/> <!-- Boutons Valider / Annuler -->
+        </Grid.RowDefinitions>
+
+        <!-- En-Tête -->
+        <Border Grid.Row="0" Background="{StaticResource ObsHeaderBackground}" BorderBrush="{StaticResource ObsDockBorder}" BorderThickness="1" CornerRadius="3" Padding="12,8" Margin="0,0,0,12">
+            <StackPanel>
+                <TextBlock x:Name="TxtSourceTitle" Text="Propriétés : Bande Déroulante (Filtre Défilement OBS)" FontSize="13" FontWeight="Bold" Foreground="{StaticResource ObsTextWhite}"/>
+                <TextBlock x:Name="TxtSourceType" Text="Type : Bandeau défilant inférieur" FontSize="11" Foreground="{StaticResource ObsTextSecondary}" Margin="0,2,0,0"/>
+            </StackPanel>
+        </Border>
+
+        <!-- Formulaire de réglages OBS -->
+        <Border Grid.Row="1" Background="{StaticResource ObsDockSurface}" BorderBrush="{StaticResource ObsDockBorder}" BorderThickness="1" CornerRadius="3" Padding="14">
+            <StackPanel>
+                <!-- Nom de la source -->
+                <TextBlock Text="Nom de la source :" FontSize="11" Foreground="{StaticResource ObsTextSecondary}" Margin="0,0,0,4"/>
+                <TextBox x:Name="TxtSourceName" Background="{StaticResource ObsDockBackground}" Foreground="{StaticResource ObsTextWhite}"
+                         BorderBrush="{StaticResource ObsDockBorder}" BorderThickness="1" Padding="6,4" FontSize="12" Margin="0,0,0,12"/>
+
+                <!-- Panneau Texte / Verset / Bandeau -->
+                <StackPanel x:Name="PanelTextOptions" Visibility="Visible">
+                    <TextBlock Text="Texte à afficher / Texte défilant :" FontSize="11" Foreground="{StaticResource ObsTextSecondary}" Margin="0,0,0,4"/>
+                    <TextBox x:Name="TxtContent" TextWrapping="Wrap" AcceptsReturn="True" Height="65"
+                             Background="{StaticResource ObsDockBackground}" Foreground="{StaticResource ObsTextWhite}"
+                             BorderBrush="{StaticResource ObsDockBorder}" BorderThickness="1" Padding="6,4" FontSize="12" Margin="0,0,0,10"/>
+
+                    <TextBlock Text="Sous-titre / Référence biblique (optionnel) :" FontSize="11" Foreground="{StaticResource ObsTextSecondary}" Margin="0,0,0,4"/>
+                    <TextBox x:Name="TxtSecondary" Background="{StaticResource ObsDockBackground}" Foreground="{StaticResource ObsTextWhite}"
+                             BorderBrush="{StaticResource ObsDockBorder}" BorderThickness="1" Padding="6,4" FontSize="12" Margin="0,0,0,10"/>
+                </StackPanel>
+
+                <!-- Réglage de la Vitesse de Défilement (Filtre Scroll OBS) -->
+                <StackPanel x:Name="PanelScrollOptions" Visibility="Visible">
+                    <DockPanel Margin="0,0,0,4">
+                        <TextBlock Text="Vitesse de défilement horizontal (Filtre Scroll) :" FontSize="11" Foreground="{StaticResource ObsTextSecondary}"/>
+                        <TextBlock x:Name="TxtSpeedValue" Text="70 px/s" FontSize="11" FontWeight="Bold" Foreground="#2FE06A" HorizontalAlignment="Right"/>
+                    </DockPanel>
+                    <Slider x:Name="SliderScrollSpeed" Minimum="10" Maximum="200" Value="70" ValueChanged="SliderScrollSpeed_ValueChanged" Margin="0,0,0,10"/>
+                </StackPanel>
+
+                <!-- Panneau Image / Logo -->
+                <StackPanel x:Name="PanelImageOptions" Visibility="Collapsed">
+                    <TextBlock Text="Chemin de l'image (PNG transparent / JPEG) :" FontSize="11" Foreground="{StaticResource ObsTextSecondary}" Margin="0,0,0,4"/>
+                    <DockPanel Margin="0,0,0,10">
+                        <Button Content="Parcourir..." Click="BtnBrowseImage_Click" Style="{StaticResource ObsCommandButtonStyle}" Width="90" Height="26" DockPanel.Dock="Right" Margin="6,0,0,0"/>
+                        <TextBox x:Name="TxtImagePath" Background="{StaticResource ObsDockBackground}" Foreground="{StaticResource ObsTextWhite}"
+                                 BorderBrush="{StaticResource ObsDockBorder}" BorderThickness="1" Padding="6,4" FontSize="12"/>
+                    </DockPanel>
+                </StackPanel>
+
+                <!-- Section Transformation Vidéo OBS (Correction orientation / Caméra à l'envers) -->
+                <Border Background="{StaticResource ObsHeaderBackground}" BorderBrush="{StaticResource ObsDockBorder}" BorderThickness="1" CornerRadius="3" Padding="10,8" Margin="0,6,0,0">
+                    <StackPanel>
+                        <TextBlock Text="🔄 Transformation &amp; Orientation OBS (Caméra inversée) :" FontSize="11" FontWeight="Bold" Foreground="{StaticResource ObsTextWhite}" Margin="0,0,0,6"/>
+                        <Grid Margin="0,0,0,6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="Rotation : " FontSize="11" Foreground="{StaticResource ObsTextSecondary}" VerticalAlignment="Center"/>
+                            <ComboBox Grid.Column="1" x:Name="CmbRotation" Background="{StaticResource ObsDockBackground}" Foreground="{StaticResource ObsTextWhite}" Height="24">
+                                <ComboBoxItem Content="0° (Normal - Sans rotation)"/>
+                                <ComboBoxItem Content="90° (Rotation horaire)"/>
+                                <ComboBoxItem Content="180° (Inverser tête en bas)"/>
+                                <ComboBoxItem Content="270° (Rotation anti-horaire)"/>
+                            </ComboBox>
+                        </Grid>
+                        <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
+                            <CheckBox x:Name="ChkFlipHorizontal" Content="Retourner horizontalement (Miroir)" Foreground="{StaticResource ObsTextSecondary}" FontSize="11" Margin="0,0,16,0"/>
+                            <CheckBox x:Name="ChkFlipVertical" Content="Retourner verticalement" Foreground="{StaticResource ObsTextSecondary}" FontSize="11"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </Border>
+
+        <!-- Boutons OK / Annuler -->
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,14,0,0">
+            <Button Content="Annuler" Click="BtnCancel_Click" Style="{StaticResource ObsCommandButtonStyle}" Width="85" Margin="0,0,8,0"/>
+            <Button Content="Valider" Click="BtnOk_Click" Background="{StaticResource ObsAccentBlue}" Foreground="{StaticResource ObsTextWhite}"
+                    BorderBrush="{StaticResource ObsAccentBlue}" BorderThickness="1" Width="85" Height="30" FontWeight="Bold" Cursor="Hand"/>
+        </StackPanel>
+    </Grid>
+</Window>

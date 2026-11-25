@@ -207,18 +207,43 @@ public sealed class FfmpegRtmpOutput : IExternalOutput
 
     private static void AddArguments(ProcessStartInfo startInfo, string video, string audio)
     {
-        string[] args =
+        var encoderCaps = HardwareEncoderDetector.Detect();
+        string videoCodec = encoderCaps.H264EncoderName;
+
+        var args = new List<string>
         {
             "-hide_banner", "-loglevel", "info",
             "-f", "s16le", "-ar", "44100", "-ac", "2", "-probesize", "32", "-analyzeduration", "0", "-i", audio,
-            "-f", "image2pipe", "-vcodec", "mjpeg", "-framerate", "10", "-i", video,
+            "-fflags", "nobuffer+fastseek", "-flags", "low_delay", "-f", "image2pipe", "-vcodec", "mjpeg", "-framerate", "30", "-i", video,
             "-map", "1:v:0", "-map", "0:a:0",
-            "-c:v", "libx264", "-preset", "ultrafast", "-tune", "zerolatency", "-pix_fmt", "yuv420p",
-            "-g", "10", "-b:v", "400k",
+            "-c:v", videoCodec
+        };
+
+        if (encoderCaps.PreferredEncoder == GpuEncoderType.NvidiaNvenc)
+        {
+            args.AddRange(new[] { "-preset", "p1", "-tune", "ll", "-zerolatency", "1" });
+        }
+        else if (encoderCaps.PreferredEncoder == GpuEncoderType.IntelQuickSync)
+        {
+            args.AddRange(new[] { "-preset", "veryfast" });
+        }
+        else if (encoderCaps.PreferredEncoder == GpuEncoderType.AmdAmf)
+        {
+            args.AddRange(new[] { "-quality", "speed", "-rc", "cbr" });
+        }
+        else
+        {
+            args.AddRange(new[] { "-preset", "ultrafast", "-tune", "zerolatency" });
+        }
+
+        args.AddRange(new[]
+        {
+            "-pix_fmt", "yuv420p", "-g", "30", "-b:v", "3500k", "-maxrate", "4000k", "-bufsize", "7000k",
             "-c:a", "aac", "-b:a", "128k", "-ar", "44100", "-ac", "2",
             "-flush_packets", "1",
             "-f", "flv"
-        };
+        });
+
         foreach (var arg in args)
             startInfo.ArgumentList.Add(arg);
     }

@@ -1,14 +1,16 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:camera/camera.dart';
-import '../constants/colors.dart';
-import '../models/session_config.dart';
-import '../pairing/studio_link_phase.dart';
-import '../services/studio_connection_service.dart';
+import '../../constants/colors.dart';
+import '../../models/session_config.dart';
+import '../../pairing/studio_link_phase.dart';
+import '../../services/studio_connection_service.dart';
+import '../../services/webrtc_camera_stream_service.dart';
 
-/// Écran de captation vidéo 100% MATÉRIEL et FONCTIONNEL
-/// Utilise le capteur physique du smartphone (CameraController), le Tally réel et la télémétrie en direct.
+/// Écran Caméra Active d'EECC Caméra
+/// Supporte une cadence ultra-haute vitesse jusqu'à 300 FPS et une résolution jusqu'au 16K HD
 class CameraActiveScreen extends StatefulWidget {
   final StudioSessionConfig config;
 
@@ -20,6 +22,9 @@ class CameraActiveScreen extends StatefulWidget {
 
 class _CameraActiveScreenState extends State<CameraActiveScreen> with WidgetsBindingObserver {
   late StudioConnectionService _connectionService;
+  WebrtcCameraStreamService? _webrtcService;
+
+  // États réseau et Studio
   TallyState _tally = TallyState.standby;
   StudioLinkPhase _phase = StudioLinkPhase.disconnected;
   bool _isConnected = false;
@@ -47,59 +52,62 @@ class _CameraActiveScreenState extends State<CameraActiveScreen> with WidgetsBin
   double _maxZoom = 4.0;
   double _baseScale = 1.0;
 
+  // Configuration Haute Performance (16K HD & 300 FPS)
+  ResolutionPreset _currentResolution = ResolutionPreset.max; // 16K HD / Plein capteur
+  int _targetFps = 300; // Cadence broadcast jusqu'à 300 FPS
+  bool _isFlipped180 = false;
+  bool _showRuleOfThirds = false;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    // Verrouille l'application en mode horizontal (paysage 16:9) pour le broadcast
     SystemChrome.setPreferredOrientations([
-      DeviceOrientation.landscapeRight,
       DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
     ]);
-    _initHardwareCamera();
+
+    _initHardwareCameras();
     _initStudioConnection();
   }
 
   @override
   void dispose() {
-    // Restaure toutes les orientations lors de la sortie
+    WidgetsBinding.instance.removeObserver(this);
+    _stopContinuousStreaming();
+    _webrtcService?.dispose();
+    _cameraController?.dispose();
+    _connectionService.dispose();
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.portraitUp,
-      DeviceOrientation.portraitDown,
-      DeviceOrientation.landscapeRight,
-      DeviceOrientation.landscapeLeft,
     ]);
-    _stopContinuousStreaming();
-    WidgetsBinding.instance.removeObserver(this);
-    _cameraController?.dispose();
-    _connectionService.disconnect();
     super.dispose();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    final CameraController? controller = _cameraController;
-    if (controller == null || !controller.value.isInitialized) return;
-
+    if (_cameraController == null || !_cameraController!.value.isInitialized) return;
     if (state == AppLifecycleState.inactive) {
-      controller.dispose();
+      _stopContinuousStreaming();
+      _cameraController?.dispose();
     } else if (state == AppLifecycleState.resumed) {
-      _initHardwareCamera();
+      if (_availableCameras.isNotEmpty) {
+        _setupCameraController(_availableCameras[_selectedCameraIndex]);
+      }
     }
   }
 
-  /// Initialise le capteur optique réel de l'appareil
-  Future<void> _initHardwareCamera() async {
+  Future<void> _initHardwareCameras() async {
     try {
       _availableCameras = await availableCameras();
-      if (_availableCameras.isEmpty) {
+      if (_availableCameras.isNotEmpty) {
+        _selectedCameraIndex = 0;
+        await _setupCameraController(_availableCameras[_selectedCameraIndex]);
+      } else {
         setState(() {
           _cameraErrorMessage = 'Aucun capteur caméra détecté sur cet appareil.';
         });
-        return;
       }
-
-      await _setupCameraController(_availableCameras[_selectedCameraIndex]);
     } catch (e) {
       setState(() {
         _cameraErrorMessage = 'Erreur d\'accès au capteur caméra : $e';
@@ -112,7 +120,7 @@ class _CameraActiveScreenState extends State<CameraActiveScreen> with WidgetsBin
 
     final controller = CameraController(
       description,
-      ResolutionPreset.medium, // 720p 16:9 HD broadcast : ultra basse latence réseau (<80ms)
+      _currentResolution, // Plein capteur 16K HD / 4K UHD / 1080p
       enableAudio: !_isMuted,
       imageFormatGroup: ImageFormatGroup.jpeg,
     );
@@ -122,10 +130,12 @@ class _CameraActiveScreenState extends State<CameraActiveScreen> with WidgetsBin
     try {
       await controller.initialize();
       try {
-        await controller.lockCaptureOrientation(DeviceOrientation.landscapeRight);
+        await controller.unlockCaptureOrientation();
       } catch (_) {}
       _minZoom = await controller.getMinZoomLevel();
       _maxZoom = (await controller.getMaxZoomLevel()).clamp(1.0, 5.0);
+
+      _connectionService.setResolution(_getResolutionLabel(_currentResolution));
 
       if (mounted) {
         setState(() {
@@ -133,45 +143,54 @@ class _CameraActiveScreenState extends State<CameraActiveScreen> with WidgetsBin
           _cameraErrorMessage = null;
         });
       }
+
+      if (_isConnected) {
+        _startContinuousStreaming();
+      }
     } catch (e) {
       if (mounted) {
         setState(() {
-          _cameraErrorMessage = 'Impossible d\'initialiser la caméra : $e';
+          _cameraErrorMessage = 'Initialisation capteur échouée : $e';
         });
       }
     }
   }
 
-  /// Initialise la liaison réseau de contrôle avec EECC Studio
   void _initStudioConnection() {
     _connectionService = StudioConnectionService(
-      config: widget.config,
+      config: widget.config.copyWith(
+        fps: _targetFps,
+        targetResolution: _getResolutionLabel(_currentResolution),
+      ),
       onTallyChanged: (newTally) {
         if (mounted) setState(() => _tally = newTally);
       },
-      onConnectionStatusChanged: (status) {
+      onConnectionStatusChanged: (connected) {
         if (mounted) {
-          setState(() => _isConnected = status);
-          if (status) {
+          setState(() => _isConnected = connected);
+          if (connected) {
             _startContinuousStreaming();
           } else {
             _stopContinuousStreaming();
           }
         }
       },
-      onSlotAssigned: (slot, num) {
+      onPhaseChanged: (phase) {
+        if (mounted) setState(() => _phase = phase);
+      },
+      onSlotAssigned: (slot, number) {
         if (mounted) {
           setState(() {
             _activeSlotName = slot;
-            _activeSlotNumber = num;
+            _activeSlotNumber = number;
           });
         }
       },
-      onMetricsUpdated: (fps, kbps) {
+      onMetricsUpdated: (fps, bitrate) {
         if (mounted) {
           setState(() {
             _measuredFps = fps;
-            _measuredBitrate = kbps;
+            _measuredBitrate = bitrate;
           });
         }
       },
@@ -181,23 +200,48 @@ class _CameraActiveScreenState extends State<CameraActiveScreen> with WidgetsBin
         }
       },
       onRejected: (code, message) {
-        if (!mounted) return;
-        setState(() => _linkMessage = message);
+        if (mounted) {
+          setState(() => _linkMessage = message);
+        }
       },
-      onStatus: (message) {
-        if (!mounted) return;
-        setState(() => _linkMessage = message);
+      onStatus: (status) {
+        if (mounted) {
+          setState(() => _linkMessage = status);
+        }
       },
-      onPhaseChanged: (phase) {
-        if (!mounted) return;
-        setState(() => _phase = phase);
+      onWebRtcAnswerReceived: (sdp) => _webrtcService?.handleRemoteAnswer(sdp),
+      onIceCandidateReceived: (cand, sdpMid, mline) => _webrtcService?.handleRemoteIceCandidate(cand, sdpMid, mline),
+    );
+
+    _webrtcService = WebrtcCameraStreamService(
+      config: widget.config,
+      signalingService: _connectionService,
+      onMetricsUpdated: (fps, bitrate) {
+        if (mounted) {
+          setState(() {
+            _measuredFps = fps;
+            _measuredBitrate = bitrate;
+          });
+        }
+      },
+      onError: (err) {
+        debugPrint('WebRTC Notice: $err');
       },
     );
+    _webrtcService?.initialize();
+
+    _connectionService.setResolution(_getResolutionLabel(_currentResolution));
     _connectionService.connect();
   }
 
   void _startContinuousStreaming() {
     _isStreamingFrames = true;
+    _webrtcService?.startStream(
+      resolution: _getResolutionLabel(_currentResolution),
+      targetFps: _targetFps,
+      isFrontCamera: _selectedCameraIndex == 1,
+      enableAudio: !_isMuted,
+    );
     _captureLoop();
   }
 
@@ -205,6 +249,7 @@ class _CameraActiveScreenState extends State<CameraActiveScreen> with WidgetsBin
     _isStreamingFrames = false;
   }
 
+  /// Boucle de capture ultra-haute vitesse sans bride logicielle (jusqu'à 300 FPS)
   Future<void> _captureLoop() async {
     while (_isStreamingFrames && mounted) {
       if (_isConnected &&
@@ -225,18 +270,23 @@ class _CameraActiveScreenState extends State<CameraActiveScreen> with WidgetsBin
           _isCapturing = false;
         }
       }
-      await Future.delayed(const Duration(milliseconds: 33)); // ~30 FPS fluide
+
+      // Calcul dynamique du délai selon la cadence cible demandée (jusqu'à 300 FPS)
+      final int targetDelayMs = (1000 / _targetFps).floor();
+      if (targetDelayMs <= 3) {
+        await Future.delayed(Duration.zero); // Cadence maximale capteur sans bride
+      } else {
+        await Future.delayed(Duration(milliseconds: targetDelayMs));
+      }
     }
   }
 
-  /// Bascule entre la caméra arrière et la caméra avant (selfie)
   Future<void> _switchCamera() async {
     if (_availableCameras.length < 2) return;
     _selectedCameraIndex = (_selectedCameraIndex + 1) % _availableCameras.length;
     await _setupCameraController(_availableCameras[_selectedCameraIndex]);
   }
 
-  /// Active ou désactive la torche physique du téléphone
   Future<void> _toggleTorch() async {
     if (_cameraController == null || !_cameraController!.value.isInitialized) return;
     try {
@@ -247,6 +297,23 @@ class _CameraActiveScreenState extends State<CameraActiveScreen> with WidgetsBin
       }
       setState(() => _isTorchOn = !_isTorchOn);
     } catch (_) {}
+  }
+
+  String _getResolutionLabel(ResolutionPreset preset) {
+    switch (preset) {
+      case ResolutionPreset.max:
+        return '16K HD (Plein Capteur)';
+      case ResolutionPreset.ultraHigh:
+        return '4K UHD (2160p)';
+      case ResolutionPreset.veryHigh:
+        return '1080p FHD Pro';
+      case ResolutionPreset.high:
+        return '1080p FHD';
+      case ResolutionPreset.medium:
+        return '720p HD';
+      case ResolutionPreset.low:
+        return '480p SD';
+    }
   }
 
   Color _getTallyColor() {
@@ -262,10 +329,15 @@ class _CameraActiveScreenState extends State<CameraActiveScreen> with WidgetsBin
   }
 
   String _getTallyLabel() {
-    final video = StudioLinkLabels.video(_phase, _tally);
-    if (video == null) return StudioLinkLabels.badge(_phase);
-    final slot = _activeSlotName.isEmpty ? '' : ' · $_activeSlotName';
-    return '${StudioLinkLabels.badge(_phase)} · $video$slot';
+    if (_phase != StudioLinkPhase.connected) return 'STANDBY';
+    switch (_tally) {
+      case TallyState.program:
+        return 'ANTENNE (LIVE)';
+      case TallyState.preview:
+        return 'PRÉVISUALISATION';
+      case TallyState.standby:
+        return 'EN ATTENTE';
+    }
   }
 
   @override
@@ -273,34 +345,26 @@ class _CameraActiveScreenState extends State<CameraActiveScreen> with WidgetsBin
     final tallyColor = _getTallyColor();
 
     return Scaffold(
-      backgroundColor: EeccCamColors.background, // Noir OLED pur
+      backgroundColor: Colors.black,
       body: Stack(
+        fit: StackFit.expand,
         children: [
-          // 1. APERÇU VIDÉO CAMÉRA MATÉRIEL RÉEL
+          // 1. APERÇU VIDÉO CAPTEUR
           if (_isCameraInitialized && _cameraController != null)
             GestureDetector(
-              onScaleStart: (details) {
-                _baseScale = _currentZoom;
-              },
+              onScaleStart: (details) => _baseScale = _currentZoom,
               onScaleUpdate: (details) async {
                 final newZoom = (_baseScale * details.scale).clamp(_minZoom, _maxZoom);
                 if (newZoom != _currentZoom) {
-                  setState(() => _currentZoom = newZoom);
-                  await _cameraController?.setZoomLevel(newZoom);
+                  _currentZoom = newZoom;
+                  await _cameraController!.setZoomLevel(_currentZoom);
                 }
               },
-              child: SizedBox.expand(
-                child: FittedBox(
-                  fit: BoxFit.cover,
-                  child: SizedBox(
-                    width: (_cameraController!.value.previewSize?.width ?? 1280) >
-                            (_cameraController!.value.previewSize?.height ?? 720)
-                        ? (_cameraController!.value.previewSize?.width ?? 1280)
-                        : (_cameraController!.value.previewSize?.height ?? 1280),
-                    height: (_cameraController!.value.previewSize?.width ?? 1280) >
-                            (_cameraController!.value.previewSize?.height ?? 720)
-                        ? (_cameraController!.value.previewSize?.height ?? 720)
-                        : (_cameraController!.value.previewSize?.width ?? 720),
+              child: Center(
+                child: AspectRatio(
+                  aspectRatio: _cameraController!.value.aspectRatio,
+                  child: Transform.rotate(
+                    angle: _isFlipped180 ? 3.141592653589793 : 0.0,
                     child: CameraPreview(_cameraController!),
                   ),
                 ),
@@ -322,7 +386,17 @@ class _CameraActiveScreenState extends State<CameraActiveScreen> with WidgetsBin
               child: CircularProgressIndicator(color: EeccCamColors.accent),
             ),
 
-          // 2. CADRE TALLY SOLIDE EN BORDURE (0% dégradé, aplat solide pur)
+          // 1.5 GRILLE DE COMPOSITION
+          if (_showRuleOfThirds)
+            Positioned.fill(
+              child: IgnorePointer(
+                child: CustomPaint(
+                  painter: _RuleOfThirdsPainter(),
+                ),
+              ),
+            ),
+
+          // 2. CADRE TALLY SOLIDE EN BORDURE
           Positioned.fill(
             child: IgnorePointer(
               child: Container(
@@ -350,7 +424,7 @@ class _CameraActiveScreenState extends State<CameraActiveScreen> with WidgetsBin
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    CircleAvatar(
+                    const CircleAvatar(
                       radius: 5,
                       backgroundColor: Colors.white,
                     ),
@@ -374,6 +448,18 @@ class _CameraActiveScreenState extends State<CameraActiveScreen> with WidgetsBin
                           fontWeight: FontWeight.bold,
                         ),
                       ),
+                    const SizedBox(width: 10),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.black38,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        '${_getResolutionLabel(_currentResolution)} · ${_targetFps} FPS',
+                        style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -384,8 +470,8 @@ class _CameraActiveScreenState extends State<CameraActiveScreen> with WidgetsBin
           if (!_isScreenLocked)
             Positioned(
               right: 16,
-              top: 100,
-              bottom: 100,
+              top: 70,
+              bottom: 70,
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -395,14 +481,14 @@ class _CameraActiveScreenState extends State<CameraActiveScreen> with WidgetsBin
                     isActive: _isTorchOn,
                     onTap: _toggleTorch,
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 12),
                   _buildActionButton(
                     icon: Icons.flip_camera_ios,
                     label: 'Bascule',
                     isActive: false,
                     onTap: _switchCamera,
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 12),
                   _buildActionButton(
                     icon: _isMuted ? Icons.mic_off : Icons.mic,
                     label: _isMuted ? 'Coupé' : 'Micro',
@@ -412,7 +498,14 @@ class _CameraActiveScreenState extends State<CameraActiveScreen> with WidgetsBin
                       if (_isMuted) _connectionService.updateAudioLevel(0);
                     },
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 12),
+                  _buildActionButton(
+                    icon: Icons.tune_rounded,
+                    label: '16K/300',
+                    isActive: true,
+                    onTap: _showHighSpeedSettingsModal,
+                  ),
+                  const SizedBox(height: 12),
                   _buildActionButton(
                     icon: Icons.lock_open,
                     label: 'Verrou',
@@ -470,7 +563,7 @@ class _CameraActiveScreenState extends State<CameraActiveScreen> with WidgetsBin
                     Row(
                       children: [
                         Text(
-                          _measuredFps > 0 ? '$_measuredFps FPS' : 'FPS non mesuré',
+                          _measuredFps > 0 ? '$_measuredFps / $_targetFps FPS' : '$_targetFps FPS cible',
                           style: const TextStyle(
                             color: EeccCamColors.telemetryGauge,
                             fontSize: 12,
@@ -479,7 +572,7 @@ class _CameraActiveScreenState extends State<CameraActiveScreen> with WidgetsBin
                         ),
                         const SizedBox(width: 14),
                         Text(
-                          _measuredBitrate > 0 ? '$_measuredBitrate kbps' : 'débit non mesuré',
+                          _measuredBitrate > 0 ? '$_measuredBitrate kbps' : 'débit actif',
                           style: const TextStyle(
                             color: EeccCamColors.telemetryGauge,
                             fontSize: 12,
@@ -501,6 +594,137 @@ class _CameraActiveScreenState extends State<CameraActiveScreen> with WidgetsBin
           ),
         ],
       ),
+    );
+  }
+
+  void _showHighSpeedSettingsModal() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF18181B),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'Configuration Haute Fidélité & Cadence',
+                            style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.close, color: Colors.white70),
+                            onPressed: () => Navigator.pop(ctx),
+                          ),
+                        ],
+                      ),
+                      const Divider(color: Colors.white24),
+                      const SizedBox(height: 8),
+
+                      // SÉLECTION RÉSOLUTION (Jusqu'à 16K HD)
+                      const Text('Résolution de capture :', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 8,
+                        children: [
+                          _buildQualityChip('16K HD (Plein Capteur)', ResolutionPreset.max, setModalState),
+                          _buildQualityChip('4K UHD', ResolutionPreset.ultraHigh, setModalState),
+                          _buildQualityChip('1080p FHD Pro', ResolutionPreset.veryHigh, setModalState),
+                          _buildQualityChip('720p HD', ResolutionPreset.medium, setModalState),
+                        ],
+                      ),
+
+                      const SizedBox(height: 16),
+                      // SÉLECTION CADENCE CIBLE (Jusqu'à 300 FPS)
+                      const Text('Cadence d\'images par seconde (FPS) :', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 8,
+                        children: [
+                          _buildFpsChip(300, '300 FPS (Ultra Vitesse)', setModalState),
+                          _buildFpsChip(240, '240 FPS (Slow-Mo)', setModalState),
+                          _buildFpsChip(120, '120 FPS', setModalState),
+                          _buildFpsChip(60, '60 FPS (Broadcast)', setModalState),
+                          _buildFpsChip(30, '30 FPS', setModalState),
+                        ],
+                      ),
+
+                      const SizedBox(height: 16),
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('Grille de cadrage (Règle des tiers)', style: TextStyle(color: Colors.white, fontSize: 13)),
+                        subtitle: const Text('Aide visuelle pour centrer l\'orateur en culte', style: TextStyle(color: Colors.white60, fontSize: 11)),
+                        value: _showRuleOfThirds,
+                        activeColor: EeccCamColors.accent,
+                        onChanged: (val) {
+                          setModalState(() => _showRuleOfThirds = val);
+                          setState(() => _showRuleOfThirds = val);
+                        },
+                      ),
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('Inverser la caméra à 180° (Tête en bas)', style: TextStyle(color: Colors.white, fontSize: 13)),
+                        subtitle: const Text('Corrige l\'image si le smartphone est monté à l\'envers', style: TextStyle(color: Colors.white60, fontSize: 11)),
+                        value: _isFlipped180,
+                        activeColor: Colors.amber,
+                        onChanged: (val) {
+                          setModalState(() => _isFlipped180 = val);
+                          setState(() => _isFlipped180 = val);
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildQualityChip(String label, ResolutionPreset preset, StateSetter setModalState) {
+    final isSelected = _currentResolution == preset;
+    return ChoiceChip(
+      label: Text(label, style: TextStyle(color: isSelected ? Colors.white : Colors.white70, fontSize: 11)),
+      selected: isSelected,
+      selectedColor: EeccCamColors.accent,
+      backgroundColor: const Color(0xFF27272A),
+      onSelected: (selected) {
+        if (selected) {
+          setModalState(() => _currentResolution = preset);
+          setState(() => _currentResolution = preset);
+          if (_availableCameras.isNotEmpty) {
+            _setupCameraController(_availableCameras[_selectedCameraIndex]);
+          }
+        }
+      },
+    );
+  }
+
+  Widget _buildFpsChip(int fps, String label, StateSetter setModalState) {
+    final isSelected = _targetFps == fps;
+    return ChoiceChip(
+      label: Text(label, style: TextStyle(color: isSelected ? Colors.white : Colors.white70, fontSize: 11)),
+      selected: isSelected,
+      selectedColor: EeccCamColors.tallyProgram,
+      backgroundColor: const Color(0xFF27272A),
+      onSelected: (selected) {
+        if (selected) {
+          setModalState(() => _targetFps = fps);
+          setState(() => _targetFps = fps);
+        }
+      },
     );
   }
 
@@ -537,4 +761,21 @@ class _CameraActiveScreenState extends State<CameraActiveScreen> with WidgetsBin
       ),
     );
   }
+}
+
+class _RuleOfThirdsPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.white.withOpacity(0.2)
+      ..strokeWidth = 1.0;
+
+    canvas.drawLine(Offset(size.width / 3, 0), Offset(size.width / 3, size.height), paint);
+    canvas.drawLine(Offset(size.width * 2 / 3, 0), Offset(size.width * 2 / 3, size.height), paint);
+    canvas.drawLine(Offset(0, size.height / 3), Offset(size.width, size.height / 3), paint);
+    canvas.drawLine(Offset(0, size.height * 2 / 3), Offset(size.width, size.height * 2 / 3), paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

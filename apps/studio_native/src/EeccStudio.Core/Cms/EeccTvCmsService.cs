@@ -375,8 +375,11 @@ namespace EeccStudio.Core.Cms
         {
             if (_localAlbums.TryGetValue(photo.AlbumId, out var album))
             {
-                album.Photos.Add(photo);
-                album.PhotoCount = album.Photos.Count;
+                lock (album.Photos)
+                {
+                    album.Photos.Add(photo);
+                    album.PhotoCount = album.Photos.Count;
+                }
             }
 
             if (!IsMockMode)

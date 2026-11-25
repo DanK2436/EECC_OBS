@@ -460,6 +460,8 @@ class StudioConnectionService {
     _wsChannel = null;
   }
 
+  void dispose() => disconnect();
+
   void disconnect({bool release = true}) {
     _userLeft = true;
     _retryTimer?.cancel();

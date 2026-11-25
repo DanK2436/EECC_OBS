@@ -60,7 +60,9 @@ class WebrtcCameraStreamService {
   Future<void> startStream({
     required String resolution,
     required int targetFps,
-    required int maxBitrateKbps,
+    int maxBitrateKbps = 50000,
+    bool isFrontCamera = false,
+    bool enableAudio = true,
   }) async {
     try {
       _currentFps = targetFps;

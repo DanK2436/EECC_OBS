@@ -239,6 +239,7 @@ class _CameraActiveScreenState extends State<CameraActiveScreen> with WidgetsBin
     _webrtcService?.startStream(
       resolution: _getResolutionLabel(_currentResolution),
       targetFps: _targetFps,
+      maxBitrateKbps: 50000,
       isFrontCamera: _selectedCameraIndex == 1,
       enableAudio: !_isMuted,
     );

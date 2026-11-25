@@ -215,9 +215,9 @@ class _DonationModalState extends State<DonationModal> {
                         ),
                       ),
                       onPressed: () => _processDonation(context),
-                      child: const Text(
+                      child: Text(
                         'Faire un don de ${_selectedAmount.toStringAsFixed(0)} \$',
-                        style: TextStyle(
+                        style: const TextStyle(
                             fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
                       ),
                     ),
@@ -275,7 +275,7 @@ class _DonationModalState extends State<DonationModal> {
           'donor_email': donorEmail.isNotEmpty ? donorEmail : null,
           'donor_phone': phone.isNotEmpty ? phone : null,
           'method': method,
-        },
+        }),
       );
 
       if (response.statusCode != 200) {

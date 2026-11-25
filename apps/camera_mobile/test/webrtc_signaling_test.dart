@@ -160,7 +160,7 @@ class _MockStudioSignalingServer {
                   'assigned_slot': 'Cam-1',
                   'slot_number': 1,
                 }));
-              } else {
+              } else if (json['type'] != 'ping' && json['type'] != 'telemetry') {
                 if (mock._waiters.isNotEmpty) {
                   mock._waiters.removeAt(0).complete(json);
                 } else {

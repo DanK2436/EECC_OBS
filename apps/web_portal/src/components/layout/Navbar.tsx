@@ -10,7 +10,7 @@ export const Navbar = () => {
   const navLinks = [
     { label: "Accueil", href: "/" },
     { label: "À propos", href: "/a-propos" },
-    { label: "Nos églises", href: "/nos-eglises" },
+    { label: "Nos églises", href: "/eglises" },
     { label: "Cultes", href: "/cultes" },
     { label: "Actualités", href: "/actualites" },
     { label: "Médiathèque", href: "/mediatheque" },

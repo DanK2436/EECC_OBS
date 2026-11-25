@@ -14,7 +14,7 @@ subprojects { subproject ->
         resolutionStrategy.eachDependency { details ->
             if (details.requested.group == "org.jetbrains.kotlin" &&
                     details.requested.name.startsWith("kotlin-stdlib")) {
-                details.useVersion("2.0.21")
+                details.useVersion("2.1.0")
                 details.because("Keep Kotlin stdlib readable by AGP 8.3.2 R8 and the Flutter 3.24 compiler")
             }
         }

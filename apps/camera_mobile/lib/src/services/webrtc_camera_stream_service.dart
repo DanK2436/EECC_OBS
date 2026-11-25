@@ -41,6 +41,7 @@ class WebrtcCameraStreamService {
   });
 
   WebRtcTransportState get state => _state;
+  bool get isStreaming => _state == WebRtcTransportState.streaming;
   int get currentBitrateKbps => _currentBitrateKbps;
   int get currentFps => _currentFps;
 

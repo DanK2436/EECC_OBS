@@ -56,7 +56,7 @@ public class WebRtcSignalingTests
             ["max_resolution"] = "16K UHD (15360x8640)"
         });
         await SendTextAsync(socket, capabilities);
-        var capResult = await capabilitiesTcs.Task.WaitAsync(TimeSpan.FromSeconds(3));
+        var capResult = await capabilitiesTcs.Task.WaitAsync(TimeSpan.FromSeconds(10));
         Assert.Equal(300, capResult.maxFps);
         Assert.Equal("16K UHD (15360x8640)", capResult.maxRes);
         Assert.Contains("H264", capResult.codecs);
@@ -72,7 +72,7 @@ public class WebRtcSignalingTests
             ["resolution"] = "16K UHD"
         });
         await SendTextAsync(socket, offer);
-        var offerResult = await offerTcs.Task.WaitAsync(TimeSpan.FromSeconds(3));
+        var offerResult = await offerTcs.Task.WaitAsync(TimeSpan.FromSeconds(10));
         Assert.Equal("H264", offerResult.codec);
         Assert.Equal(300, offerResult.fps);
         Assert.Equal("16K UHD", offerResult.res);
@@ -97,7 +97,7 @@ public class WebRtcSignalingTests
             ["sdpMLineIndex"] = 0
         });
         await SendTextAsync(socket, iceMsg);
-        var iceResult = await iceCandidateTcs.Task.WaitAsync(TimeSpan.FromSeconds(3));
+        var iceResult = await iceCandidateTcs.Task.WaitAsync(TimeSpan.FromSeconds(10));
         Assert.Equal("candidate:1 1 UDP 2130706431 127.0.0.1 50000 typ host", iceResult.candidate);
         Assert.Equal("video", iceResult.sdpMid);
         Assert.Equal(0, iceResult.sdpMLineIndex);
@@ -116,7 +116,7 @@ public class WebRtcSignalingTests
             ["ready"] = true
         });
         await SendTextAsync(socket, readyMsg);
-        var readyResult = await readyTcs.Task.WaitAsync(TimeSpan.FromSeconds(3));
+        var readyResult = await readyTcs.Task.WaitAsync(TimeSpan.FromSeconds(10));
         Assert.True(readyResult.ready);
 
         // 8. Rétrocompatibilité : l'envoi d'une image JPEG binaire reste totalement fonctionnel

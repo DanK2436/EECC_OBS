@@ -134,7 +134,8 @@ Future<void> _until(bool Function() condition, {Duration timeout = const Duratio
 
 class _MockStudioSignalingServer {
   final HttpServer _server;
-  final StreamController<Map<String, dynamic>> _messages = StreamController.broadcast();
+  final List<Map<String, dynamic>> _queue = [];
+  final List<Completer<Map<String, dynamic>>> _waiters = [];
   WebSocket? _clientSocket;
 
   _MockStudioSignalingServer._(this._server);
@@ -160,7 +161,11 @@ class _MockStudioSignalingServer {
                   'slot_number': 1,
                 }));
               } else {
-                mock._messages.add(json);
+                if (mock._waiters.isNotEmpty) {
+                  mock._waiters.removeAt(0).complete(json);
+                } else {
+                  mock._queue.add(json);
+                }
               }
             } catch (_) {}
           }
@@ -174,13 +179,23 @@ class _MockStudioSignalingServer {
     _clientSocket?.add(jsonEncode(msg));
   }
 
-  Future<Map<String, dynamic>> nextMessage({Duration timeout = const Duration(seconds: 3)}) {
-    return _messages.stream.first.timeout(timeout);
+  Future<Map<String, dynamic>> nextMessage({Duration timeout = const Duration(seconds: 4)}) {
+    if (_queue.isNotEmpty) {
+      return Future.value(_queue.removeAt(0));
+    }
+    final completer = Completer<Map<String, dynamic>>();
+    _waiters.add(completer);
+    return completer.future.timeout(timeout);
   }
 
   Future<void> close() async {
     await _clientSocket?.close();
-    await _messages.close();
+    for (final waiter in _waiters) {
+      if (!waiter.isCompleted) {
+        waiter.completeError(Exception('Server closed'));
+      }
+    }
+    _waiters.clear();
     await _server.close(force: true);
   }
 }

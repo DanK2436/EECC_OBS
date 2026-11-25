@@ -81,7 +81,7 @@ export const Navbar = () => {
             </button>
           </div>
         </div>
-      </header>
+      </div>
 
       {/* Menu Latéral Mobile */}
       {mobileMenuOpen && (

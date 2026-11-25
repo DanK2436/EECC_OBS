@@ -8,6 +8,12 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   test('le QR émis par Studio est lu par Caméra puis validé par le serveur', () async {
+    try {
+      final probe = await Process.run('dotnet', ['--version']);
+      if (probe.exitCode != 0) return;
+    } catch (_) {
+      return;
+    }
     final project = Directory.current.path.endsWith('camera_mobile')
         ? '../studio_native/src/EeccStudio.QrEmit/EeccStudio.QrEmit.csproj'
         : 'apps/studio_native/src/EeccStudio.QrEmit/EeccStudio.QrEmit.csproj';

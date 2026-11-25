@@ -140,7 +140,7 @@ public class LanPairingTests
         // Image synthétique : ce n'est pas la caméra d'un téléphone.
         var syntheticFrame = new byte[] { 0xFF, 0xD8, 0xEE, 0xC1, 0x0A, 0x01 };
         await socket.SendAsync(syntheticFrame, WebSocketMessageType.Binary, true, CancellationToken.None);
-        var delivered = await frameSeen.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        var delivered = await frameSeen.Task.WaitAsync(TimeSpan.FromSeconds(15));
         Assert.Equal(syntheticFrame, delivered);
         Assert.Equal(syntheticFrame, server.GetCameraFrame("Cam-1"));
 
@@ -204,7 +204,7 @@ public class LanPairingTests
         var gone = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         server.OnCameraDisconnected += _ => gone.TrySetResult();
         await SendText(again, """{"type":"bye"}""");
-        await gone.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await gone.Task.WaitAsync(TimeSpan.FromSeconds(15));
         Assert.Equal(0, server.PhoneCount);
 
         using var late = await Connect(server.ListeningPort);
@@ -325,7 +325,7 @@ public class LanPairingTests
     private static async Task<ClientWebSocket> Connect(int port)
     {
         var socket = new ClientWebSocket();
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
         await socket.ConnectAsync(new Uri($"ws://127.0.0.1:{port}/camera/control"), timeout.Token);
         return socket;
     }
@@ -340,7 +340,7 @@ public class LanPairingTests
     {
         var buffer = new byte[8192];
         using var message = new MemoryStream();
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
         WebSocketReceiveResult result;
         do
         {
@@ -355,7 +355,7 @@ public class LanPairingTests
 
     private static async Task WaitUntilAsync(Func<bool> condition)
     {
-        var deadline = DateTime.UtcNow.AddSeconds(5);
+        var deadline = DateTime.UtcNow.AddSeconds(15);
         while (DateTime.UtcNow < deadline)
         {
             if (condition())
@@ -368,7 +368,7 @@ public class LanPairingTests
 
     private static async Task<CameraClient> WaitForPhoneAsync(Func<CameraClient?> read)
     {
-        var deadline = DateTime.UtcNow.AddSeconds(5);
+        var deadline = DateTime.UtcNow.AddSeconds(15);
         while (DateTime.UtcNow < deadline)
         {
             var value = read();

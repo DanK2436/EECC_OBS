@@ -39,7 +39,7 @@ jobs:
 
       - name: Test LAN camera pairing
         working-directory: apps/studio_native
-        run: dotnet test tests/EeccStudio.Core.Tests/EeccStudio.Core.Tests.csproj -c Release --nologo
+        run: dotnet test tests/EeccStudio.Core.Tests/EeccStudio.Core.Tests.csproj -c Release --nologo --logger "console;verbosity=normal"
 
       - name: Publish EECC Studio Native (.NET 8 Win-x64 Self-Contained)
         working-directory: apps/studio_native

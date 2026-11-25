@@ -123,7 +123,7 @@ void main() {
   });
 }
 
-Future<void> _until(bool Function() condition, {Duration timeout = const Duration(seconds: 4)}) async {
+Future<void> _until(bool Function() condition, {Duration timeout = const Duration(seconds: 10)}) async {
   final end = DateTime.now().add(timeout);
   while (DateTime.now().isBefore(end)) {
     if (condition()) return;

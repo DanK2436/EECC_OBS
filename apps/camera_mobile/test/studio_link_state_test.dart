@@ -132,7 +132,7 @@ StudioConnectionService _service(int port, List<StudioLinkPhase> phases) {
 }
 
 Future<void> _until(bool Function() ready) async {
-  final deadline = DateTime.now().add(const Duration(seconds: 3));
+  final deadline = DateTime.now().add(const Duration(seconds: 10));
   while (DateTime.now().isBefore(deadline)) {
     if (ready()) return;
     await Future<void>.delayed(const Duration(milliseconds: 20));

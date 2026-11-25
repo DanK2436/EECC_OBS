@@ -39,14 +39,24 @@ jobs:
 
       - name: Test LAN camera pairing
         working-directory: apps/studio_native
-        run: dotnet test tests/EeccStudio.Core.Tests/EeccStudio.Core.Tests.csproj -c Release -v normal --logger "trx;LogFileName=test_results.trx"
+        run: |
+          dotnet test tests/EeccStudio.Core.Tests/EeccStudio.Core.Tests.csproj -c Release -v normal > test_studio.log 2>&1
+        continue-on-error: true
 
-      - name: Upload Test Results
+      - name: Upload Studio Test Log
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: studio_test_results
-          path: apps/studio_native/tests/EeccStudio.Core.Tests/TestResults/
+          name: studio_test_log
+          path: apps/studio_native/test_studio.log
+
+      - name: Verify Studio Tests Succeeded
+        working-directory: apps/studio_native
+        run: |
+          Get-Content test_studio.log
+          if ((Select-String -Path test_studio.log -Pattern "Failed:").Line -match "Failed:\s+[1-9]") {
+            throw "Tests studio failed!"
+          }
 
       - name: Publish EECC Studio Native (.NET 8 Win-x64 Self-Contained)
         working-directory: apps/studio_native
@@ -165,7 +175,25 @@ jobs:
 
       - name: Build Release APK
         working-directory: apps/tv_mobile
-        run: flutter build apk --release -v
+        run: |
+          flutter build apk --release -v > build_tv.log 2>&1
+        continue-on-error: true
+
+      - name: Upload TV Build Log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tv_build_log
+          path: apps/tv_mobile/build_tv.log
+
+      - name: Verify TV APK Built
+        working-directory: apps/tv_mobile
+        run: |
+          if [ ! -f build/app/outputs/flutter-apk/app-release.apk ]; then
+            echo "=== BUILD FAILED - LAST 300 LINES ==="
+            tail -n 300 build_tv.log
+            exit 1
+          fi
 
       - name: Prepare Artifact
         working-directory: apps/tv_mobile
@@ -216,7 +244,24 @@ jobs:
 
       - name: Flutter test
         working-directory: apps/camera_mobile
-        run: flutter test --reporter=expanded
+        run: |
+          flutter test --reporter=expanded > test_camera.log 2>&1
+        continue-on-error: true
+
+      - name: Upload Camera Test Log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: camera_test_log
+          path: apps/camera_mobile/test_camera.log
+
+      - name: Verify Camera Tests Succeeded
+        working-directory: apps/camera_mobile
+        run: |
+          cat test_camera.log
+          if grep -q "Some tests failed" test_camera.log; then
+            exit 1
+          fi
 
       - name: Build Release APK
         working-directory: apps/camera_mobile

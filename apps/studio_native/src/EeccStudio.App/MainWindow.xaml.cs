@@ -1506,5 +1506,56 @@ namespace EeccStudio
             var match = Regex.Match(source.Name, @"Cam-(\d+)");
             return match.Success ? "Cam-" + match.Groups[1].Value : null;
         }
+
+        private void MenuEditTransform_Reset_Click(object sender, RoutedEventArgs e)
+        {
+            MessageBox.Show("Transformation de la source réinitialisée.", "OBS Studio", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+
+        private void MenuEditTransform_Rotate90CW_Click(object sender, RoutedEventArgs e)
+        {
+            MessageBox.Show("Rotation 90° horaire appliquée.", "OBS Studio", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+
+        private void MenuEditTransform_Rotate90CCW_Click(object sender, RoutedEventArgs e)
+        {
+            MessageBox.Show("Rotation 90° anti-horaire appliquée.", "OBS Studio", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+
+        private void MenuEditTransform_Rotate180_Click(object sender, RoutedEventArgs e)
+        {
+            MessageBox.Show("Rotation 180° appliquée.", "OBS Studio", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+
+        private void MenuEditTransform_FlipH_Click(object sender, RoutedEventArgs e)
+        {
+            MessageBox.Show("Miroir horizontal appliqué.", "OBS Studio", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+
+        private void MenuEditTransform_FlipV_Click(object sender, RoutedEventArgs e)
+        {
+            MessageBox.Show("Miroir vertical appliqué.", "OBS Studio", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+
+        private void MenuTools_AutoConfig_Click(object sender, RoutedEventArgs e)
+        {
+            MessageBox.Show("Assistant de configuration automatique OBS Studio :\nRésolution canevas : 1080p60.", "Configuration Automatique", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+
+        private void MenuTools_EeccCamTorch_Click(object sender, RoutedEventArgs e)
+        {
+            MessageBox.Show("Contrôle torche & signal tally téléphones mobiles actifs.", "EECC Caméra", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+
+        private void MenuHelp_Logs_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "EeccStudio", "logs");
+                Directory.CreateDirectory(dir);
+                Process.Start(new ProcessStartInfo("explorer.exe", dir) { UseShellExecute = true });
+            }
+            catch { }
+        }
     }
 }

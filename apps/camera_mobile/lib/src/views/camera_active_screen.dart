@@ -3,11 +3,11 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:camera/camera.dart';
-import '../../constants/colors.dart';
-import '../../models/session_config.dart';
-import '../../pairing/studio_link_phase.dart';
-import '../../services/studio_connection_service.dart';
-import '../../services/webrtc_camera_stream_service.dart';
+import '../constants/colors.dart';
+import '../models/session_config.dart';
+import '../pairing/studio_link_phase.dart';
+import '../services/studio_connection_service.dart';
+import '../services/webrtc_camera_stream_service.dart';
 
 /// Écran Caméra Active d'EECC Caméra
 /// Supporte une cadence ultra-haute vitesse jusqu'à 300 FPS et une résolution jusqu'au 16K HD

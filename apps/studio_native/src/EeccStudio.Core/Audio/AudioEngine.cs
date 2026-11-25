@@ -55,6 +55,7 @@ namespace EeccStudio.Core.Audio
         {
             lock (_lock)
             {
+                if (_channels.Any(c => c.Id == id)) return;
                 _channels.Add(new AudioChannel
                 {
                     Id = id,

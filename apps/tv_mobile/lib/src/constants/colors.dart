@@ -24,7 +24,10 @@ class EeccColors {
 
   // 4. Signaux fonctionnels stricts (Aplats solides)
   static const Color liveRed = Color(0xFFB91C1C); // Badge solide « EN DIRECT »
+  static const Color danger = liveRed;
   static const Color goldLiturgical = Color(0xFFD97706); // Or liturgique solide (Dons, favoris)
+  static const Color secondary = goldLiturgical;
   static const Color warningOrange = Color(0xFFD97706);
+  static const Color badgeScheduled = warningOrange;
   static const Color successGreen = Color(0xFF15803D);
 }

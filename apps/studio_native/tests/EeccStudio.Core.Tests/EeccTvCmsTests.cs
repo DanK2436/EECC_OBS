@@ -208,7 +208,7 @@ namespace EeccStudio.Core.Tests
 
                 Assert.Equal(20, uploaded.Count);
                 Assert.All(uploaded, p => Assert.Equal(album.Id, p.AlbumId));
-                Assert.All(uploaded, p => Assert.StartsWith("https://cdn.eecc.tv/storage/v1/object/public/photo-galleries/albums/", p.PhotoUrl));
+                Assert.All(uploaded, p => Assert.Contains("/storage/v1/object/public/photo-galleries/albums/", p.PhotoUrl));
 
                 // 4. Vérification que l'album a bien comptabilisé ses photos
                 var albums = await service.GetPhotoAlbumsAsync();

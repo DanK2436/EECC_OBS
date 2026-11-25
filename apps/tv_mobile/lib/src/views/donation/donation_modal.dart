@@ -6,8 +6,8 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 
-import 'package:eecc_tv/config.dart';
-import 'package:eecc_tv/constants/colors.dart';
+import '../../constants/config.dart';
+import '../../constants/colors.dart';
 
 class DonationModal extends StatefulWidget {
   const DonationModal({super.key});
@@ -325,7 +325,7 @@ class _DonationModalState extends State<DonationModal> {
         'https://maishapay.online/api/checkout?amount=$amountFmt&currency=USD&phone=${Uri.encodeComponent(_phoneController.text.trim())}&merchant_key=${Uri.encodeComponent(EeccConfig.maishapayPublicKey)}'
       );
       try {
-        if (await launchUrl(paymentUri, mode: LaunchMode.externalApplication)) {
+        if (await launchUrl(paymentUrl, mode: LaunchMode.externalApplication)) {
           // fermer le modal
           if (!mounted) return;
           Navigator.of(context).pop();

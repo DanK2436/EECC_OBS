@@ -14,7 +14,7 @@ public class WebRtcSignalingTests
         using var server = new CameraServer(0);
         server.Start();
 
-        var ticket = server.IssuePairingTicket("EECC Studio Test", "127.0.0.1");
+        var ticket = server.IssuePairingTicket("EECC Studio Test", "10.8.0.4");
 
         // Captures d'événements serveur
         var offerTcs = new TaskCompletionSource<(CameraClient client, string sdp, string codec, int fps, string res)>(TaskCreationOptions.RunContinuationsAsynchronously);

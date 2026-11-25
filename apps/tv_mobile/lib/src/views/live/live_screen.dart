@@ -315,7 +315,7 @@ class _LiveScreenState extends State<LiveScreen> with SingleTickerProviderStateM
         ),
         const SizedBox(height: 6),
         Text(
-          event.description,
+          event.description ?? '',
           style: const TextStyle(color: EeccColors.textSecondary, height: 1.4, fontSize: 13),
         ),
       ],

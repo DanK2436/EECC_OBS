@@ -52,6 +52,10 @@ namespace EeccStudio.Core.WebRtc
             _client = client;
             _server = server;
             _audioEngine = audioEngine;
+            if (_audioEngine != null && _client.SlotNumber > 0)
+            {
+                _audioEngine.AddChannel($"mobile_cam_{_client.SlotNumber}", $"Audio Caméra Mobile {_client.SlotNumber}");
+            }
         }
 
         /// <summary>

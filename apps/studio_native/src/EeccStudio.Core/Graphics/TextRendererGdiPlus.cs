@@ -93,6 +93,7 @@ namespace EeccStudio.Core.Graphics
         private bool _dirty = true;
         private DateTime _lastFileCheck = DateTime.MinValue;
         private DateTime _lastFileModified = DateTime.MinValue;
+        private float _elapsedSinceLastCheck = 1.0f;
 
         public string Text
         {
@@ -127,9 +128,11 @@ namespace EeccStudio.Core.Graphics
         {
             if (!_props.ReadFromFile || string.IsNullOrWhiteSpace(_props.FilePath)) return;
 
+            _elapsedSinceLastCheck += seconds;
             var now = DateTime.UtcNow;
-            if ((now - _lastFileCheck).TotalSeconds >= 1.0)
+            if (_elapsedSinceLastCheck >= 1.0f || (now - _lastFileCheck).TotalSeconds >= 1.0)
             {
+                _elapsedSinceLastCheck = 0;
                 _lastFileCheck = now;
                 try
                 {

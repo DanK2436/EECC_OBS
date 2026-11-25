@@ -462,7 +462,7 @@
             </Border>
 
             <!-- DOCK 2 : SOURCES -->
-            <Border Grid.Column="1" x:Name="PanelTransitions" Background="{StaticResource ObsDockSurface}" BorderBrush="{StaticResource ObsDockBorder}" BorderThickness="1" CornerRadius="3" Margin="2">
+            <Border Grid.Column="1" x:Name="PanelSources" Background="{StaticResource ObsDockSurface}" BorderBrush="{StaticResource ObsDockBorder}" BorderThickness="1" CornerRadius="3" Margin="2">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="26"/> <!-- En-Tête Dock -->

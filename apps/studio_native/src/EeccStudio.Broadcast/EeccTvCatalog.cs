@@ -60,6 +60,27 @@ public static class EeccTvCatalog
         return await SendAsync(url, key, title, speaker, playback, live: true, cancellationToken) + note;
     }
 
+    public static async Task UpdateCaptionAsync(string title, string speaker, string theme, CancellationToken cancellationToken = default)
+    {
+        var (url, key) = EeccCloud.Resolve();
+        using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(8) };
+        http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", key);
+        http.DefaultRequestHeaders.Add("apikey", key);
+        using var request = new HttpRequestMessage(HttpMethod.Post, url + "/rest/v1/rpc/studio_set_live_caption")
+        {
+            Content = new StringContent(JsonSerializer.Serialize(new
+            {
+                p_title = title,
+                p_speaker = speaker,
+                p_theme = theme,
+                p_secret = StudioSecret.Current,
+            }), Encoding.UTF8, "application/json"),
+        };
+        using var response = await http.SendAsync(request, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+            throw new InvalidOperationException("Supabase " + (int)response.StatusCode);
+    }
+
     public static async Task<string> EndLiveAsync(CancellationToken cancellationToken = default)
     {
         PublicProgramRelay.Shared.Stop();

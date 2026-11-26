@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:camera/camera.dart';
@@ -21,6 +22,7 @@ class CameraActiveScreen extends StatefulWidget {
 }
 
 class _CameraActiveScreenState extends State<CameraActiveScreen> with WidgetsBindingObserver {
+  static const MethodChannel _device = MethodChannel('cd.eecc.camera/device');
   late StudioConnectionService _connectionService;
   WebrtcCameraStreamService? _webrtcService;
 
@@ -74,6 +76,7 @@ class _CameraActiveScreenState extends State<CameraActiveScreen> with WidgetsBin
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _keepAwake(false);
     _stopContinuousStreaming();
     _webrtcService?.dispose();
     _cameraController?.dispose();
@@ -168,6 +171,7 @@ class _CameraActiveScreenState extends State<CameraActiveScreen> with WidgetsBin
       onConnectionStatusChanged: (connected) {
         if (mounted) {
           setState(() => _isConnected = connected);
+          _keepAwake(connected);
           if (connected) {
             _startContinuousStreaming();
           } else {
@@ -234,7 +238,13 @@ class _CameraActiveScreenState extends State<CameraActiveScreen> with WidgetsBin
     _connectionService.connect();
   }
 
-  void _startContinuousStreaming() {
+  Future<void> _keepAwake(bool on) async {
+    try {
+      await _device.invokeMethod('keepAwake', {'on': on});
+    } catch (_) {}
+  }
+
+  Future<void> _startContinuousStreaming() async {
     _isStreamingFrames = true;
     _webrtcService?.startStream(
       resolution: _getResolutionLabel(_currentResolution),
@@ -243,11 +253,75 @@ class _CameraActiveScreenState extends State<CameraActiveScreen> with WidgetsBin
       isFrontCamera: _selectedCameraIndex == 1,
       enableAudio: !_isMuted,
     );
-    _captureLoop();
+    final controller = _cameraController;
+    if (controller == null || !controller.value.isInitialized) return;
+    if (controller.value.isStreamingImages) return;
+    try {
+      await controller.startImageStream(_onSensorFrame);
+    } catch (_) {
+      _captureLoop();
+    }
   }
 
   void _stopContinuousStreaming() {
     _isStreamingFrames = false;
+    final controller = _cameraController;
+    if (controller != null && controller.value.isStreamingImages) {
+      controller.stopImageStream();
+    }
+  }
+
+  Future<void> _onSensorFrame(CameraImage image) async {
+    if (!_isStreamingFrames || !_isConnected || _isCapturing) return;
+    _isCapturing = true;
+    try {
+      if (image.format.group == ImageFormatGroup.jpeg && image.planes.isNotEmpty) {
+        _connectionService.sendVideoFrame(image.planes.first.bytes);
+        return;
+      }
+      final nv21 = _nv21(image);
+      if (nv21 == null) return;
+      final jpeg = await _device.invokeMethod<Uint8List>('jpeg', {
+        'nv21': nv21,
+        'width': image.width,
+        'height': image.height,
+      });
+      if (jpeg != null && jpeg.isNotEmpty) {
+        _connectionService.sendVideoFrame(jpeg);
+      }
+    } catch (_) {
+    } finally {
+      _isCapturing = false;
+    }
+  }
+
+  Uint8List? _nv21(CameraImage image) {
+    if (image.planes.length < 3 || image.width <= 0 || image.height <= 0) return null;
+    final width = image.width;
+    final height = image.height;
+    final yPlane = image.planes[0];
+    final uPlane = image.planes[1];
+    final vPlane = image.planes[2];
+    final out = Uint8List(width * height + (width * height) ~/ 2);
+    var offset = 0;
+    for (var row = 0; row < height; row++) {
+      final start = row * yPlane.bytesPerRow;
+      out.setRange(offset, offset + width, yPlane.bytes, start);
+      offset += width;
+    }
+    final uvRow = uPlane.bytesPerRow;
+    final uvPixel = uPlane.bytesPerPixel ?? 1;
+    for (var row = 0; row < height ~/ 2; row++) {
+      for (var col = 0; col < width ~/ 2; col++) {
+        final index = row * uvRow + col * uvPixel;
+        if (offset + 1 >= out.length || index >= vPlane.bytes.length || index >= uPlane.bytes.length) {
+          return out;
+        }
+        out[offset++] = vPlane.bytes[index];
+        out[offset++] = uPlane.bytes[index];
+      }
+    }
+    return out;
   }
 
   /// Boucle de capture ultra-haute vitesse sans bride logicielle (jusqu'à 300 FPS)

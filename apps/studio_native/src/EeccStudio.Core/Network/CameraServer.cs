@@ -82,6 +82,10 @@ public sealed class CameraServer : IDisposable
     /// <summary>Incruste textes et images sur l'image servie aux téléphones.</summary>
     public Func<byte[], byte[]?>? DecorateOnAirFrame { get; set; }
 
+    private byte[]? _decoratedFrame;
+    private byte[]? _decoratedSource;
+    private long _decoratedAt;
+
     /// <summary>Image à l'antenne : le programme choisi, sinon la dernière image de téléphone reçue.</summary>
     public byte[]? OnAirFrameBytes
     {
@@ -90,10 +94,17 @@ public sealed class CameraServer : IDisposable
             var raw = ActiveProgramFrameBytes ?? LatestCameraFrameBytes;
             if (raw == null || DecorateOnAirFrame == null)
                 return raw;
+            var now = Environment.TickCount64;
+            if (ReferenceEquals(raw, _decoratedSource) && _decoratedFrame != null && now - _decoratedAt < 80)
+                return _decoratedFrame;
             try
             {
                 var decorated = DecorateOnAirFrame(raw);
-                return decorated is { Length: > 3 } ? decorated : raw;
+                var frame = decorated is { Length: > 3 } ? decorated : raw;
+                _decoratedSource = raw;
+                _decoratedFrame = frame;
+                _decoratedAt = now;
+                return frame;
             }
             catch
             {
@@ -108,6 +119,7 @@ public sealed class CameraServer : IDisposable
     public string ChurchName { get; set; } = "Église Évangélique les Cohéritiers du Christ (EECC)";
     public string ProgramTitle { get; set; } = "Grand Culte d'Adoration et d'Enseignement";
     public string Speaker { get; set; } = "Pasteur Principal";
+    public string Theme { get; set; } = "La Puissance de la Foi Agissante";
     public string ActiveSceneName { get; set; } = "Culte Principal";
     public TimeSpan PairingTtl { get; set; } = TimeSpan.FromMinutes(3);
     public TimeSpan ReconnectGrace { get; set; } = TimeSpan.FromSeconds(45);
@@ -1008,6 +1020,7 @@ public sealed class CameraServer : IDisposable
                 ["status"] = IsStreaming ? "live" : "standby",
                 ["title"] = ProgramTitle,
                 ["speaker"] = Speaker,
+                ["theme"] = Theme,
                 ["active_scene"] = ActiveSceneName,
                 ["live_stream_url"] = $"http://{(lan.Length == 0 ? "127.0.0.1" : lan)}:{ListeningPort}/live/stream",
                 ["lan_addresses"] = ListLanAddresses(),
@@ -1088,7 +1101,7 @@ public sealed class CameraServer : IDisposable
                     await stream.FlushAsync(cancellationToken);
                 }
 
-                await Task.Delay(frame == null ? 200 : 66, cancellationToken);
+                await Task.Delay(frame == null ? 40 : 2, cancellationToken);
             }
 
             return;

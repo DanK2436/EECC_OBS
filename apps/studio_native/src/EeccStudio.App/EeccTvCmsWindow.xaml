@@ -117,9 +117,9 @@
                             <TextBlock Text="Le téléphone des fidèles lit cette adresse dans Supabase. Elle doit être joignable depuis leur réseau, en général le Wi-Fi de l'église."
                                        Foreground="#8E9297" TextWrapping="Wrap" Margin="0,0,0,18"/>
                             <TextBlock Text="Titre du culte" Foreground="#C9D1D9" Margin="0,0,0,4"/>
-                            <TextBox x:Name="TxtLiveTitle" Padding="8,6" Margin="0,0,0,12" Background="#0D1117" Foreground="White" BorderBrush="#30363D"/>
+                            <TextBox x:Name="TxtLiveTitle" Padding="8,6" Margin="0,0,0,12" Background="#0D1117" Foreground="White" BorderBrush="#30363D" TextChanged="LiveCaption_TextChanged"/>
                             <TextBlock Text="Orateur" Foreground="#C9D1D9" Margin="0,0,0,4"/>
-                            <TextBox x:Name="TxtLiveSpeaker" Padding="8,6" Margin="0,0,0,12" Background="#0D1117" Foreground="White" BorderBrush="#30363D"/>
+                            <TextBox x:Name="TxtLiveSpeaker" Padding="8,6" Margin="0,0,0,12" Background="#0D1117" Foreground="White" BorderBrush="#30363D" TextChanged="LiveCaption_TextChanged"/>
                             <TextBlock Text="Adresse du flux" Foreground="#C9D1D9" Margin="0,0,0,4"/>
                             <TextBox x:Name="TxtLiveUrl" Padding="8,6" Margin="0,0,0,18" Background="#0D1117" Foreground="White" BorderBrush="#30363D"/>
                             <StackPanel Orientation="Horizontal">

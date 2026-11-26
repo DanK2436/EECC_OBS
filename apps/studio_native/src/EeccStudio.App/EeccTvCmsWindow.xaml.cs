@@ -6,6 +6,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Threading;
 using EeccStudio.Broadcast;
 using EeccStudio.Core.Cms;
 using EeccStudio.Core.Network;
@@ -18,6 +19,8 @@ namespace EeccStudio
         private readonly EeccTvCmsService _cmsService;
         private readonly BatchPhotoUploader _batchUploader;
         private CancellationTokenSource? _batchCts;
+        private readonly DispatcherTimer _captionTimer;
+        private bool _captionReady;
 
         public CameraServer? StudioServer { get; set; }
 
@@ -80,12 +83,30 @@ namespace EeccStudio
             GridSermonTexts.ItemsSource = _sermonTexts;
             GridBanners.ItemsSource = _banners;
             GridAlbums.ItemsSource = _albums;
+            _captionTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(300) };
+            _captionTimer.Tick += async (_, _) =>
+            {
+                _captionTimer.Stop();
+                var server = StudioServer;
+                if (server == null) return;
+                server.ProgramTitle = TxtLiveTitle.Text.Trim();
+                server.Speaker = TxtLiveSpeaker.Text.Trim();
+                try
+                {
+                    await EeccTvCatalog.UpdateCaptionAsync(server.ProgramTitle, server.Speaker, server.Theme);
+                }
+                catch
+                {
+                    // Le texte reste local. La frappe suivante réessaie.
+                }
+            };
 
             Loaded += async (_, _) =>
             {
                 var server = StudioServer;
                 TxtLiveTitle.Text = server?.ProgramTitle ?? "Culte EECC";
                 TxtLiveSpeaker.Text = server?.Speaker ?? "";
+                _captionReady = true;
                 var host = server?.GetLocalIpAddress();
                 if (string.IsNullOrWhiteSpace(host))
                     host = "127.0.0.1";
@@ -93,6 +114,13 @@ namespace EeccStudio
                 TxtLiveUrl.Text = $"http://{host}:{port}/live/stream";
                 await LoadAllDataAsync();
             };
+        }
+
+        private void LiveCaption_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
+        {
+            if (!_captionReady) return;
+            _captionTimer.Stop();
+            _captionTimer.Start();
         }
 
         private async void BtnPublishLive_Click(object sender, RoutedEventArgs e)

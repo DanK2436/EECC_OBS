@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../constants/colors.dart';
 import '../../models/podcast_model.dart';
 import '../../services/supabase_service.dart';
+import 'gallery_panels.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class MediaLibraryScreen extends StatefulWidget {
@@ -54,7 +55,9 @@ class _MediaLibraryScreenState extends State<MediaLibraryScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return DefaultTabController(
+      length: 3,
+      child: Scaffold(
       backgroundColor: EeccColors.background,
       appBar: AppBar(
         backgroundColor: EeccColors.surface,
@@ -63,8 +66,20 @@ class _MediaLibraryScreenState extends State<MediaLibraryScreen> {
           'Médiathèque & Podcasts',
           style: TextStyle(fontWeight: FontWeight.bold, color: EeccColors.textMain),
         ),
+        bottom: const TabBar(
+          labelColor: EeccColors.primary,
+          unselectedLabelColor: EeccColors.textSecondary,
+          indicatorColor: EeccColors.primary,
+          tabs: [
+            Tab(text: 'Podcasts'),
+            Tab(text: 'Affiches'),
+            Tab(text: 'Galeries'),
+          ],
+        ),
       ),
-      body: _isLoading
+      body: TabBarView(
+        children: [
+          _isLoading
           ? const Center(child: CircularProgressIndicator(color: EeccColors.primary))
           : Column(
               children: [
@@ -173,6 +188,11 @@ class _MediaLibraryScreenState extends State<MediaLibraryScreen> {
                 if (_currentlyPlayingId != null) _buildMiniPlayer(),
               ],
             ),
+          const PostersPanel(),
+          const AlbumsPanel(),
+        ],
+      ),
+      ),
     );
   }
 

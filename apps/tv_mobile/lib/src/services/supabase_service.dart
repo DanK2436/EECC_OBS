@@ -21,7 +21,7 @@ class EeccDataService {
     try {
       final studio = await _client
           .from('studio_live')
-          .select('id, is_live, title, speaker, playback_url, updated_at')
+          .select('id, is_live, title, speaker, theme, playback_url, updated_at')
           .eq('id', 1)
           .maybeSingle();
 
@@ -38,7 +38,9 @@ class EeccDataService {
             status: 'live',
             liveStreamUrl: playback,
             speaker: studio['speaker'] as String?,
-            theme: 'Culte en direct',
+            theme: (studio['theme'] as String?)?.isNotEmpty == true
+                ? studio['theme'] as String
+                : 'Culte en direct',
           );
         }
       }
@@ -235,6 +237,29 @@ class EeccDataService {
         documentPdfUrl: '$storageBaseUrl/documents/notes_foi_perseverance.pdf',
       ),
     ];
+  }
+
+  final List<void Function(Map<String, dynamic> row)> _captionListeners = [];
+  RealtimeChannel? _captionChannel;
+
+  /// Le titre, l'orateur et le thème changent dans EECC TV dès que la régie les écrit.
+  void Function() watchLiveCaption(void Function(Map<String, dynamic> row) onRow) {
+    _captionListeners.add(onRow);
+    _captionChannel ??= _client
+        .channel('eecc-studio-live')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'studio_live',
+          callback: (payload) {
+            final row = payload.newRecord;
+            for (final listener in List<void Function(Map<String, dynamic>)>.from(_captionListeners)) {
+              listener(row);
+            }
+          },
+        )
+        .subscribe();
+    return () => _captionListeners.remove(onRow);
   }
 
   /// Récupère les livres bibliques

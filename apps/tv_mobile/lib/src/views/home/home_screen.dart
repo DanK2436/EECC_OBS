@@ -3,7 +3,9 @@ import '../../constants/colors.dart';
 import '../../models/event_model.dart';
 import '../../models/replay_model.dart';
 import '../../models/podcast_model.dart';
+import '../../services/supabase_cms_service.dart';
 import '../../services/supabase_service.dart';
+import '../media/published_image.dart';
 import '../donation/donation_modal.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -18,27 +20,59 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final EeccDataService _dataService = EeccDataService();
+  final SupabaseCmsService _cms = SupabaseCmsService();
   ChurchEvent? _currentEvent;
   List<ReplayItem> _replays = [];
   List<PodcastItem> _podcasts = [];
+  List<CmsEventBanner> _banners = [];
   bool _isLoading = true;
+  void Function()? _stopCaption;
 
   @override
   void initState() {
     super.initState();
     _loadData();
+    _stopCaption = _dataService.watchLiveCaption(_applyCaption);
+  }
+
+  @override
+  void dispose() {
+    _stopCaption?.call();
+    super.dispose();
+  }
+
+  void _applyCaption(Map<String, dynamic> row) {
+    if (!mounted) return;
+    final title = (row['title'] as String?) ?? '';
+    final speaker = row['speaker'] as String?;
+    final theme = row['theme'] as String?;
+    final current = _currentEvent;
+    setState(() {
+      _currentEvent = ChurchEvent(
+        id: current?.id ?? 'studio-live',
+        title: title.isNotEmpty ? title : (current?.title ?? 'Culte'),
+        description: current?.description,
+        startTime: current?.startTime ?? DateTime.now(),
+        status: current?.status ?? 'scheduled',
+        liveStreamUrl: current?.liveStreamUrl,
+        speaker: (speaker != null && speaker.isNotEmpty) ? speaker : current?.speaker,
+        theme: (theme != null && theme.isNotEmpty) ? theme : current?.theme,
+      );
+    });
   }
 
   Future<void> _loadData() async {
     final event = await _dataService.getCurrentOrNextEvent();
     final replays = await _dataService.getReplaysCatalog();
     final podcasts = await _dataService.getPodcasts();
+    final banners = await _cms.getActiveBanners();
 
     if (mounted) {
       setState(() {
         _currentEvent = event;
         _replays = replays;
         _podcasts = podcasts;
+        _banners = banners.where((banner) => banner.imageUrl.trim().isNotEmpty).toList();
         _isLoading = false;
       });
     }
@@ -106,6 +140,57 @@ class _HomeScreenState extends State<HomeScreen> {
             children: [
               // 1. BANNIÈRE DIRECT OU PROCHAIN CULTE
               _buildLiveOrScheduledCard(),
+
+              if (_banners.isNotEmpty) ...[
+                const SizedBox(height: 20),
+                const Text(
+                  'Affiches',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: EeccColors.textMain),
+                ),
+                const SizedBox(height: 10),
+                SizedBox(
+                  height: 210,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: _banners.length,
+                    separatorBuilder: (_, __) => const SizedBox(width: 12),
+                    itemBuilder: (context, index) {
+                      final banner = _banners[index];
+                      return GestureDetector(
+                        onTap: () => openImageViewer(context, banner.imageUrl, banner.title),
+                        child: SizedBox(
+                          width: 280,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: PublishedImage(url: banner.imageUrl),
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                banner.title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontWeight: FontWeight.w600, color: EeccColors.textMain),
+                              ),
+                              if ((banner.subtitle ?? '').isNotEmpty)
+                                Text(
+                                  banner.subtitle!,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(fontSize: 12, color: EeccColors.textSecondary),
+                                ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
 
               const SizedBox(height: 16),
 

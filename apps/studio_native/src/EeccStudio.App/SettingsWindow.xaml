@@ -176,13 +176,13 @@
                         <TextBox x:Name="TxtChurchName" Text="Église Évangélique les Cohéritiers du Christ (EECC)" Background="#2A2E33" Foreground="#FFFFFF" BorderBrush="#22262B" Padding="8,6" Margin="0,0,0,12" IsReadOnly="True"/>
 
                         <TextBlock Text="Titre du programme / Culte :" Foreground="#C5CCD3" FontSize="12" Margin="0,0,0,4"/>
-                        <TextBox x:Name="TxtProgramTitle" Text="Grand Culte d'Adoration et d'Enseignement" Background="#2A2E33" Foreground="#FFFFFF" BorderBrush="#22262B" Padding="8,6" Margin="0,0,0,12"/>
+                        <TextBox x:Name="TxtProgramTitle" Text="Grand Culte d'Adoration et d'Enseignement" Background="#2A2E33" Foreground="#FFFFFF" BorderBrush="#22262B" Padding="8,6" Margin="0,0,0,12" TextChanged="Caption_TextChanged"/>
 
                         <TextBlock Text="Prédicateur / Orateur principal :" Foreground="#C5CCD3" FontSize="12" Margin="0,0,0,4"/>
-                        <TextBox x:Name="TxtSpeaker" Text="Pasteur Principal" Background="#2A2E33" Foreground="#FFFFFF" BorderBrush="#22262B" Padding="8,6" Margin="0,0,0,12"/>
+                        <TextBox x:Name="TxtSpeaker" Text="Pasteur Principal" Background="#2A2E33" Foreground="#FFFFFF" BorderBrush="#22262B" Padding="8,6" Margin="0,0,0,12" TextChanged="Caption_TextChanged"/>
 
                         <TextBlock Text="Thème du message :" Foreground="#C5CCD3" FontSize="12" Margin="0,0,0,4"/>
-                        <TextBox x:Name="TxtTheme" Text="La Puissance de la Foi Agissante" Background="#2A2E33" Foreground="#FFFFFF" BorderBrush="#22262B" Padding="8,6" Margin="0,0,0,12"/>
+                        <TextBox x:Name="TxtTheme" Text="La Puissance de la Foi Agissante" Background="#2A2E33" Foreground="#FFFFFF" BorderBrush="#22262B" Padding="8,6" Margin="0,0,0,12" TextChanged="Caption_TextChanged"/>
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>

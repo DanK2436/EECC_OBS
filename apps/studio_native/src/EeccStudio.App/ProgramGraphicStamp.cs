@@ -8,10 +8,16 @@ namespace EeccStudio;
 
 public static class ProgramGraphicStamp
 {
-    private static GraphicCard[] _cards = [];
+    public const int OutputWidth = 3840;
+    public const int OutputHeight = 2160;
 
-    public static void Use(IEnumerable<StudioSource> sources)
+    private static GraphicCard[] _cards = [];
+    private static float _referenceHeight = 540f;
+
+    public static void Use(IEnumerable<StudioSource> sources, double referenceHeight = 0)
     {
+        if (referenceHeight > 64)
+            _referenceHeight = (float)referenceHeight;
         _cards = sources
             .Where(source => source.IsVisible && GraphicPlacement.IsGraphic(source))
             .Select(source =>
@@ -24,27 +30,38 @@ public static class ProgramGraphicStamp
 
     public static byte[]? Apply(byte[] jpeg)
     {
-        var cards = _cards;
-        if (cards.Length == 0 || jpeg.Length < 4 || jpeg[0] != 0xFF || jpeg[1] != 0xD8)
+        if (jpeg.Length < 4 || jpeg[0] != 0xFF || jpeg[1] != 0xD8)
             return jpeg;
 
+        var cards = _cards;
         using var input = new MemoryStream(jpeg);
         using var image = Image.FromStream(input);
-        using var bitmap = new Bitmap(image.Width, image.Height);
+        using var bitmap = new Bitmap(OutputWidth, OutputHeight);
         using (var canvas = Graphics.FromImage(bitmap))
         {
             canvas.SmoothingMode = SmoothingMode.AntiAlias;
-            canvas.DrawImage(image, 0, 0, bitmap.Width, bitmap.Height);
+            canvas.InterpolationMode = InterpolationMode.HighQualityBicubic;
+            canvas.PixelOffsetMode = PixelOffsetMode.HighQuality;
+            canvas.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
+            canvas.Clear(Color.FromArgb(10, 12, 14));
+            var fit = Math.Min(OutputWidth / (float)image.Width, OutputHeight / (float)image.Height);
+            var drawnWidth = image.Width * fit;
+            var drawnHeight = image.Height * fit;
+            canvas.DrawImage(image, (OutputWidth - drawnWidth) / 2f, (OutputHeight - drawnHeight) / 2f, drawnWidth, drawnHeight);
+            var scale = OutputHeight / _referenceHeight;
             foreach (var card in cards)
-                Draw(canvas, bitmap.Width, bitmap.Height, card);
+                Draw(canvas, OutputWidth, OutputHeight, card, scale);
         }
 
         using var output = new MemoryStream();
-        bitmap.Save(output, ImageFormat.Jpeg);
+        var codec = ImageCodecInfo.GetImageEncoders().First(encoder => encoder.MimeType == "image/jpeg");
+        using var parameters = new EncoderParameters(1);
+        parameters.Param[0] = new EncoderParameter(Encoder.Quality, 90L);
+        bitmap.Save(output, codec, parameters);
         return output.ToArray();
     }
 
-    private static void Draw(Graphics canvas, int width, int height, GraphicCard card)
+    private static void Draw(Graphics canvas, int width, int height, GraphicCard card, float scale)
     {
         var box = new RectangleF(
             width * card.X / 100f,
@@ -56,7 +73,7 @@ public static class ProgramGraphicStamp
         if (card.Motion == GraphicMotion.Slide)
             box.X += (1f - Math.Min(1f, seconds / 0.5f)) * -box.Width * 0.4f;
 
-        using var path = Shape(card.Shape, box);
+        using var path = Shape(card.Shape, box, scale);
         using var back = new SolidBrush(Color.FromArgb((int)(alpha * card.Background.A), card.Background));
         canvas.FillPath(back, path);
         if (card.ImagePath.Length > 0 && File.Exists(card.ImagePath))
@@ -69,7 +86,11 @@ public static class ProgramGraphicStamp
         }
 
         var shown = ShownText(card, seconds);
-        using var font = new Font(card.Verse ? "Georgia" : "Segoe UI", card.FontSize, card.Verse ? FontStyle.Italic : FontStyle.Bold);
+        using var font = new Font(
+            card.Verse ? "Georgia" : "Segoe UI",
+            Math.Max(8f, card.FontSize * scale),
+            card.Verse ? FontStyle.Italic : FontStyle.Bold,
+            GraphicsUnit.Pixel);
         using var brush = new SolidBrush(Color.FromArgb((int)(alpha * 255), card.Foreground));
         var format = new StringFormat
         {
@@ -81,7 +102,7 @@ public static class ProgramGraphicStamp
         {
             var size = canvas.MeasureString(shown, font);
             var travel = box.Width + size.Width;
-            var shift = travel - (seconds * card.Speed % travel);
+            var shift = travel - (seconds * card.Speed * scale % travel);
             canvas.SetClip(path);
             canvas.DrawString(shown, font, brush, box.Left + shift - size.Width, box.Top + (box.Height - size.Height) / 2);
             canvas.ResetClip();
@@ -91,8 +112,9 @@ public static class ProgramGraphicStamp
         canvas.DrawString(shown, font, brush, box, format);
         if (card.Secondary.Length > 0 && card.Motion != GraphicMotion.Type)
         {
-            using var small = new Font(font.FontFamily, Math.Max(10, card.FontSize - 4), FontStyle.Regular);
-            var second = new RectangleF(box.X + 8, box.Bottom - small.Height - 6, box.Width - 16, small.Height + 4);
+            using var small = new Font(font.FontFamily, Math.Max(8f, (card.FontSize - 4) * scale), FontStyle.Regular, GraphicsUnit.Pixel);
+            var pad = 8f * scale;
+            var second = new RectangleF(box.X + pad, box.Bottom - small.Size - pad, box.Width - pad * 2, small.Size + pad);
             canvas.DrawString(card.Secondary, small, brush, second);
         }
     }
@@ -114,12 +136,12 @@ public static class ProgramGraphicStamp
         _ => 1f,
     };
 
-    private static GraphicsPath Shape(GraphicShape shape, RectangleF box)
+    private static GraphicsPath Shape(GraphicShape shape, RectangleF box, float scale)
     {
         var path = new GraphicsPath();
         var radius = shape switch
         {
-            GraphicShape.Rounded => 16f,
+            GraphicShape.Rounded => 16f * scale,
             GraphicShape.Circle => Math.Min(box.Width, box.Height) / 2f,
             GraphicShape.Pill => box.Height / 2f,
             _ => 0f,

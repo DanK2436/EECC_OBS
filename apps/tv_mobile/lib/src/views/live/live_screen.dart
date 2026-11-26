@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
 import 'package:chewie/chewie.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../constants/colors.dart';
+import 'fullscreen_player.dart';
 import '../../models/event_model.dart';
 import '../../models/replay_model.dart';
 import '../../services/supabase_service.dart';
@@ -32,20 +34,22 @@ class _LiveScreenState extends State<LiveScreen> with SingleTickerProviderStateM
   String? _videoErrorMessage;
   String? _studioFrameUrl;
   Timer? _liveRefreshTimer;
+  void Function()? _stopCaption;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
     _loadDataAndStream();
-    // Rafraîchissement périodique de l'état du direct depuis Supabase
-    _liveRefreshTimer = Timer.periodic(const Duration(seconds: 10), (_) {
+    _stopCaption = _dataService.watchLiveCaption(_applyCaption);
+    _liveRefreshTimer = Timer.periodic(const Duration(seconds: 2), (_) {
       if (mounted) _pollSupabaseStatus();
     });
   }
 
   @override
   void dispose() {
+    _stopCaption?.call();
     _liveRefreshTimer?.cancel();
     _tabController.dispose();
     _chewieController?.dispose();
@@ -57,7 +61,11 @@ class _LiveScreenState extends State<LiveScreen> with SingleTickerProviderStateM
     try {
       final event = await _dataService.getCurrentOrNextEvent();
       if (mounted) {
-        if (_currentEvent?.status != event.status || _currentEvent?.liveStreamUrl != event.liveStreamUrl) {
+        if (_currentEvent?.status != event.status ||
+            _currentEvent?.liveStreamUrl != event.liveStreamUrl ||
+            _currentEvent?.title != event.title ||
+            _currentEvent?.speaker != event.speaker ||
+            _currentEvent?.theme != event.theme) {
           setState(() {
             _currentEvent = event;
           });
@@ -67,6 +75,26 @@ class _LiveScreenState extends State<LiveScreen> with SingleTickerProviderStateM
         }
       }
     } catch (_) {}
+  }
+
+  void _applyCaption(Map<String, dynamic> row) {
+    if (!mounted) return;
+    final title = (row['title'] as String?) ?? '';
+    final speaker = row['speaker'] as String?;
+    final theme = row['theme'] as String?;
+    final current = _currentEvent;
+    setState(() {
+      _currentEvent = ChurchEvent(
+        id: current?.id ?? 'studio-live',
+        title: title.isNotEmpty ? title : (current?.title ?? 'Culte'),
+        description: current?.description,
+        startTime: current?.startTime ?? DateTime.now(),
+        status: current?.status ?? 'scheduled',
+        liveStreamUrl: current?.liveStreamUrl,
+        speaker: (speaker != null && speaker.isNotEmpty) ? speaker : current?.speaker,
+        theme: (theme != null && theme.isNotEmpty) ? theme : current?.theme,
+      );
+    });
   }
 
   Future<void> _loadDataAndStream() async {
@@ -122,10 +150,20 @@ class _LiveScreenState extends State<LiveScreen> with SingleTickerProviderStateM
         videoPlayerController: _videoPlayerController!,
         autoPlay: true,
         looping: true,
-        aspectRatio: 16 / 9,
+        aspectRatio: _videoPlayerController!.value.aspectRatio == 0
+            ? 16 / 9
+            : _videoPlayerController!.value.aspectRatio,
         allowFullScreen: true,
         allowMuting: true,
+        allowPlaybackSpeedChanging: true,
         showControls: true,
+        deviceOrientationsOnEnterFullScreen: const [
+          DeviceOrientation.landscapeLeft,
+          DeviceOrientation.landscapeRight,
+        ],
+        deviceOrientationsAfterFullScreen: const [
+          DeviceOrientation.portraitUp,
+        ],
         materialProgressColors: ChewieProgressColors(
           playedColor: EeccColors.liveRed,
           handleColor: EeccColors.liveRed,
@@ -201,7 +239,22 @@ class _LiveScreenState extends State<LiveScreen> with SingleTickerProviderStateM
                 // 1. ZONE DE LECTURE VIDÉO OFFICIELLE
                 AspectRatio(
                   aspectRatio: 16 / 9,
-                  child: _buildVideoArea(_currentEvent, isLive),
+                  child: Stack(
+                    children: [
+                      Positioned.fill(child: _buildVideoArea(_currentEvent, isLive)),
+                      Positioned(
+                        right: 6,
+                        bottom: 6,
+                        child: Row(
+                          children: [
+                            _fullButton(Icons.stay_current_landscape, false),
+                            const SizedBox(width: 6),
+                            _fullButton(Icons.stay_current_portrait, true),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
 
                 // 2. BANDEAU DE STATUT OFFICIEL
@@ -488,6 +541,30 @@ class _LiveScreenState extends State<LiveScreen> with SingleTickerProviderStateM
           'En attente du flux en direct...',
           style: TextStyle(color: Colors.white70),
         ),
+      ),
+    );
+  }
+
+  Widget _fullButton(IconData icon, bool vertical) {
+    final url = _currentEvent?.liveStreamUrl;
+    final ready = url != null && url.isNotEmpty && _currentEvent?.status == 'live';
+    return Material(
+      color: Colors.black54,
+      borderRadius: BorderRadius.circular(8),
+      child: IconButton(
+        tooltip: vertical ? 'Plein écran vertical' : 'Plein écran horizontal',
+        onPressed: ready
+            ? () {
+                final jpeg = _isStudioJpeg(url);
+                openProgramFullscreen(
+                  context,
+                  videoUrl: jpeg ? null : url,
+                  frameUrl: jpeg ? _studioFrameEndpoint(url) : null,
+                  vertical: vertical,
+                );
+              }
+            : null,
+        icon: Icon(icon, color: Colors.white, size: 20),
       ),
     );
   }

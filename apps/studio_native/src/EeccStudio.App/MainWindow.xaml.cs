@@ -1203,7 +1203,7 @@ namespace EeccStudio
             if (scene == null)
                 return;
             _programOverlays.Paint(CanvasProgramGraphics, scene.Sources);
-            ProgramGraphicStamp.Use(scene.Sources);
+            ProgramGraphicStamp.Use(scene.Sources, CanvasProgramGraphics.ActualHeight);
         }
 
         private void MenuFullscreen_Click(object sender, RoutedEventArgs e)

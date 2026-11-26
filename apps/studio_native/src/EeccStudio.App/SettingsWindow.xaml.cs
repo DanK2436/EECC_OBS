@@ -1,6 +1,8 @@
 using System;
 using System.IO;
 using System.Windows;
+using System.Windows.Threading;
+using EeccStudio.Broadcast;
 using EeccStudio.Core.Network;
 
 namespace EeccStudio
@@ -8,11 +10,19 @@ namespace EeccStudio
     public partial class SettingsWindow : Window
     {
         private readonly CameraServer _server;
+        private readonly DispatcherTimer _captionTimer;
+        private bool _ready;
 
         public SettingsWindow(CameraServer server)
         {
             InitializeComponent();
             _server = server;
+            _captionTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(300) };
+            _captionTimer.Tick += async (_, _) =>
+            {
+                _captionTimer.Stop();
+                await PushCaptionAsync();
+            };
 
             LoadSettings();
         }
@@ -26,6 +36,8 @@ namespace EeccStudio
             TxtChurchName.Text = _server.ChurchName;
             TxtProgramTitle.Text = _server.ProgramTitle;
             TxtSpeaker.Text = _server.Speaker;
+            TxtTheme.Text = _server.Theme;
+            _ready = true;
 
             var defaultVideoDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyVideos), "EECC_Enregistrements");
             TxtRecordPath.Text = defaultVideoDir;
@@ -43,17 +55,40 @@ namespace EeccStudio
         {
             _server.ProgramTitle = TxtProgramTitle.Text.Trim();
             _server.Speaker = TxtSpeaker.Text.Trim();
+            _server.Theme = TxtTheme.Text.Trim();
         }
 
-        private void BtnApply_Click(object sender, RoutedEventArgs e)
+        private void Caption_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
+        {
+            if (!_ready) return;
+            ApplySettings();
+            _captionTimer.Stop();
+            _captionTimer.Start();
+        }
+
+        private async Task PushCaptionAsync()
+        {
+            try
+            {
+                await EeccTvCatalog.UpdateCaptionAsync(_server.ProgramTitle, _server.Speaker, _server.Theme);
+            }
+            catch
+            {
+                // Le texte local reste affiché. Le prochain passage réessaie.
+            }
+        }
+
+        private async void BtnApply_Click(object sender, RoutedEventArgs e)
         {
             ApplySettings();
+            await PushCaptionAsync();
             MessageBox.Show("Paramètres appliqués avec succès !", "EECC Studio", MessageBoxButton.OK, MessageBoxImage.Information);
         }
 
-        private void BtnOk_Click(object sender, RoutedEventArgs e)
+        private async void BtnOk_Click(object sender, RoutedEventArgs e)
         {
             ApplySettings();
+            await PushCaptionAsync();
             DialogResult = true;
             Close();
         }

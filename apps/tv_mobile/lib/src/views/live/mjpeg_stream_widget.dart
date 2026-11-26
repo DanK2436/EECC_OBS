@@ -139,7 +139,7 @@ class _MjpegStreamWidgetState extends State<MjpegStreamWidget> {
     _fallbackPollingTimer?.cancel();
     final fallbackUrl = widget.streamUrl.replaceAll('/stream', '/frame.jpg');
 
-    _fallbackPollingTimer = Timer.periodic(const Duration(milliseconds: 100), (_) async {
+    _fallbackPollingTimer = Timer.periodic(const Duration(milliseconds: 8), (_) async {
       try {
         final client = HttpClient()..connectionTimeout = const Duration(seconds: 2);
         final req = await client.getUrl(Uri.parse(fallbackUrl));

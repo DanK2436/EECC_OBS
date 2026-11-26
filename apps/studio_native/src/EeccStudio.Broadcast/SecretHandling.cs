@@ -184,7 +184,8 @@ public sealed class BroadcastProfileStore
                 Id = destination.Id,
                 DisplayName = destination.DisplayName,
                 Platform = destination.Platform.ToString(),
-                IngestUrl = destination.IngestUrl
+                IngestUrl = destination.IngestUrl,
+                Vertical = destination.Vertical
             }).ToList()
         };
 
@@ -224,7 +225,8 @@ public sealed class BroadcastProfileStore
                 DisplayName = item.DisplayName ?? "Destination",
                 Platform = platform,
                 IngestUrl = item.IngestUrl ?? string.Empty,
-                StreamKey = new StreamKey(_secrets.Load(item.Id ?? string.Empty))
+                StreamKey = new StreamKey(_secrets.Load(item.Id ?? string.Empty)),
+                Vertical = item.Vertical
             });
         }
 
@@ -270,5 +272,6 @@ public sealed class BroadcastProfileStore
         public string? DisplayName { get; set; }
         public string? Platform { get; set; }
         public string? IngestUrl { get; set; }
+        public bool Vertical { get; set; }
     }
 }

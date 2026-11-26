@@ -6,7 +6,9 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
+using EeccStudio.Broadcast;
 using EeccStudio.Core.Cms;
+using EeccStudio.Core.Network;
 using Microsoft.Win32;
 
 namespace EeccStudio
@@ -16,6 +18,8 @@ namespace EeccStudio
         private readonly EeccTvCmsService _cmsService;
         private readonly BatchPhotoUploader _batchUploader;
         private CancellationTokenSource? _batchCts;
+
+        public CameraServer? StudioServer { get; set; }
 
         // ViewModels avec affichage formaté
         public class PodcastDisplay : PodcastItem
@@ -67,7 +71,7 @@ namespace EeccStudio
         public EeccTvCmsWindow(EeccTvCmsService? cmsService = null)
         {
             InitializeComponent();
-            _cmsService = cmsService ?? new EeccTvCmsService();
+            _cmsService = cmsService ?? EeccTvCmsService.ForStudio();
             _batchUploader = new BatchPhotoUploader(_cmsService, maxConcurrency: 4);
 
             GridPodcasts.ItemsSource = _podcasts;
@@ -77,7 +81,49 @@ namespace EeccStudio
             GridBanners.ItemsSource = _banners;
             GridAlbums.ItemsSource = _albums;
 
-            Loaded += async (s, e) => await LoadAllDataAsync();
+            Loaded += async (_, _) =>
+            {
+                var server = StudioServer;
+                TxtLiveTitle.Text = server?.ProgramTitle ?? "Culte EECC";
+                TxtLiveSpeaker.Text = server?.Speaker ?? "";
+                var host = server?.GetLocalIpAddress();
+                if (string.IsNullOrWhiteSpace(host))
+                    host = "127.0.0.1";
+                var port = server?.ListeningPort ?? server?.Port ?? 8089;
+                TxtLiveUrl.Text = $"http://{host}:{port}/live/stream";
+                await LoadAllDataAsync();
+            };
+        }
+
+        private async void BtnPublishLive_Click(object sender, RoutedEventArgs e)
+        {
+            var url = TxtLiveUrl.Text.Trim();
+            if (url.Length == 0)
+            {
+                TxtLiveResult.Text = "Indiquez l'adresse du flux.";
+                return;
+            }
+
+            StudioServer?.StartStreaming();
+            TxtLiveState.Text = "Publication…";
+            TxtLiveState.Foreground = System.Windows.Media.Brushes.White;
+            var message = await EeccTvCatalog.PublishLiveAsync(url, TxtLiveTitle.Text.Trim(), TxtLiveSpeaker.Text.Trim());
+            TxtLiveResult.Text = message;
+            TxtLiveState.Text = message.Contains("publié", StringComparison.OrdinalIgnoreCase) ? "En direct" : "À vérifier";
+            TxtLiveState.Foreground = message.Contains("publié", StringComparison.OrdinalIgnoreCase)
+                ? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0xE0, 0x32, 0x32))
+                : System.Windows.Media.Brushes.Goldenrod;
+            TxtGlobalStatus.Text = message;
+        }
+
+        private async void BtnEndLive_Click(object sender, RoutedEventArgs e)
+        {
+            StudioServer?.StopStreaming();
+            var message = await EeccTvCatalog.EndLiveAsync() ?? "Le direct est terminé.";
+            TxtLiveResult.Text = message;
+            TxtLiveState.Text = "Hors ligne";
+            TxtLiveState.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x8E, 0x92, 0x97));
+            TxtGlobalStatus.Text = message;
         }
 
         private async Task LoadAllDataAsync()
@@ -199,7 +245,9 @@ namespace EeccStudio
                 }
                 TxtAlbumCount.Text = $"{_albums.Count} album(s)";
 
-                TxtGlobalStatus.Text = "Synchronisation Supabase à jour. Prêt.";
+                TxtGlobalStatus.Text = _cmsService.UsesCloud
+                    ? "Contenus synchronisés avec Supabase."
+                    : "Les publications de cette page sont écrites dans Supabase.";
             }
             catch (Exception ex)
             {

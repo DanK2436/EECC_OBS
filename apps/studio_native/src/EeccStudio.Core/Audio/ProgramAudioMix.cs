@@ -36,6 +36,31 @@ public sealed class ProgramAudioMix
             TrackFor(id).Mute = mute;
     }
 
+    public void SetBalance(string id, float balance)
+    {
+        lock (_gate)
+            TrackFor(id).Balance = Math.Clamp(balance, -1f, 1f);
+    }
+
+    /// <summary>Faux pour « écoute seule » : la piste reste visible au vumètre, absente du programme.</summary>
+    public void SetRouteToMaster(string id, bool send)
+    {
+        lock (_gate)
+            TrackFor(id).SendToMaster = send;
+    }
+
+    public IReadOnlyDictionary<string, double> CopyLevels()
+    {
+        lock (_gate)
+        {
+            var levels = new Dictionary<string, double>(StringComparer.Ordinal);
+            foreach (var pair in _tracks)
+                levels[pair.Key] = pair.Value.LevelDb;
+            levels["master"] = MasterLevelDb;
+            return levels;
+        }
+    }
+
     public void Submit(string id, ReadOnlySpan<short> interleavedStereo)
     {
         if (interleavedStereo.Length == 0)
@@ -84,8 +109,12 @@ public sealed class ProgramAudioMix
                     continue;
                 any = true;
                 var sample = track.Pending.Dequeue();
-                if (!track.Mute)
-                    mixed += (int)(sample * track.Volume);
+                track.LevelSum += sample * (double)sample;
+                track.LevelCount++;
+                if (track.Mute || !track.SendToMaster)
+                    continue;
+                var pan = PanGain(track.Balance, left: i % 2 == 0);
+                mixed += (int)(sample * track.Volume * pan);
             }
 
             if (!any && produced == 0 && !HasPending())
@@ -109,6 +138,32 @@ public sealed class ProgramAudioMix
         MasterLevelDb = produced == 0 || sumSq <= 0
             ? -60
             : Math.Max(-60, 20.0 * Math.Log10(Math.Sqrt(sumSq / produced) / 32768.0));
+
+        foreach (var pair in _tracks)
+        {
+            var track = pair.Value;
+            if (track.LevelCount == 0)
+            {
+                track.LevelDb = Math.Max(-60, track.LevelDb - 6);
+                continue;
+            }
+
+            var mean = track.LevelSum / track.LevelCount;
+            track.LevelDb = mean <= 0
+                ? -60
+                : Math.Max(-60, 20.0 * Math.Log10(Math.Sqrt(mean) / 32768.0));
+            track.LevelSum = 0;
+            track.LevelCount = 0;
+        }
+    }
+
+    private static float PanGain(float balance, bool left)
+    {
+        if (balance > -0.001f && balance < 0.001f)
+            return 1f;
+        return left
+            ? (balance <= 0 ? 1f : 1f - balance)
+            : (balance >= 0 ? 1f : 1f + balance);
     }
 
     private bool HasPending()
@@ -164,7 +219,12 @@ public sealed class ProgramAudioMix
     private sealed class Track
     {
         public float Volume = 1f;
+        public float Balance;
         public bool Mute;
+        public bool SendToMaster = true;
+        public double LevelDb = -60;
+        public double LevelSum;
+        public int LevelCount;
         public Queue<short> Pending { get; } = new();
     }
 }

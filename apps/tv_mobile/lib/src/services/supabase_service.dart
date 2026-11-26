@@ -19,7 +19,30 @@ class EeccDataService {
   /// Récupère le culte actuellement en direct ou le prochain culte programmé depuis Supabase.
   Future<ChurchEvent> getCurrentOrNextEvent() async {
     try {
-      // 1. Recherche prioritaire d'un culte actuellement en statut 'live'
+      final studio = await _client
+          .from('studio_live')
+          .select('id, is_live, title, speaker, playback_url, updated_at')
+          .eq('id', 1)
+          .maybeSingle();
+
+      if (studio != null && studio['is_live'] == true) {
+        final playback = studio['playback_url'] as String?;
+        if (playback != null && playback.isNotEmpty) {
+          return ChurchEvent(
+            id: 'studio-live',
+            title: (studio['title'] as String?)?.isNotEmpty == true
+                ? studio['title'] as String
+                : 'Culte en direct',
+            description: 'Direct publié par EECC Studio.',
+            startTime: DateTime.tryParse(studio['updated_at'] as String? ?? '') ?? DateTime.now(),
+            status: 'live',
+            liveStreamUrl: playback,
+            speaker: studio['speaker'] as String?,
+            theme: 'Culte en direct',
+          );
+        }
+      }
+
       final liveData = await _client
           .from('events')
           .select('id, title, description, start_time, status, live_stream_url, sermons(speaker, theme)')

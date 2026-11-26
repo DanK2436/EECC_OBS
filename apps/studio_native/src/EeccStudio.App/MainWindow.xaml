@@ -5,8 +5,10 @@
         Height="900" Width="1480"
         MinHeight="720" MinWidth="1100"
         Background="{StaticResource ObsWindowBackground}"
+        FontFamily="Segoe UI"
         Icon="Assets/eecc.ico"
-        WindowStartupLocation="CenterScreen">
+        WindowStartupLocation="CenterScreen"
+        PreviewKeyDown="MainWindow_PreviewKeyDown">
     
     <Window.Resources>
         <ResourceDictionary>
@@ -42,7 +44,7 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/> <!-- 0. Barre de Menus Supérieure -->
             <RowDefinition Height="*"/>    <!-- 1. Espace Moniteurs Vidéo (Preview / Transition / Program) -->
-            <RowDefinition Height="240"/>  <!-- 2. Rangée Inférieure des Docks OBS -->
+            <RowDefinition Height="280"/>  <!-- 2. Rangée Inférieure des Docks OBS -->
             <RowDefinition Height="24"/>   <!-- 3. Barre d'État Inférieure Officielle OBS -->
         </Grid.RowDefinitions>
 
@@ -81,11 +83,11 @@
 
                     <!-- 2. MENU ÉDITION (OBS STUDIO + TRANSFORMATION) -->
                     <MenuItem Header="_Édition" Style="{StaticResource ObsMenuItemStyle}">
-                        <MenuItem Header="Annuler" InputGestureText="Ctrl+Z"/>
-                        <MenuItem Header="Rétablir" InputGestureText="Ctrl+Y"/>
+                        <MenuItem Header="Annuler" Click="MenuUndo_Click" InputGestureText="Ctrl+Z"/>
+                        <MenuItem Header="Rétablir" Click="MenuRedo_Click" InputGestureText="Ctrl+Y"/>
                         <Separator Background="{StaticResource ObsDockBorder}"/>
-                        <MenuItem Header="Copier la source" InputGestureText="Ctrl+C"/>
-                        <MenuItem Header="Coller la source (Référence)" InputGestureText="Ctrl+V"/>
+                        <MenuItem Header="Copier la source" Click="MenuCopySource_Click" InputGestureText="Ctrl+C"/>
+                        <MenuItem Header="Coller la source (Référence)" Click="MenuPasteSource_Click" InputGestureText="Ctrl+V"/>
                         <MenuItem Header="Dupliquer la scène active" Click="BtnDuplicateScene_Click"/>
                         <Separator Background="{StaticResource ObsDockBorder}"/>
                         <!-- Sous-Menu Transformer OBS -->
@@ -100,20 +102,20 @@
                             <MenuItem Header="Retourner horizontalement (Miroir)" Click="MenuEditTransform_FlipH_Click"/>
                             <MenuItem Header="Retourner verticalement" Click="MenuEditTransform_FlipV_Click"/>
                             <Separator Background="{StaticResource ObsDockBorder}"/>
-                            <MenuItem Header="Ajuster à l'écran" Click="MenuFullscreen_Click" InputGestureText="Ctrl+F"/>
-                            <MenuItem Header="Centrer à l'écran" InputGestureText="Ctrl+D"/>
+                            <MenuItem Header="Ajuster à l'écran" Click="MenuEditTransform_Fit_Click" InputGestureText="Ctrl+F"/>
+                            <MenuItem Header="Centrer à l'écran" Click="MenuEditTransform_Center_Click" InputGestureText="Ctrl+D"/>
                         </MenuItem>
                         <!-- Sous-Menu Ordre OBS -->
                         <MenuItem Header="Ordre">
-                            <MenuItem Header="Monter" Click="BtnMoveSceneUp_Click" InputGestureText="Ctrl+Haut"/>
-                            <MenuItem Header="Descendre" Click="BtnMoveSceneDown_Click" InputGestureText="Ctrl+Bas"/>
-                            <MenuItem Header="Tout en haut"/>
-                            <MenuItem Header="Tout en bas"/>
+                            <MenuItem Header="Monter" Click="BtnMoveSourceUp_Click" InputGestureText="Ctrl+Haut"/>
+                            <MenuItem Header="Descendre" Click="BtnMoveSourceDown_Click" InputGestureText="Ctrl+Bas"/>
+                            <MenuItem Header="Tout en haut" Click="BtnMoveSourceTop_Click"/>
+                            <MenuItem Header="Tout en bas" Click="BtnMoveSourceBottom_Click"/>
                         </MenuItem>
                         <Separator Background="{StaticResource ObsDockBorder}"/>
                         <MenuItem Header="Propriétés de la source..." Click="MenuSourceProperties_Click"/>
-                        <MenuItem Header="Filtres audio et vidéo..." Click="MenuRemux_Click"/>
-                        <MenuItem Header="Propriétés audio avancées..." Click="MenuRemux_Click"/>
+                        <MenuItem Header="Filtres audio et vidéo..." Click="MenuFilters_Click"/>
+                        <MenuItem Header="Propriétés audio avancées..." Click="MenuAdvancedAudio_Click"/>
                     </MenuItem>
 
                     <!-- 3. MENU AFFICHAGE (OBS STUDIO) -->
@@ -146,27 +148,27 @@
 
                     <!-- 5. MENU PROFIL (OBS STUDIO) -->
                     <MenuItem Header="_Profil" Style="{StaticResource ObsMenuItemStyle}">
-                        <MenuItem Header="Nouveau profil..."/>
-                        <MenuItem Header="Dupliquer"/>
-                        <MenuItem Header="Renommer"/>
-                        <MenuItem Header="Exporter..."/>
-                        <MenuItem Header="Importer..."/>
+                        <MenuItem Header="Nouveau profil..." Click="MenuProfileNew_Click"/>
+                        <MenuItem Header="Dupliquer" Click="MenuProfileDuplicate_Click"/>
+                        <MenuItem Header="Renommer" Click="MenuProfileRename_Click"/>
+                        <MenuItem Header="Exporter..." Click="MenuProfileExport_Click"/>
+                        <MenuItem Header="Importer..." Click="MenuProfileImport_Click"/>
                         <Separator Background="{StaticResource ObsDockBorder}"/>
-                        <MenuItem Header="Culte Dominical EECC (Par défaut)" IsChecked="True"/>
-                        <MenuItem Header="Répétition Chorale &amp; Louange"/>
-                        <MenuItem Header="Séminaire &amp; Événement Spécial"/>
+                        <MenuItem x:Name="MenuProfileSunday" Header="Culte Dominical EECC (Par défaut)" IsCheckable="True" IsChecked="True" Click="MenuProfilePick_Click"/>
+                        <MenuItem x:Name="MenuProfileChoir" Header="Répétition Chorale &amp; Louange" IsCheckable="True" Click="MenuProfilePick_Click"/>
+                        <MenuItem x:Name="MenuProfileSeminar" Header="Séminaire &amp; Événement Spécial" IsCheckable="True" Click="MenuProfilePick_Click"/>
                     </MenuItem>
 
                     <!-- 6. MENU COLLECTION DE SCÈNES (OBS STUDIO) -->
                     <MenuItem Header="_Collection de scènes" Style="{StaticResource ObsMenuItemStyle}">
-                        <MenuItem Header="Nouvelle collection..."/>
-                        <MenuItem Header="Dupliquer"/>
-                        <MenuItem Header="Renommer"/>
-                        <MenuItem Header="Exporter..."/>
-                        <MenuItem Header="Importer..."/>
+                        <MenuItem Header="Nouvelle collection..." Click="MenuCollectionNew_Click"/>
+                        <MenuItem Header="Dupliquer" Click="MenuCollectionDuplicate_Click"/>
+                        <MenuItem Header="Renommer" Click="MenuCollectionRename_Click"/>
+                        <MenuItem Header="Exporter..." Click="MenuProfileExport_Click"/>
+                        <MenuItem Header="Importer..." Click="MenuProfileImport_Click"/>
                         <Separator Background="{StaticResource ObsDockBorder}"/>
-                        <MenuItem Header="Production Culte EECC (Scène Actuelle)" IsChecked="True"/>
-                        <MenuItem Header="Studio Démo &amp; Tests"/>
+                        <MenuItem x:Name="MenuCollectionProduction" Header="Production Culte EECC (Scène Actuelle)" IsCheckable="True" IsChecked="True" Click="MenuCollectionPick_Click"/>
+                        <MenuItem x:Name="MenuCollectionDemo" Header="Studio Démo &amp; Tests" IsCheckable="True" Click="MenuCollectionPick_Click"/>
                     </MenuItem>
 
                     <!-- 7. MENU OUTILS (OBS STUDIO + SPÉCIFICATIONS EECC CAMÉRA & EECC TV) -->
@@ -178,7 +180,7 @@
                         <MenuItem Header="🎞️ Sauvegarder Instant Replay (Ralenti 30s)..." Click="MenuReplayBuffer_Click"/>
                         <MenuItem Header="📷 Caméra Virtuelle (Zoom, Teams, Meet)..." Click="MenuVirtualCamera_Click"/>
                         <MenuItem Header="🎛️ Contrôle Stream Deck &amp; Companion (WebSocket v5:4455)..." Click="MenuObsWebSocket_Click" FontWeight="SemiBold"/>
-                        <MenuItem Header="Gestionnaire de plugins..."/>
+                        <MenuItem Header="Habillage à l'écran (textes et images)..." Click="MenuGraphics_Click"/>
                         <Separator Background="{StaticResource ObsDockBorder}"/>
 
                         <!-- SPÉCIFICATIONS OFFICIELLES EECC CAMÉRA -->
@@ -261,22 +263,17 @@
                             </StackPanel>
                         </Grid>
 
-                        <!-- 1. Source Image : Logo Filigrane OBS (Haut-Droit) -->
-                        <Image x:Name="ImgPreviewLogo" Source="Assets/logo.png" Width="80" Height="40" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="10" Visibility="Visible" Stretch="Uniform" Opacity="0.85"/>
-
-                        <!-- 2. Source Texte : Bandeau Tiers Inférieur (Nom/Verset) -->
-                        <Border x:Name="PanelPreviewLowerThird" HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="12,0,0,32" Background="#E5161B22" BorderBrush="#2C7BFE" BorderThickness="3,0,0,0" CornerRadius="0,4,4,0" Padding="12,6" Visibility="Visible">
+                        <Canvas x:Name="CanvasPreviewGraphics" IsHitTestVisible="False"/>
+                        <Image x:Name="ImgPreviewLogo" Visibility="Collapsed"/>
+                        <Border x:Name="PanelPreviewLowerThird" Visibility="Collapsed">
                             <StackPanel>
-                                <TextBlock x:Name="TxtPreviewLowerTitle" Text="Pasteur Principal - Culte EECC" FontSize="12" FontWeight="Bold" Foreground="#FFFFFF"/>
-                                <TextBlock x:Name="TxtPreviewLowerSub" Text="Thème : La Puissance de la Résurrection" FontSize="10" Foreground="#93C5FD"/>
+                                <TextBlock x:Name="TxtPreviewLowerTitle"/>
+                                <TextBlock x:Name="TxtPreviewLowerSub"/>
                             </StackPanel>
                         </Border>
-
-                        <!-- 3. Filtre Défilement : Bande Déroulante (Ticker Scroll OBS) -->
-                        <Border x:Name="PanelPreviewTicker" Height="26" VerticalAlignment="Bottom" Background="#EA0D1117" BorderBrush="#2E3136" BorderThickness="0,1,0,0" Visibility="Visible" ClipToBounds="True">
-                            <Canvas x:Name="CanvasPreviewTicker" Height="26">
-                                <TextBlock x:Name="TxtPreviewTicker" Text="✦ Bienvenue à l'Église Évangélique du Centre (EECC) ✦ Culte en direct ✦ Prochain culte dimanche à 9h00 ✦ Offrandes et Dîmes par Mobile Money ✦"
-                                           FontSize="11" FontWeight="SemiBold" Foreground="#F0F6FC" Canvas.Top="4" Canvas.Left="0"/>
+                        <Border x:Name="PanelPreviewTicker" Visibility="Collapsed">
+                            <Canvas x:Name="CanvasPreviewTicker">
+                                <TextBlock x:Name="TxtPreviewTicker"/>
                             </Canvas>
                         </Border>
                     </Grid>
@@ -326,20 +323,22 @@
 
                     <!-- Fondu rapide (Fade) -->
                     <Button Grid.Row="2" x:Name="BtnFade" Click="BtnFade_Click" Style="{StaticResource ObsCommandButtonStyle}" Height="28" Margin="0,2">
-                        <TextBlock Text="Fondu (300 ms)" FontSize="11"/>
+                        <TextBlock x:Name="TxtFadeButton" Text="Fondu (300 ms)" FontSize="11"/>
                     </Button>
 
                     <!-- Réglette en T (T-Bar Transition Slider OBS) -->
                     <Grid Grid.Row="3" Margin="0,8">
                         <Slider x:Name="TBarSlider" Orientation="Vertical" Minimum="0" Maximum="100" Value="0"
-                                HorizontalAlignment="Center" Cursor="Hand" SmallChange="5" LargeChange="20"/>
+                                HorizontalAlignment="Center" Cursor="Hand" SmallChange="5" LargeChange="20"
+                                ValueChanged="TBarSlider_ValueChanged" PreviewMouseLeftButtonUp="TBarSlider_Released"/>
                     </Grid>
 
                     <!-- Durée de transition en ms -->
                     <StackPanel Grid.Row="4" Margin="0,4">
                         <TextBlock Text="Durée :" FontSize="10" Foreground="{StaticResource ObsTextSecondary}" HorizontalAlignment="Center"/>
-                        <TextBox Text="300 ms" FontSize="11" Foreground="{StaticResource ObsTextWhite}" Background="{StaticResource ObsDockBackground}"
-                                 BorderBrush="{StaticResource ObsDockBorder}" BorderThickness="1" HorizontalContentAlignment="Center" Margin="0,2,0,0" Padding="2"/>
+                        <TextBox x:Name="TxtCenterTransitionDuration" Text="300 ms" FontSize="11" Foreground="{StaticResource ObsTextWhite}" Background="{StaticResource ObsDockBackground}"
+                                 BorderBrush="{StaticResource ObsDockBorder}" BorderThickness="1" HorizontalContentAlignment="Center" Margin="0,2,0,0" Padding="2"
+                                 LostFocus="TransitionDuration_LostFocus"/>
                     </StackPanel>
 
                     <!-- Fondu au Noir (FTB) -->
@@ -374,6 +373,7 @@
 
                     <!-- Écran Vidéo Programme avec Overlays (Logo, Texte, Bande Déroulante OBS) -->
                     <Grid Grid.Row="1" Background="#0A0C0E">
+                        <Image x:Name="ImgProgramMix" Stretch="Uniform" Opacity="0"/>
                         <Image x:Name="ImgProgramVideo" Stretch="Uniform"/>
                         <!-- Ardoise si aucune image -->
                         <Grid x:Name="PanelProgramSlate" HorizontalAlignment="Center" VerticalAlignment="Center">
@@ -385,22 +385,17 @@
                             </StackPanel>
                         </Grid>
 
-                        <!-- 1. Source Image : Logo Filigrane OBS (Haut-Droit) -->
-                        <Image x:Name="ImgProgramLogo" Source="Assets/logo.png" Width="80" Height="40" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="10" Visibility="Visible" Stretch="Uniform" Opacity="0.85"/>
-
-                        <!-- 2. Source Texte : Bandeau Tiers Inférieur (Nom/Verset) -->
-                        <Border x:Name="PanelProgramLowerThird" HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="12,0,0,32" Background="#E5161B22" BorderBrush="#DC2626" BorderThickness="3,0,0,0" CornerRadius="0,4,4,0" Padding="12,6" Visibility="Visible">
+                        <Canvas x:Name="CanvasProgramGraphics" IsHitTestVisible="False"/>
+                        <Image x:Name="ImgProgramLogo" Visibility="Collapsed"/>
+                        <Border x:Name="PanelProgramLowerThird" Visibility="Collapsed">
                             <StackPanel>
-                                <TextBlock x:Name="TxtProgramLowerTitle" Text="Pasteur Principal - Culte EECC" FontSize="12" FontWeight="Bold" Foreground="#FFFFFF"/>
-                                <TextBlock x:Name="TxtProgramLowerSub" Text="Thème : La Puissance de la Résurrection" FontSize="10" Foreground="#FCA5A5"/>
+                                <TextBlock x:Name="TxtProgramLowerTitle"/>
+                                <TextBlock x:Name="TxtProgramLowerSub"/>
                             </StackPanel>
                         </Border>
-
-                        <!-- 3. Filtre Défilement : Bande Déroulante (Ticker Scroll OBS) -->
-                        <Border x:Name="PanelProgramTicker" Height="26" VerticalAlignment="Bottom" Background="#EA0D1117" BorderBrush="#2E3136" BorderThickness="0,1,0,0" Visibility="Visible" ClipToBounds="True">
-                            <Canvas x:Name="CanvasProgramTicker" Height="26">
-                                <TextBlock x:Name="TxtProgramTicker" Text="✦ Bienvenue à l'Église Évangélique du Centre (EECC) ✦ Culte en direct ✦ Prochain culte dimanche à 9h00 ✦ Offrandes et Dîmes par Mobile Money ✦"
-                                           FontSize="11" FontWeight="SemiBold" Foreground="#F0F6FC" Canvas.Top="4" Canvas.Left="0"/>
+                        <Border x:Name="PanelProgramTicker" Visibility="Collapsed">
+                            <Canvas x:Name="CanvasProgramTicker">
+                                <TextBlock x:Name="TxtProgramTicker"/>
                             </Canvas>
                         </Border>
                     </Grid>
@@ -474,12 +469,13 @@
                         <TextBlock Text="Sources" Style="{StaticResource ObsDockHeaderStyle}"/>
                     </Border>
 
-                    <ListBox Grid.Row="1" x:Name="ListSources" SelectionChanged="ListSources_SelectionChanged"
+                    <ListBox Grid.Row="1" x:Name="ListSources" SelectionChanged="ListSources_SelectionChanged" MouseDoubleClick="ListSources_MouseDoubleClick"
                              Background="{StaticResource ObsDockBackground}" BorderThickness="0" Foreground="{StaticResource ObsTextPrimary}">
                         <ListBox.ItemTemplate>
                             <DataTemplate>
                                 <DockPanel Margin="4,2">
-                                    <TextBlock Text="👁" Foreground="{StaticResource ObsTextSecondary}" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                                    <Button Content="{Binding EyeGlyph}" Click="SourceEye_Click" Background="Transparent" BorderThickness="0"
+                                            Foreground="{StaticResource ObsTextSecondary}" Margin="0,0,6,0" Padding="0" Cursor="Hand" ToolTip="Afficher ou masquer"/>
                                     <TextBlock Text="{Binding Name}" FontSize="12" Foreground="{StaticResource ObsTextPrimary}" VerticalAlignment="Center"/>
                                 </DockPanel>
                             </DataTemplate>
@@ -491,8 +487,8 @@
                             <Button x:Name="BtnAddSource" Click="BtnAddSource_Click" Content="+" Style="{StaticResource ObsDockToolButtonStyle}" ToolTip="Ajouter une source"/>
                             <Button x:Name="BtnRemoveSource" Click="BtnRemoveSource_Click" Content="-" Style="{StaticResource ObsDockToolButtonStyle}" ToolTip="Supprimer la source"/>
                             <Button Content="⚙" Click="MenuSourceProperties_Click" Style="{StaticResource ObsDockToolButtonStyle}" ToolTip="Propriétés"/>
-                            <Button Content="▲" Style="{StaticResource ObsDockToolButtonStyle}" ToolTip="Monter"/>
-                            <Button Content="▼" Style="{StaticResource ObsDockToolButtonStyle}" ToolTip="Descendre"/>
+                            <Button Click="BtnMoveSourceUp_Click" Content="▲" Style="{StaticResource ObsDockToolButtonStyle}" ToolTip="Monter"/>
+                            <Button Click="BtnMoveSourceDown_Click" Content="▼" Style="{StaticResource ObsDockToolButtonStyle}" ToolTip="Descendre"/>
                         </StackPanel>
                     </Border>
                 </Grid>
@@ -508,158 +504,72 @@
 
                     <Border Grid.Row="0" Style="{StaticResource ObsDockTitleBarStyle}">
                         <DockPanel>
+                            <Button DockPanel.Dock="Right" Content="⚙" Width="22" Height="18" Margin="0,0,6,0"
+                                    Click="MenuAdvancedAudio_Click" ToolTip="Propriétés audio avancées"
+                                    Background="Transparent" BorderThickness="0" Foreground="{StaticResource ObsTextPrimary}" Cursor="Hand"/>
                             <TextBlock Text="Mélangeur audio" Style="{StaticResource ObsDockHeaderStyle}"/>
-                            <TextBlock Text="dBFS" FontSize="9" Foreground="{StaticResource ObsTextMuted}" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,8,0"/>
                         </DockPanel>
                     </Border>
 
-                    <!-- Canaux Audio Faders & Vumètres Stéréo OBS -->
                     <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
-                        <StackPanel Orientation="Horizontal" Margin="6,4">
-                            
-                            <!-- PISTE 1 : PROGRAMME MASTER -->
-                            <Border Background="{StaticResource ObsDockBackground}" BorderBrush="{StaticResource ObsDockBorder}" BorderThickness="1" Width="105" Margin="0,0,6,0" Padding="4">
-                                <Grid>
-                                    <Grid.RowDefinitions>
-                                        <RowDefinition Height="Auto"/>
-                                        <RowDefinition Height="*"/>
-                                        <RowDefinition Height="Auto"/>
-                                        <RowDefinition Height="Auto"/>
-                                    </Grid.RowDefinitions>
-                                    <TextBlock Grid.Row="0" Text="Master (PGM)" FontSize="10" FontWeight="Bold" Foreground="{StaticResource ObsTextPrimary}" HorizontalAlignment="Center"/>
-                                    
-                                    <!-- Double Vumètre Stéréo L/R OBS -->
-                                    <Grid Grid.Row="1" Margin="0,4">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="6"/>
-                                            <ColumnDefinition Width="6"/>
-                                            <ColumnDefinition Width="*"/>
-                                        </Grid.ColumnDefinitions>
-                                        <Border Grid.Column="1" Background="#111214" Width="5">
-                                            <Border x:Name="MeterFill1" Background="{StaticResource ObsAudioSafe}" Height="75" VerticalAlignment="Bottom"/>
-                                        </Border>
-                                        <Border Grid.Column="2" Background="#111214" Width="5">
-                                            <Border x:Name="MeterFill2" Background="{StaticResource ObsAudioSafe}" Height="70" VerticalAlignment="Bottom"/>
-                                        </Border>
-                                    </Grid>
-
-                                    <!-- Fader Slider Horizontal -->
-                                    <Slider Grid.Row="2" Minimum="0" Maximum="100" Value="85" Height="18" Margin="0,2"/>
-                                    
-                                    <!-- Mute & Volume texte -->
-                                    <DockPanel Grid.Row="3">
-                                        <Button Content="🔊" Background="Transparent" BorderThickness="0" Foreground="{StaticResource ObsTextPrimary}" FontSize="11" Cursor="Hand"/>
-                                        <TextBlock Text="-3.2 dB" FontSize="9" Foreground="{StaticResource ObsTextSecondary}" HorizontalAlignment="Right" VerticalAlignment="Center"/>
-                                    </DockPanel>
-                                </Grid>
-                            </Border>
-
-                            <!-- PISTE 2 : MICRO PRÉDICATEUR -->
-                            <Border Background="{StaticResource ObsDockBackground}" BorderBrush="{StaticResource ObsDockBorder}" BorderThickness="1" Width="105" Margin="0,0,6,0" Padding="4">
-                                <Grid>
-                                    <Grid.RowDefinitions>
-                                        <RowDefinition Height="Auto"/>
-                                        <RowDefinition Height="*"/>
-                                        <RowDefinition Height="Auto"/>
-                                        <RowDefinition Height="Auto"/>
-                                    </Grid.RowDefinitions>
-                                    <TextBlock Grid.Row="0" Text="Prédicateur" FontSize="10" FontWeight="Bold" Foreground="{StaticResource ObsTextPrimary}" HorizontalAlignment="Center"/>
-                                    
-                                    <Grid Grid.Row="1" Margin="0,4">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="6"/>
-                                            <ColumnDefinition Width="6"/>
-                                            <ColumnDefinition Width="*"/>
-                                        </Grid.ColumnDefinitions>
-                                        <Border Grid.Column="1" Background="#111214" Width="5">
-                                            <Border x:Name="MeterFill3" Background="{StaticResource ObsAudioWarning}" Height="85" VerticalAlignment="Bottom"/>
-                                        </Border>
-                                        <Border Grid.Column="2" Background="#111214" Width="5">
-                                            <Border x:Name="MeterFill4" Background="{StaticResource ObsAudioWarning}" Height="80" VerticalAlignment="Bottom"/>
-                                        </Border>
-                                    </Grid>
-
-                                    <Slider Grid.Row="2" Minimum="0" Maximum="100" Value="90" Height="18" Margin="0,2"/>
-                                    
-                                    <DockPanel Grid.Row="3">
-                                        <Button Content="🔊" Background="Transparent" BorderThickness="0" Foreground="{StaticResource ObsTextPrimary}" FontSize="11" Cursor="Hand"/>
-                                        <TextBlock Text="-1.8 dB" FontSize="9" Foreground="{StaticResource ObsTextSecondary}" HorizontalAlignment="Right" VerticalAlignment="Center"/>
-                                    </DockPanel>
-                                </Grid>
-                            </Border>
-
-                            <!-- PISTE 3 : CHŒUR & MUSIQUE -->
-                            <Border Background="{StaticResource ObsDockBackground}" BorderBrush="{StaticResource ObsDockBorder}" BorderThickness="1" Width="105" Margin="0,0,6,0" Padding="4">
-                                <Grid>
-                                    <Grid.RowDefinitions>
-                                        <RowDefinition Height="Auto"/>
-                                        <RowDefinition Height="*"/>
-                                        <RowDefinition Height="Auto"/>
-                                        <RowDefinition Height="Auto"/>
-                                    </Grid.RowDefinitions>
-                                    <TextBlock Grid.Row="0" Text="Chœur / Musique" FontSize="10" FontWeight="Bold" Foreground="{StaticResource ObsTextPrimary}" HorizontalAlignment="Center"/>
-                                    
-                                    <Grid Grid.Row="1" Margin="0,4">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="6"/>
-                                            <ColumnDefinition Width="6"/>
-                                            <ColumnDefinition Width="*"/>
-                                        </Grid.ColumnDefinitions>
-                                        <Border Grid.Column="1" Background="#111214" Width="5">
-                                            <Border x:Name="MeterFill5" Background="{StaticResource ObsAudioSafe}" Height="55" VerticalAlignment="Bottom"/>
-                                        </Border>
-                                        <Border Grid.Column="2" Background="#111214" Width="5">
-                                            <Border x:Name="MeterFill6" Background="{StaticResource ObsAudioSafe}" Height="60" VerticalAlignment="Bottom"/>
-                                        </Border>
-                                    </Grid>
-
-                                    <Slider Grid.Row="2" Minimum="0" Maximum="100" Value="75" Height="18" Margin="0,2"/>
-                                    
-                                    <DockPanel Grid.Row="3">
-                                        <Button Content="🔊" Background="Transparent" BorderThickness="0" Foreground="{StaticResource ObsTextPrimary}" FontSize="11" Cursor="Hand"/>
-                                        <TextBlock Text="-6.0 dB" FontSize="9" Foreground="{StaticResource ObsTextSecondary}" HorizontalAlignment="Right" VerticalAlignment="Center"/>
-                                    </DockPanel>
-                                </Grid>
-                            </Border>
-
-                            <!-- PISTE 4 : AUDIO SMARTPHONE 1 -->
-                            <Border Background="{StaticResource ObsDockBackground}" BorderBrush="{StaticResource ObsDockBorder}" BorderThickness="1" Width="105" Padding="4">
-                                <Grid>
-                                    <Grid.RowDefinitions>
-                                        <RowDefinition Height="Auto"/>
-                                        <RowDefinition Height="*"/>
-                                        <RowDefinition Height="Auto"/>
-                                        <RowDefinition Height="Auto"/>
-                                    </Grid.RowDefinitions>
-                                    <TextBlock Grid.Row="0" Text="Cam-1 (Mobile)" FontSize="10" FontWeight="Bold" Foreground="{StaticResource ObsTextPrimary}" HorizontalAlignment="Center"/>
-                                    
-                                    <Grid Grid.Row="1" Margin="0,4">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="6"/>
-                                            <ColumnDefinition Width="6"/>
-                                            <ColumnDefinition Width="*"/>
-                                        </Grid.ColumnDefinitions>
-                                        <Border Grid.Column="1" Background="#111214" Width="5">
-                                            <Border x:Name="MeterFill7" Background="{StaticResource ObsAudioSafe}" Height="40" VerticalAlignment="Bottom"/>
-                                        </Border>
-                                        <Border Grid.Column="2" Background="#111214" Width="5">
-                                            <Border x:Name="MeterFill8" Background="{StaticResource ObsAudioSafe}" Height="40" VerticalAlignment="Bottom"/>
-                                        </Border>
-                                    </Grid>
-
-                                    <Slider Grid.Row="2" Minimum="0" Maximum="100" Value="70" Height="18" Margin="0,2"/>
-                                    
-                                    <DockPanel Grid.Row="3">
-                                        <Button Content="🔊" Background="Transparent" BorderThickness="0" Foreground="{StaticResource ObsTextPrimary}" FontSize="11" Cursor="Hand"/>
-                                        <TextBlock Text="-12.0 dB" FontSize="9" Foreground="{StaticResource ObsTextSecondary}" HorizontalAlignment="Right" VerticalAlignment="Center"/>
-                                    </DockPanel>
-                                </Grid>
-                            </Border>
-                        </StackPanel>
+                        <ItemsControl x:Name="MixerStrips" Margin="4,2">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel Orientation="Horizontal"/>
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Width="108" Margin="3,0" Padding="4,3"
+                                            Background="{StaticResource ObsDockBackground}"
+                                            BorderBrush="{StaticResource ObsDockBorder}" BorderThickness="1">
+                                        <Border.ContextMenu>
+                                            <ContextMenu>
+                                                <MenuItem Header="Verrouiller / déverrouiller le volume" Click="MixerLock_Click"/>
+                                                <MenuItem Header="Propriétés audio avancées..." Click="MenuAdvancedAudio_Click"/>
+                                            </ContextMenu>
+                                        </Border.ContextMenu>
+                                        <Grid>
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="16"/>
+                                                <RowDefinition Height="14"/>
+                                                <RowDefinition Height="*"/>
+                                                <RowDefinition Height="22"/>
+                                            </Grid.RowDefinitions>
+                                            <TextBlock Text="{Binding Name}" FontSize="10" FontWeight="SemiBold"
+                                                       Foreground="{StaticResource ObsTextPrimary}"
+                                                       TextTrimming="CharacterEllipsis" HorizontalAlignment="Center"/>
+                                            <TextBlock Grid.Row="1" Text="{Binding DbText}" FontSize="9"
+                                                       Foreground="{StaticResource ObsTextSecondary}"/>
+                                            <Grid Grid.Row="2" Margin="0,2">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="10"/>
+                                                    <ColumnDefinition Width="10"/>
+                                                </Grid.ColumnDefinitions>
+                                                <Slider Orientation="Vertical" Minimum="0" Maximum="100"
+                                                        Value="{Binding Fader, Mode=TwoWay}"
+                                                        IsEnabled="{Binding CanMove}"
+                                                        HorizontalAlignment="Center" TickFrequency="10" TickPlacement="BottomRight"/>
+                                                <Border Grid.Column="1" Width="6" Height="120" Background="#111214" ClipToBounds="True" HorizontalAlignment="Center">
+                                                    <Border Height="{Binding MeterLeft}" VerticalAlignment="Bottom" Background="{Binding MeterBrush}"/>
+                                                </Border>
+                                                <Border Grid.Column="2" Width="6" Height="120" Background="#111214" ClipToBounds="True" HorizontalAlignment="Center">
+                                                    <Border Height="{Binding MeterRight}" VerticalAlignment="Bottom" Background="{Binding MeterBrush}"/>
+                                                </Border>
+                                            </Grid>
+                                            <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Center">
+                                                <Button Content="{Binding MuteGlyph}" Foreground="{Binding MuteBrush}" Click="MixerMute_Click" Tag="{Binding}"
+                                                        Width="24" Height="18" Margin="1,0" Background="Transparent" BorderThickness="0" Cursor="Hand" ToolTip="Sourdine"/>
+                                                <Button Content="{Binding MonitorGlyph}" Click="MixerMonitor_Click" Tag="{Binding}"
+                                                        Width="24" Height="18" Margin="1,0" Background="Transparent" BorderBrush="{StaticResource ObsDockBorder}"
+                                                        Foreground="{StaticResource ObsTextPrimary}" Cursor="Hand" ToolTip="{Binding MonitorTip}"/>
+                                            </StackPanel>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
                     </ScrollViewer>
                 </Grid>
             </Border>
@@ -688,7 +598,8 @@
 
                         <TextBlock Text="Durée :" FontSize="11" Foreground="{StaticResource ObsTextSecondary}" Margin="0,8,0,2"/>
                         <TextBox x:Name="TxtTransitionDuration" Text="300 ms" Background="{StaticResource ObsDockBackground}" Foreground="{StaticResource ObsTextWhite}"
-                                 BorderBrush="{StaticResource ObsDockBorder}" BorderThickness="1" Padding="4,2" FontSize="11"/>
+                                 BorderBrush="{StaticResource ObsDockBorder}" BorderThickness="1" Padding="4,2" FontSize="11"
+                                 LostFocus="TransitionDuration_LostFocus"/>
                     </StackPanel>
                 </Grid>
             </Border>

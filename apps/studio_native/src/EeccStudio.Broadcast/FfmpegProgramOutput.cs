@@ -33,7 +33,7 @@ public sealed class FfmpegRtmpOutput : IExternalOutput
         var ffmpeg = FfmpegLocator.Find();
         if (ffmpeg == null)
         {
-            const string missing = "Encodeur ffmpeg introuvable (libx264 et AAC requis, variable EECC_FFMPEG). EECC TV n'est pas coupée.";
+            const string missing = "ffmpeg est introuvable. L'installateur le place dans le dossier ffmpeg et l'ajoute au PATH. EECC TV n'est pas coupée.";
             return new OutputStart(DestinationRunState.Error, missing);
         }
 
@@ -70,7 +70,7 @@ public sealed class FfmpegRtmpOutput : IExternalOutput
             RedirectStandardOutput = true,
             RedirectStandardError = true
         };
-        AddArguments(startInfo, video.FfmpegPath, audio.FfmpegPath);
+        AddArguments(startInfo, video.FfmpegPath, audio.FfmpegPath, _destination.Vertical);
         startInfo.ArgumentList.Add(url);
 
         Process process;
@@ -205,7 +205,7 @@ public sealed class FfmpegRtmpOutput : IExternalOutput
         }
     }
 
-    private static void AddArguments(ProcessStartInfo startInfo, string video, string audio)
+    private static void AddArguments(ProcessStartInfo startInfo, string video, string audio, bool vertical)
     {
         var encoderCaps = HardwareEncoderDetector.Detect();
         string videoCodec = encoderCaps.H264EncoderName;
@@ -238,7 +238,24 @@ public sealed class FfmpegRtmpOutput : IExternalOutput
 
         args.AddRange(new[]
         {
-            "-pix_fmt", "yuv420p", "-g", "30", "-b:v", "3500k", "-maxrate", "4000k", "-bufsize", "7000k",
+            "-pix_fmt", "yuv420p", "-g", "30"
+        });
+        if (vertical)
+        {
+            args.Add("-vf");
+            args.Add("scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:black");
+            args.Add("-b:v");
+            args.Add("2500k");
+        }
+        else
+        {
+            args.Add("-b:v");
+            args.Add("3500k");
+        }
+
+        args.AddRange(new[]
+        {
+            "-maxrate", "4000k", "-bufsize", "7000k",
             "-c:a", "aac", "-b:a", "128k", "-ar", "44100", "-ac", "2",
             "-flush_packets", "1",
             "-f", "flv"

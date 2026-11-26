@@ -63,6 +63,39 @@ jobs:
           path: apps/studio_native/publish_studio.txt
           if-no-files-found: ignore
 
+      - name: Fetch ffmpeg for the installer
+        working-directory: apps/studio_native
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File installer/fetch-ffmpeg.ps1
+
+      - name: Bundle dependencies into the setup payload
+        working-directory: apps/studio_native
+        run: |
+          $ErrorActionPreference = "Stop"
+          $payload = "publish/win-x64/ffmpeg"
+          if (Test-Path $payload) { Remove-Item $payload -Recurse -Force }
+          New-Item -ItemType Directory -Force -Path $payload | Out-Null
+          Get-ChildItem "third_party/ffmpeg" -File | Where-Object { $_.Name -ne ".gitkeep" } | Copy-Item -Destination $payload -Force
+          foreach ($required in @("ffmpeg.exe", "ffprobe.exe")) {
+            if (-not (Test-Path (Join-Path $payload $required))) { throw "Dépendance absente du setup : $required" }
+          }
+          & (Join-Path (Resolve-Path $payload) "ffmpeg.exe") -version
+          if ($LASTEXITCODE -ne 0) { throw "Le ffmpeg du setup ne démarre pas" }
+
+      - name: Stage the church publish secret
+        working-directory: apps/studio_native
+        env:
+          EECC_STUDIO_SECRET: ${{ secrets.EECC_STUDIO_SECRET }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $secret = $env:EECC_STUDIO_SECRET
+          if ([string]::IsNullOrWhiteSpace($secret) -or $secret.Trim().Length -lt 16) {
+            throw "EECC_STUDIO_SECRET est absent. Le setup ne pourrait pas publier depuis un autre PC."
+          }
+          $utf8 = New-Object System.Text.UTF8Encoding $false
+          $text = $secret.Trim()
+          [System.IO.File]::WriteAllText((Join-Path (Get-Location) "installer\studio.secret"), $text, $utf8)
+          [System.IO.File]::WriteAllText((Join-Path (Get-Location) "publish\win-x64\studio.secret"), $text, $utf8)
+
       - name: Compile Windows Installer (.exe) with Inno Setup
         working-directory: apps/studio_native
         run: |
@@ -81,10 +114,25 @@ jobs:
 
           $exe = Join-Path $dest "EeccStudio.exe"
           if (-not (Test-Path $exe)) { throw "Installed executable missing: $exe" }
-          foreach ($required in @("EeccStudio.dll","coreclr.dll","hostfxr.dll","wpfgfx_cor3.dll")) {
+          foreach ($required in @(
+            "EeccStudio.dll","EeccStudio.Core.dll","EeccStudio.Broadcast.dll",
+            "coreclr.dll","hostfxr.dll","wpfgfx_cor3.dll","PresentationFramework.dll",
+            "QRCoder.dll","System.Drawing.Common.dll","System.Text.Json.dll",
+            "System.Security.Cryptography.ProtectedData.dll",
+            "ffmpeg\ffmpeg.exe","ffmpeg\ffprobe.exe")) {
             $path = Join-Path $dest $required
             if (-not (Test-Path $path)) { throw "Installed package is missing $required" }
           }
+          Get-ChildItem "third_party\ffmpeg" -File | Where-Object { $_.Name -ne ".gitkeep" } | ForEach-Object {
+            $installed = Join-Path $dest "ffmpeg\$($_.Name)"
+            if (-not (Test-Path $installed)) { throw "Installed package is missing ffmpeg\$($_.Name)" }
+          }
+          & (Join-Path $dest "ffmpeg\ffmpeg.exe") -version
+          if ($LASTEXITCODE -ne 0) { throw "Installed ffmpeg does not run" }
+          $secretFile = Join-Path $dest "studio.secret"
+          if (-not (Test-Path $secretFile) -or (Get-Item $secretFile).Length -lt 16) { throw "Installed package is missing the publish secret" }
+          $userPath = [string](Get-ItemProperty -Path "HKCU:\Environment" -Name Path -ErrorAction SilentlyContinue).Path
+          if ($userPath -notlike "*$(Join-Path $dest 'ffmpeg')*") { throw "Installer did not add ffmpeg to the user PATH" }
 
           Add-Type -AssemblyName System.Drawing
           $icon = [System.Drawing.Icon]::ExtractAssociatedIcon($exe)
@@ -122,6 +170,7 @@ jobs:
       - name: Create Portable Zip Package
         working-directory: apps/studio_native
         run: |
+          if (-not (Test-Path "publish/win-x64/ffmpeg/ffmpeg.exe")) { throw "Le zip portable n'a pas ffmpeg" }
           Compress-Archive -Path publish/win-x64/* -DestinationPath dist_installer/EECC_Studio_Portable_win-x64.zip -Force
 
       - name: Upload Windows Installer (.exe)

@@ -18,6 +18,34 @@ namespace EeccStudio.Core.Models
         ScrollingTicker
     }
 
+    public enum GraphicTextStyle
+    {
+        Classic,
+        LowerThird,
+        Verse,
+        Title,
+        Outline,
+        Glass
+    }
+
+    public enum GraphicMotion
+    {
+        Still,
+        Scroll,
+        Fade,
+        Slide,
+        Type,
+        Pulse
+    }
+
+    public enum GraphicShape
+    {
+        Rectangle,
+        Rounded,
+        Circle,
+        Pill
+    }
+
     public class StudioSource
     {
         public string Id { get; set; } = Guid.NewGuid().ToString("N");
@@ -33,11 +61,48 @@ namespace EeccStudio.Core.Models
         public string ImagePath { get; set; } = string.Empty;
         public double ScrollSpeed { get; set; } = 80.0; // Vitesse de défilement (pixels / seconde)
         public double Opacity { get; set; } = 1.0;
+        public bool GraphicPlaced { get; set; }
+        public GraphicTextStyle TextStyle { get; set; } = GraphicTextStyle.Classic;
+        public GraphicMotion Motion { get; set; } = GraphicMotion.Still;
+        public GraphicShape Shape { get; set; } = GraphicShape.Rectangle;
+        public double XPercent { get; set; }
+        public double YPercent { get; set; }
+        public double WidthPercent { get; set; }
+        public double HeightPercent { get; set; }
+        public double FontSize { get; set; }
+        public string EyeGlyph => IsVisible ? "👁" : "—";
 
         // Propriétés de transformation géométrique OBS Studio (Correction caméra inversée / miroir)
         public int RotationAngle { get; set; } = 0; // 0, 90, 180, 270 degrés
         public bool FlipHorizontal { get; set; } = false; // Effet miroir horizontal
         public bool FlipVertical { get; set; } = false; // Inversion verticale (tête en bas)
+
+        public StudioSource Clone(bool newId = true) => new()
+        {
+            Id = newId ? Guid.NewGuid().ToString("N") : Id,
+            Name = Name,
+            Type = Type,
+            IsVisible = IsVisible,
+            IsLocked = IsLocked,
+            Details = Details,
+            TextContent = TextContent,
+            SecondaryText = SecondaryText,
+            ImagePath = ImagePath,
+            ScrollSpeed = ScrollSpeed,
+            Opacity = Opacity,
+            GraphicPlaced = GraphicPlaced,
+            TextStyle = TextStyle,
+            Motion = Motion,
+            Shape = Shape,
+            XPercent = XPercent,
+            YPercent = YPercent,
+            WidthPercent = WidthPercent,
+            HeightPercent = HeightPercent,
+            FontSize = FontSize,
+            RotationAngle = RotationAngle,
+            FlipHorizontal = FlipHorizontal,
+            FlipVertical = FlipVertical,
+        };
 
         public string IconSymbol => Type switch
         {

@@ -14,6 +14,10 @@
     <Product>EECC Studio — Régie Broadcast Native</Product>
   </PropertyGroup>
 
+    <ItemGroup>
+    <PackageReference Include="System.Drawing.Common" Version="8.0.11" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\EeccStudio.Core\EeccStudio.Core.csproj" />
     <ProjectReference Include="..\EeccStudio.Broadcast\EeccStudio.Broadcast.csproj" />

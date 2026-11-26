@@ -41,10 +41,19 @@ namespace EeccStudio.Core.Cms
         public EeccTvCmsService(CmsServiceConfig? config = null)
         {
             _config = config ?? new CmsServiceConfig();
-            SeedSampleData();
+            if (IsMockMode)
+                SeedSampleData();
         }
 
+        public static EeccTvCmsService ForStudio() => new(new CmsServiceConfig
+        {
+            SupabaseUrl = EeccStudio.Broadcast.EeccCloud.ProjectUrl,
+            ApiKey = EeccStudio.Broadcast.EeccCloud.PublishableKey,
+        });
+
         private bool IsMockMode => string.IsNullOrWhiteSpace(_config.ApiKey) || _config.SupabaseUrl.Contains("your-project");
+
+        public bool UsesCloud => !IsMockMode;
 
         #region Podcasts
         public async Task<List<PodcastItem>> GetPodcastsAsync(CancellationToken token = default)
@@ -53,7 +62,7 @@ namespace EeccStudio.Core.Cms
 
             try
             {
-                var url = $"{_config.SupabaseUrl.TrimEnd('/')}/rest/v1/sermons?select=id,title,speaker,date,theme,scripture_refs,podcast_url,cover_image_url,is_published,created_at&podcast_url=not.is.null&order=date.desc";
+                var url = $"{_config.SupabaseUrl.TrimEnd('/')}/rest/v1/sermons?select=id,title,speaker,date,theme,scripture_refs,audio_url:podcast_url,cover_image_url,is_published,created_at,duration_seconds:podcast_duration_seconds&podcast_url=not.is.null&order=date.desc";
                 return await GetRestListAsync<PodcastItem>(url, token).ConfigureAwait(false);
             }
             catch { return _localPodcasts.Values.OrderByDescending(p => p.Date).ToList(); }
@@ -486,39 +495,47 @@ namespace EeccStudio.Core.Cms
 
         private async Task UpsertRestAsync(string table, object data, CancellationToken token)
         {
-            string url = $"{_config.SupabaseUrl.TrimEnd('/')}/rest/v1/{table}";
-            using var req = new HttpRequestMessage(HttpMethod.Post, url);
-            req.Headers.Add("apikey", _config.ApiKey);
-            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _config.ApiKey);
-            req.Headers.Add("Prefer", "resolution=merge-duplicates");
-
-            string json = JsonSerializer.Serialize(data);
-            req.Content = new StringContent(json, Encoding.UTF8, "application/json");
-
-            using var resp = await _http.SendAsync(req, token).ConfigureAwait(false);
+            await SaveContentAsync(table, data, token).ConfigureAwait(false);
         }
 
         private async Task PatchRestAsync(string table, Guid id, object data, CancellationToken token)
         {
-            string url = $"{_config.SupabaseUrl.TrimEnd('/')}/rest/v1/{table}?id=eq.{id}";
-            using var req = new HttpRequestMessage(HttpMethod.Patch, url);
-            req.Headers.Add("apikey", _config.ApiKey);
-            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _config.ApiKey);
-
-            string json = JsonSerializer.Serialize(data);
-            req.Content = new StringContent(json, Encoding.UTF8, "application/json");
-
-            using var resp = await _http.SendAsync(req, token).ConfigureAwait(false);
+            var row = System.Text.Json.Nodes.JsonNode.Parse(JsonSerializer.Serialize(data))!.AsObject();
+            row["id"] = id.ToString();
+            await SaveContentAsync(table, row, token).ConfigureAwait(false);
         }
 
         private async Task DeleteRestAsync(string table, Guid id, CancellationToken token)
         {
-            string url = $"{_config.SupabaseUrl.TrimEnd('/')}/rest/v1/{table}?id=eq.{id}";
-            using var req = new HttpRequestMessage(HttpMethod.Delete, url);
+            await PostRpcAsync("studio_remove_content", new
+            {
+                p_secret = EeccStudio.Broadcast.StudioSecret.Current,
+                p_kind = table,
+                p_id = id,
+            }, token).ConfigureAwait(false);
+        }
+
+        private Task SaveContentAsync(string table, object data, CancellationToken token) =>
+            PostRpcAsync("studio_save_content", new
+            {
+                p_secret = EeccStudio.Broadcast.StudioSecret.Current,
+                p_kind = table,
+                p_row = data,
+            }, token);
+
+        private async Task PostRpcAsync(string name, object body, CancellationToken token)
+        {
+            string url = $"{_config.SupabaseUrl.TrimEnd('/')}/rest/v1/rpc/{name}";
+            using var req = new HttpRequestMessage(HttpMethod.Post, url);
             req.Headers.Add("apikey", _config.ApiKey);
             req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _config.ApiKey);
-
+            req.Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
             using var resp = await _http.SendAsync(req, token).ConfigureAwait(false);
+            if (!resp.IsSuccessStatusCode)
+            {
+                var err = await resp.Content.ReadAsStringAsync(token).ConfigureAwait(false);
+                throw new InvalidOperationException($"Supabase a refusé {name} ({(int)resp.StatusCode}). {err}");
+            }
         }
 
         private void SeedSampleData()

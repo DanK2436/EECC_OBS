@@ -163,4 +163,35 @@
     <SolidColorBrush x:Key="AudioMeterSafe" Color="#2FE06A" />
     <SolidColorBrush x:Key="AudioMeterWarning" Color="#F5A623" />
     <SolidColorBrush x:Key="AudioMeterClip" Color="#E03232" />
+
+    <Style TargetType="ListBoxItem">
+        <Setter Property="Foreground" Value="{StaticResource ObsTextPrimary}"/>
+        <Setter Property="Padding" Value="2,1"/>
+        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ListBoxItem">
+                    <Border x:Name="Row" Background="Transparent" Padding="{TemplateBinding Padding}">
+                        <ContentPresenter/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Row" Property="Background" Value="#2A2E33"/>
+                        </Trigger>
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter TargetName="Row" Property="Background" Value="#1F4B99"/>
+                            <Setter Property="Foreground" Value="White"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style TargetType="TextBox">
+        <Setter Property="Background" Value="{StaticResource ObsDockBackground}"/>
+        <Setter Property="Foreground" Value="{StaticResource ObsTextWhite}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource ObsDockBorder}"/>
+        <Setter Property="CaretBrush" Value="White"/>
+    </Style>
 </ResourceDictionary>

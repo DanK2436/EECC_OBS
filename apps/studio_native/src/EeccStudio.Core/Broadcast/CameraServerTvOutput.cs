@@ -25,15 +25,14 @@ public sealed class CameraServerTvOutput : ITvOutput
             return Task.FromResult(new TvOutputResult(false, null, message));
         }
 
-        if (programFrame is { Length: > 3 } &&
-            _server.ActiveProgramFrameBytes == null &&
-            _server.LatestCameraFrameBytes == null)
-        {
+        if (programFrame is { Length: > 3 } && _server.OnAirFrameBytes == null)
             _server.ActiveProgramFrameBytes = programFrame;
-        }
 
         _server.StartStreaming();
-        var playback = $"http://127.0.0.1:{_server.Port}{EeccTvContract.StreamPath}";
+        var host = _server.GetLocalIpAddress();
+        if (host.Length == 0)
+            host = "127.0.0.1";
+        var playback = $"http://{host}:{_server.Port}{EeccTvContract.StreamPath}";
         return Task.FromResult(new TvOutputResult(true, playback, null));
     }
 

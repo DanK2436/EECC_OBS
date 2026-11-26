@@ -73,6 +73,9 @@ public sealed class ExternalDestination
 
     public required StreamKey StreamKey { get; init; }
 
+    /// <summary>Canevas 9:16, comme la sortie verticale d'Aitum, pour TikTok, Shorts et Instagram.</summary>
+    public bool Vertical { get; init; }
+
     public override string ToString() => $"{DisplayName} ({Platform})";
 }
 

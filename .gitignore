@@ -5,6 +5,7 @@
 Maishapay.txt
 *.key
 *.pem
+studio.secret
 
 # Dependencies
 node_modules/
@@ -16,6 +17,8 @@ dist/
 build/
 bin/
 obj/
+apps/studio_native/publish/
+apps/studio_native/dist_installer/
 out/
 .next/
 *.exe

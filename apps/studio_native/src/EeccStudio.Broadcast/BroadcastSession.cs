@@ -362,14 +362,30 @@ public sealed class BroadcastSession : IAsyncDisposable
 
 public static class FfmpegLocator
 {
-    public static string? Find()
+    public static string? Find() => FindTool(OperatingSystem.IsWindows() ? "ffmpeg.exe" : "ffmpeg");
+
+    public static string? FindProbe() => FindTool(OperatingSystem.IsWindows() ? "ffprobe.exe" : "ffprobe");
+
+    private static string? FindTool(string fileName)
     {
         var configured = Environment.GetEnvironmentVariable("EECC_FFMPEG");
-        if (!string.IsNullOrWhiteSpace(configured) && File.Exists(configured))
-            return configured;
+        if (!string.IsNullOrWhiteSpace(configured))
+        {
+            if (File.Exists(configured) && configured.EndsWith(fileName, StringComparison.OrdinalIgnoreCase))
+                return configured;
+            var beside = Path.Combine(Path.GetDirectoryName(configured) ?? "", fileName);
+            if (File.Exists(beside))
+                return beside;
+        }
+
+        foreach (var directory in InstallDirectories())
+        {
+            var candidate = Path.Combine(directory, fileName);
+            if (File.Exists(candidate))
+                return candidate;
+        }
 
         var path = Environment.GetEnvironmentVariable("PATH") ?? string.Empty;
-        var fileName = OperatingSystem.IsWindows() ? "ffmpeg.exe" : "ffmpeg";
         foreach (var directory in path.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
         {
             var candidate = Path.Combine(directory, fileName);
@@ -378,6 +394,52 @@ public static class FfmpegLocator
         }
 
         return null;
+    }
+
+    private static IEnumerable<string> InstallDirectories()
+    {
+        var root = AppContext.BaseDirectory;
+        yield return root;
+        yield return Path.Combine(root, "ffmpeg");
+
+        var cursor = new DirectoryInfo(root);
+        for (var depth = 0; depth < 8 && cursor != null; depth++)
+        {
+            yield return Path.Combine(cursor.FullName, "third_party", "ffmpeg");
+            cursor = cursor.Parent;
+        }
+    }
+
+    public static void EnsureOnPath()
+    {
+        if (!OperatingSystem.IsWindows())
+            return;
+        var ffmpeg = Find();
+        if (ffmpeg == null)
+            return;
+        var directory = Path.GetDirectoryName(ffmpeg);
+        if (string.IsNullOrWhiteSpace(directory))
+            return;
+
+        var processPath = Environment.GetEnvironmentVariable("PATH") ?? "";
+        if (!processPath.Split(Path.PathSeparator).Any(item => string.Equals(item.TrimEnd('\\'), directory.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase)))
+            Environment.SetEnvironmentVariable("PATH", directory + Path.PathSeparator + processPath);
+
+        try
+        {
+            using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey("Environment", writable: true);
+            if (key == null)
+                return;
+            var stored = key.GetValue("Path") as string ?? "";
+            var parts = stored.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            if (parts.Any(item => string.Equals(item.TrimEnd('\\'), directory.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase)))
+                return;
+            key.SetValue("Path", string.IsNullOrWhiteSpace(stored) ? directory : stored.TrimEnd(';') + ";" + directory);
+        }
+        catch
+        {
+            // Le processus courant a déjà le dossier. Le PATH utilisateur sera repris à l'installation.
+        }
     }
 }
 

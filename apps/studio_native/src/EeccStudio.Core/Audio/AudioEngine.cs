@@ -12,6 +12,16 @@ namespace EeccStudio.Core.Audio
         public bool IsMuted { get; set; }
         public float CurrentLevelDb { get; set; } = -60.0f; // -inf à 0 dB
         public float PeakLevelDb { get; set; } = -60.0f;
+        public float Balance { get; set; }
+        public bool Locked { get; set; }
+        public AudioMonitorMode Monitor { get; set; } = AudioMonitorMode.Off;
+    }
+
+    public enum AudioMonitorMode
+    {
+        Off,
+        MonitorOnly,
+        Both,
     }
 
     /// <summary>
@@ -102,6 +112,45 @@ namespace EeccStudio.Core.Audio
             }
         }
 
+        public void SetBalance(string channelId, float balance)
+        {
+            var pan = Math.Clamp(balance, -1f, 1f);
+            _mix.SetBalance(channelId, pan);
+            lock (_lock)
+            {
+                var ch = _channels.Find(c => c.Id == channelId);
+                if (ch != null)
+                    ch.Balance = pan;
+            }
+        }
+
+        public void SetMonitor(string channelId, AudioMonitorMode mode)
+        {
+            _mix.SetRouteToMaster(channelId, mode != AudioMonitorMode.MonitorOnly);
+            lock (_lock)
+            {
+                var ch = _channels.Find(c => c.Id == channelId);
+                if (ch != null)
+                    ch.Monitor = mode;
+            }
+        }
+
+        public void PublishLevels()
+        {
+            var levels = _mix.CopyLevels();
+            lock (_lock)
+            {
+                foreach (var channel in _channels)
+                {
+                    if (!levels.TryGetValue(channel.Id, out var db))
+                        continue;
+                    channel.CurrentLevelDb = (float)db;
+                    if (db > channel.PeakLevelDb)
+                        channel.PeakLevelDb = (float)db;
+                }
+            }
+        }
+
         /// <summary>
         /// Ajoute des échantillons stéréo entrelacés sur une piste du bus en appliquant la chaîne DSP
         /// et l'enregistrement ISO indépendant.
@@ -146,6 +195,7 @@ namespace EeccStudio.Core.Audio
                 }
             }
 
+            PublishLevels();
             return bytes;
         }
     }

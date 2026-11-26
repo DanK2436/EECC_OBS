@@ -78,6 +78,29 @@ public sealed class CameraServer : IDisposable
 
     public byte[]? LatestCameraFrameBytes { get; private set; }
     public byte[]? ActiveProgramFrameBytes { get; set; }
+
+    /// <summary>Incruste textes et images sur l'image servie aux téléphones.</summary>
+    public Func<byte[], byte[]?>? DecorateOnAirFrame { get; set; }
+
+    /// <summary>Image à l'antenne : le programme choisi, sinon la dernière image de téléphone reçue.</summary>
+    public byte[]? OnAirFrameBytes
+    {
+        get
+        {
+            var raw = ActiveProgramFrameBytes ?? LatestCameraFrameBytes;
+            if (raw == null || DecorateOnAirFrame == null)
+                return raw;
+            try
+            {
+                var decorated = DecorateOnAirFrame(raw);
+                return decorated is { Length: > 3 } ? decorated : raw;
+            }
+            catch
+            {
+                return raw;
+            }
+        }
+    }
     public int TotalFramesReceived { get; private set; }
 
     public int Port { get; }
@@ -1006,7 +1029,7 @@ public sealed class CameraServer : IDisposable
 
         if (cleanPath is "/live/frame.jpg" or "/frame.jpg")
         {
-            var frame = IsStreaming ? ActiveProgramFrameBytes : null;
+            var frame = IsStreaming ? OnAirFrameBytes : null;
             if (frame == null)
             {
                 await WriteJsonAsync(stream, new Dictionary<string, string>
@@ -1055,7 +1078,7 @@ public sealed class CameraServer : IDisposable
             await WriteAsciiAsync(stream, "HTTP/1.1 200 OK\r\nContent-Type: multipart/x-mixed-replace; boundary=--eecc_boundary_frame\r\nAccess-Control-Allow-Origin: *\r\nCache-Control: no-cache, no-store\r\n\r\n", cancellationToken);
             while (!cancellationToken.IsCancellationRequested && _isRunning && IsStreaming)
             {
-                var frame = ActiveProgramFrameBytes;
+                var frame = OnAirFrameBytes;
                 if (frame != null)
                 {
                     var part = $"--eecc_boundary_frame\r\nContent-Type: image/jpeg\r\nContent-Length: {frame.Length}\r\n\r\n";

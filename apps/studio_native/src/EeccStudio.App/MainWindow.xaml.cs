@@ -6,6 +6,7 @@ using System.Linq;
 using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
@@ -36,6 +37,14 @@ namespace EeccStudio
         private OfflineSyncQueue? _offlineSyncQueue;
         private readonly DispatcherTimer _clockTimer;
         private readonly ObservableCollection<StudioScene> _scenes;
+        private readonly ObservableCollection<MixerStrip> _mixerStrips = new();
+        private readonly StudioUndoStack _undo = new();
+        private readonly OverlayPlayback _previewOverlays = new();
+        private readonly OverlayPlayback _programOverlays = new();
+        private StudioSource? _copiedSource;
+        private string _profileName = "Culte Dominical EECC";
+        private string _collectionName = "Production Culte EECC";
+        private bool _tBarDragging;
 
         private StudioScene? _previewScene;
         private StudioScene? _programScene;
@@ -50,7 +59,6 @@ namespace EeccStudio
         private readonly object _frameLock = new();
         private readonly Dictionary<string, byte[]> _pendingFrames = new(StringComparer.OrdinalIgnoreCase);
         private bool _renderScheduled;
-        private static readonly int[] DemoMeterHeights = { 70, 66, 78, 74, 48, 50, 64, 64, 52, 50 };
 
         public MainWindow()
         {
@@ -60,6 +68,8 @@ namespace EeccStudio
             _cameraServer = new CameraServer(port: 8089);
             _audioEngine = new AudioEngine();
             _webRtcSessionManager = new WebRtcSessionManager(_cameraServer, _audioEngine);
+            PublicProgramRelay.Shared.RenderAudio = frames => _audioEngine.RenderMaster(frames);
+            FfmpegLocator.EnsureOnPath();
             _webRtcSessionManager.OnVideoFrameReceived += (slot, frame) =>
             {
                 OnCameraFrameReceived(slot, frame);
@@ -107,32 +117,32 @@ namespace EeccStudio
             // Contrôle à distance des Overlays Graphiques (Stream Deck / Companion / OBS WebSocket v5)
             _obsWebSocketServer.OnToggleLowerThird = (visible, speaker, title) => Dispatcher.Invoke(() =>
             {
-                var vis = visible ? Visibility.Visible : Visibility.Collapsed;
-                PanelProgramLowerThird.Visibility = vis;
-                PanelPreviewLowerThird.Visibility = vis;
-                if (!string.IsNullOrWhiteSpace(speaker))
+                foreach (var scene in new[] { _previewScene, _programScene }.Where(scene => scene != null).Distinct())
                 {
-                    TxtProgramLowerTitle.Text = speaker;
-                    TxtPreviewLowerTitle.Text = speaker;
+                    var source = scene!.Sources.FirstOrDefault(item => item.Type is SourceType.Text or SourceType.BibleVerse);
+                    if (source == null)
+                        continue;
+                    source.IsVisible = visible;
+                    if (!string.IsNullOrWhiteSpace(speaker))
+                        source.TextContent = speaker;
+                    if (!string.IsNullOrWhiteSpace(title))
+                        source.SecondaryText = title;
                 }
-                if (!string.IsNullOrWhiteSpace(title))
-                {
-                    TxtProgramLowerSub.Text = title;
-                    TxtPreviewLowerSub.Text = title;
-                }
+                ApplyOverlaysFromScene();
             });
 
             _obsWebSocketServer.OnToggleTicker = (enabled, text) => Dispatcher.Invoke(() =>
             {
-                var vis = enabled ? Visibility.Visible : Visibility.Collapsed;
-                PanelProgramTicker.Visibility = vis;
-                PanelPreviewTicker.Visibility = vis;
-                if (!string.IsNullOrWhiteSpace(text))
+                foreach (var scene in new[] { _previewScene, _programScene }.Where(scene => scene != null).Distinct())
                 {
-                    TxtProgramTicker.Text = text;
-                    TxtPreviewTicker.Text = text;
-                    StartTickerAnimations();
+                    var source = scene!.Sources.FirstOrDefault(item => item.Type == SourceType.ScrollingTicker);
+                    if (source == null)
+                        continue;
+                    source.IsVisible = enabled;
+                    if (!string.IsNullOrWhiteSpace(text))
+                        source.TextContent = text;
                 }
+                ApplyOverlaysFromScene();
             });
 
             _obsWebSocketServer.OnSlideShowNext = () => Dispatcher.Invoke(() =>
@@ -186,6 +196,11 @@ namespace EeccStudio
                     _cameraServer.RegisterPhysicalCamera(source.Id, source.Name);
             }
 
+            if (!App.IsSmokeTest)
+                TryLoadCollection();
+
+            RefreshWindowTitle();
+
             // 3. Minuteur Broadcast temps réel (Status, LIVE, REC, CPU)
             _clockTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
             _clockTimer.Tick += OnClockTick;
@@ -196,12 +211,8 @@ namespace EeccStudio
             if (App.IsDemoMode)
             {
                 BadgeDemo.Visibility = Visibility.Visible;
-                for (int i = 0; i < DemoMeterHeights.Length; i++)
-                {
-                    if (FindName($"MeterFill{i + 1}") is Border meter)
-                        meter.Height = DemoMeterHeights[i];
-                }
             }
+            BindMixer();
         }
 
         private void UpdateNetworkStatusDisplay()
@@ -241,7 +252,11 @@ namespace EeccStudio
                 File.WriteAllText(
                     Path.Combine(AppContext.BaseDirectory, "startup.ready"),
                     DateTime.UtcNow.ToString("o"));
-                App.WriteLog("MainWindow loaded"); ApplyOverlaysFromScene();
+                App.WriteLog("MainWindow loaded");
+                CanvasPreviewGraphics.SizeChanged += (_, _) => PaintPreviewOverlays();
+                CanvasProgramGraphics.SizeChanged += (_, _) => PaintProgramOverlays();
+                _cameraServer.DecorateOnAirFrame = ProgramGraphicStamp.Apply;
+                ApplyOverlaysFromScene();
             }
             catch (Exception ex)
             {
@@ -282,6 +297,7 @@ namespace EeccStudio
                 TxtProgramLiveFooter.Text = "DÉMO · Diffusion en cours...";
                 TxtProgramDetails.Text = "00:12:34";
                 PgmOnAirPill.Visibility = Visibility.Visible;
+                UpdateMixerMeters();
                 return;
             }
 
@@ -355,6 +371,7 @@ namespace EeccStudio
                 $"Téléphones {_cameraServer.ConnectedPhoneCount}/{CameraServer.MaxPhoneConnections}" +
                 $" · reconnexion {_cameraServer.ReservedPhoneCount}" +
                 $" · physiques {_cameraServer.PhysicalCameraCount} (non comptés) · Pipeline 16K HD / 300 FPS";
+            UpdateMixerMeters();
         }
 
         private void OnCameraConnected(CameraClient camera)
@@ -413,11 +430,11 @@ namespace EeccStudio
                 {
                     var streamSlot = pair.Key;
                     var bytes = pair.Value;
-
-                    if (streamSlot != _selectedPreviewSlot && streamSlot != _selectedProgramSlot)
+                    if (!IsJpeg(bytes))
                         continue;
 
-                    var activeSrc = _previewScene?.Sources.FirstOrDefault(s => SlotFromSource(s) == streamSlot) ?? _programScene?.Sources.FirstOrDefault(s => SlotFromSource(s) == streamSlot);
+                    var activeSrc = _previewScene?.Sources.FirstOrDefault(s => SlotFromSource(s) == streamSlot)
+                        ?? _programScene?.Sources.FirstOrDefault(s => SlotFromSource(s) == streamSlot);
                     int rot = activeSrc?.RotationAngle ?? 0;
                     bool fH = activeSrc?.FlipHorizontal ?? false;
                     bool fV = activeSrc?.FlipVertical ?? false;
@@ -425,15 +442,28 @@ namespace EeccStudio
                     if (!TryDecodeJpeg(bytes, out var bitmap, rot, fH, fV) || bitmap == null)
                         continue;
 
-                    if (streamSlot == _selectedPreviewSlot)
-                        ShowJpeg(ImgPreviewVideo, PanelPreviewSlate, bitmap);
-
-                    if (streamSlot == _selectedProgramSlot)
+                    var previewFollows = streamSlot == _selectedPreviewSlot || !IsDedicatedProgramSlot(_selectedPreviewSlot);
+                    if (previewFollows && (_selectedPreviewSlot == streamSlot || _cameraServer.GetCameraFrame(_selectedPreviewSlot) == null))
                     {
-                        ShowJpeg(ImgProgramVideo, PanelProgramSlate, bitmap);
-                        _cameraServer.ActiveProgramFrameBytes = bytes;
-                        _replayBuffer?.AppendFrame(bytes);
-                        TxtProgramLiveFooter.Text = $"Image reçue · {streamSlot}";
+                        _selectedPreviewSlot = streamSlot;
+                        ShowJpeg(ImgPreviewVideo, PanelPreviewSlate, bitmap);
+                        TxtPreviewEmpty.Text = "";
+                    }
+
+                    var programFollows = streamSlot == _selectedProgramSlot
+                        || (_selectedProgramSlot.StartsWith("Cam-", StringComparison.OrdinalIgnoreCase)
+                            && _cameraServer.GetCameraFrame(_selectedProgramSlot) == null);
+                    if (programFollows)
+                    {
+                        if (_selectedProgramSlot != streamSlot && _cameraServer.GetCameraFrame(_selectedProgramSlot) == null)
+                            _selectedProgramSlot = streamSlot;
+                        if (streamSlot == _selectedProgramSlot)
+                        {
+                            ShowJpeg(ImgProgramVideo, PanelProgramSlate, bitmap);
+                            _cameraServer.ActiveProgramFrameBytes = bytes;
+                            _replayBuffer?.AppendFrame(bytes);
+                            TxtProgramLiveFooter.Text = $"Image reçue · {streamSlot}";
+                        }
                     }
                 }
             });
@@ -516,6 +546,7 @@ namespace EeccStudio
                 TxtPreviewSub.Text = $"Source : {first.Name} + {second}";
                 TxtPreviewOverlay.Text = $"[ {first.Name} ]";
             }
+            PaintPreviewOverlays();
         }
 
         private void UpdateProgramDisplay()
@@ -546,6 +577,7 @@ namespace EeccStudio
                 var first = _programScene.Sources[0];
                 TxtProgramSub.Text = first.Name;
             }
+            PaintProgramOverlays();
         }
 
         private void BtnAddScene_Click(object sender, RoutedEventArgs e)
@@ -596,7 +628,7 @@ namespace EeccStudio
                 var dup = new StudioScene($"{selected.Name} (Copie)", selected.Description);
                 foreach (var src in selected.Sources)
                 {
-                    dup.Sources.Add(new StudioSource { Name = src.Name, Type = src.Type, Details = src.Details, IsVisible = src.IsVisible });
+                dup.Sources.Add(src.Clone());
                 }
                 _scenes.Add(dup);
                 ListScenes.SelectedItem = dup;
@@ -693,55 +725,41 @@ namespace EeccStudio
             miMedia.Click += (s, args) => selected.Sources.Add(new StudioSource { Name = "Vidéo Culte MP4", Type = SourceType.MediaVideo, Details = "Lecture Vidéo Boucle" });
             cm.Items.Add(miMedia);
 
-            var miImg = new MenuItem { Header = "🖼️ Image (Logo / Filigrane)..." };
-            miImg.Click += (s, args) =>
+            var miImg = new MenuItem { Header = "Image (logo, forme, position)..." };
+            miImg.Click += (_, _) => OpenGraphics(new StudioSource
             {
-                var imgSource = new StudioSource
-                {
-                    Name = "Logo EECC",
-                    Type = SourceType.Image,
-                    Details = "Filigrane d'angle supérieur",
-                    ImagePath = "Assets/logo.png"
-                };
-                selected.Sources.Add(imgSource);
-                ApplyOverlaysFromScene();
-            };
+                Name = "Image",
+                Type = SourceType.Image,
+                Shape = GraphicShape.Rounded,
+                Motion = GraphicMotion.Fade,
+            });
             cm.Items.Add(miImg);
 
             var miSlide = new MenuItem { Header = "📊 Diaporama d'images (Diapositives)..." };
             miSlide.Click += (s, args) => selected.Sources.Add(new StudioSource { Name = "Diaporama Culte", Type = SourceType.PresentationSlide, Details = "Projection Paroles" });
             cm.Items.Add(miSlide);
 
-            var miTxt = new MenuItem { Header = "📝 Texte GDI+ (Titre Pasteur / Verset)..." };
-            miTxt.Click += (s, args) =>
+            var miTxt = new MenuItem { Header = "Texte fixe ou animé..." };
+            miTxt.Click += (_, _) => OpenGraphics(new StudioSource
             {
-                var txtSource = new StudioSource
-                {
-                    Name = "Bandeau Titre",
-                    Type = SourceType.Text,
-                    TextContent = "Pasteur Principal - Culte EECC",
-                    SecondaryText = "Thème du Jour",
-                    Details = "Tiers Inférieur (Lower Third)"
-                };
-                selected.Sources.Add(txtSource);
-                ApplyOverlaysFromScene();
-            };
+                Name = "Texte",
+                Type = SourceType.Text,
+                TextContent = "Nouveau texte",
+                SecondaryText = "Deuxième ligne",
+                TextStyle = GraphicTextStyle.LowerThird,
+                Motion = GraphicMotion.Slide,
+            });
             cm.Items.Add(miTxt);
 
-            var miTicker = new MenuItem { Header = "📜 Bande Déroulante (Filtre Défilement Scroll OBS)..." };
-            miTicker.Click += (s, args) =>
+            var miTicker = new MenuItem { Header = "Texte défilant..." };
+            miTicker.Click += (_, _) => OpenGraphics(new StudioSource
             {
-                var tickerSource = new StudioSource
-                {
-                    Name = "Bande Déroulante Annonces",
-                    Type = SourceType.ScrollingTicker,
-                    TextContent = "✦ Bienvenue au culte de l'Église Évangélique du Centre ✦ Annonces & Dons par Mobile Money ✦",
-                    ScrollSpeed = 70.0,
-                    Details = "Bandeau Défilant Continu"
-                };
-                selected.Sources.Add(tickerSource);
-                ApplyOverlaysFromScene();
-            };
+                Name = "Texte défilant",
+                Type = SourceType.ScrollingTicker,
+                TextContent = "Annonce du culte · bienvenue à l'Église Évangélique du Centre",
+                Motion = GraphicMotion.Scroll,
+                ScrollSpeed = 70,
+            });
             cm.Items.Add(miTicker);
 
             var miBrowser = new MenuItem { Header = "🌐 Navigateur (Browser Source / Page Web)..." };
@@ -763,7 +781,11 @@ namespace EeccStudio
         {
             if (ListScenes.SelectedItem is StudioScene selected && ListSources.SelectedItem is StudioSource src)
             {
-                selected.Sources.Remove(src);
+                var index = selected.Sources.IndexOf(src);
+                selected.Sources.RemoveAt(index);
+                Remember("Supprimer la source",
+                    () => selected.Sources.Insert(Math.Min(index, selected.Sources.Count), src),
+                    () => selected.Sources.Remove(src));
             }
         }
 
@@ -805,7 +827,7 @@ namespace EeccStudio
                 {
                     From = startOffset,
                     To = 0,
-                    Duration = TimeSpan.FromMilliseconds(300),
+                    Duration = TimeSpan.FromMilliseconds(TransitionDurationMs()),
                     EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut }
                 };
                 var translate = new TranslateTransform();
@@ -818,7 +840,7 @@ namespace EeccStudio
                 {
                     From = 0.15,
                     To = 1.0,
-                    Duration = TimeSpan.FromMilliseconds(300),
+                    Duration = TimeSpan.FromMilliseconds(TransitionDurationMs()),
                     EasingFunction = new System.Windows.Media.Animation.QuadraticEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseInOut }
                 };
                 ImgProgramVideo.BeginAnimation(UIElement.OpacityProperty, fadeAnim);
@@ -849,6 +871,7 @@ namespace EeccStudio
             if (_broadcast is { IsActive: true } running)
             {
                 var stopped = await running.StopAsync();
+                _ = EeccTvCatalog.EndLiveAsync();
                 _broadcast = null;
                 ApplyBroadcastChrome(stopped);
                 return;
@@ -999,6 +1022,63 @@ namespace EeccStudio
             }
         }
 
+        private void BindMixer()
+        {
+            if (_audioEngine == null)
+                return;
+            foreach (var channel in _audioEngine.Channels)
+                _mixerStrips.Add(new MixerStrip(_audioEngine, channel));
+            MixerStrips.ItemsSource = _mixerStrips;
+        }
+
+        private void UpdateMixerMeters()
+        {
+            if (_audioEngine == null)
+                return;
+            if (!App.IsDemoMode && _broadcast is not { IsActive: true })
+                _audioEngine.RenderMaster(480);
+            if (App.IsDemoMode)
+            {
+                var tick = DateTime.UtcNow.Second;
+                var index = 0;
+                foreach (var strip in _mixerStrips)
+                    strip.ApplyLevel(-32 + (index++ * 4) + tick % 6);
+                return;
+            }
+
+            foreach (var strip in _mixerStrips)
+            {
+                var channel = _audioEngine.Channels.FirstOrDefault(item => item.Id == strip.Id);
+                if (channel != null)
+                    strip.ApplyLevel(channel.CurrentLevelDb);
+            }
+        }
+
+        private void MixerMute_Click(object sender, RoutedEventArgs e)
+        {
+            if ((sender as FrameworkElement)?.Tag is MixerStrip strip)
+                strip.ToggleMute();
+        }
+
+        private void MixerMonitor_Click(object sender, RoutedEventArgs e)
+        {
+            if ((sender as FrameworkElement)?.Tag is MixerStrip strip)
+                strip.CycleMonitor();
+        }
+
+        private void MixerLock_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is MenuItem { Parent: ContextMenu menu }
+                && menu.PlacementTarget is FrameworkElement { DataContext: MixerStrip strip })
+                strip.ToggleLock();
+        }
+
+        private void MenuAdvancedAudio_Click(object sender, RoutedEventArgs e)
+        {
+            var dialog = new AdvancedAudioWindow(_mixerStrips.ToList()) { Owner = this };
+            dialog.ShowDialog();
+        }
+
         private void AudioSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
             _audioEngine?.SetVolume("master", (float)(e.NewValue / 100.0));
@@ -1017,7 +1097,40 @@ namespace EeccStudio
 
         private void MenuRemux_Click(object sender, RoutedEventArgs e)
         {
-            MessageBox.Show("Outil de conversion remux prêt (MKV vers MP4 sub-second sans ré-encodage).", "Remux EECC Studio", MessageBoxButton.OK, MessageBoxImage.Information);
+            var dialog = new Microsoft.Win32.OpenFileDialog
+            {
+                Filter = "Matroska (*.mkv)|*.mkv|Tous les fichiers|*.*",
+                Title = "Remuxer vers MP4 sans réencodage",
+            };
+            if (dialog.ShowDialog(this) != true)
+                return;
+            var ffmpeg = FfmpegLocator.Find();
+            if (ffmpeg == null)
+            {
+                MessageBox.Show("ffmpeg est introuvable. Relancez l'installateur EECC Studio : il place ffmpeg dans le dossier de l'application et l'ajoute au PATH.", "Remux", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+            var output = Path.ChangeExtension(dialog.FileName, ".mp4");
+            var start = new ProcessStartInfo
+            {
+                FileName = ffmpeg,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+            };
+            start.ArgumentList.Add("-y");
+            start.ArgumentList.Add("-i");
+            start.ArgumentList.Add(dialog.FileName);
+            start.ArgumentList.Add("-c");
+            start.ArgumentList.Add("copy");
+            start.ArgumentList.Add(output);
+            using var process = Process.Start(start);
+            process?.WaitForExit(120_000);
+            var ok = process is { HasExited: true, ExitCode: 0 } && File.Exists(output);
+            MessageBox.Show(
+                ok ? "Fichier écrit :\n" + output : "Le remux n'a pas abouti. Le fichier source est inchangé.",
+                "Remux",
+                MessageBoxButton.OK,
+                ok ? MessageBoxImage.Information : MessageBoxImage.Warning);
         }
 
         private void MenuShowSettingsFolder_Click(object sender, RoutedEventArgs e)
@@ -1043,69 +1156,54 @@ namespace EeccStudio
             }
         }
 
-        private void ApplyOverlaysFromScene()
+        private void MenuGraphics_Click(object sender, RoutedEventArgs e) => OpenGraphics(null);
+
+        private void ListSources_MouseDoubleClick(object sender, MouseButtonEventArgs e)
         {
-            if (_previewScene == null) return;
-
-            foreach (var src in _previewScene.Sources)
-            {
-                if (!src.IsVisible) continue;
-
-                if (src.Type == SourceType.Image && !string.IsNullOrWhiteSpace(src.ImagePath))
-                {
-                    try
-                    {
-                        if (File.Exists(src.ImagePath))
-                        {
-                            var uri = new Uri(Path.GetFullPath(src.ImagePath));
-                            var bi = new BitmapImage(uri);
-                            ImgPreviewLogo.Source = bi;
-                            ImgProgramLogo.Source = bi;
-                        }
-                    }
-                    catch { }
-                }
-                else if (src.Type == SourceType.Text || src.Type == SourceType.BibleVerse)
-                {
-                    if (!string.IsNullOrWhiteSpace(src.TextContent))
-                    {
-                        TxtPreviewLowerTitle.Text = src.TextContent;
-                        TxtProgramLowerTitle.Text = src.TextContent;
-                    }
-                    if (!string.IsNullOrWhiteSpace(src.SecondaryText))
-                    {
-                        TxtPreviewLowerSub.Text = src.SecondaryText;
-                        TxtProgramLowerSub.Text = src.SecondaryText;
-                    }
-                }
-                else if (src.Type == SourceType.ScrollingTicker && !string.IsNullOrWhiteSpace(src.TextContent))
-                {
-                    TxtPreviewTicker.Text = src.TextContent;
-                    TxtProgramTicker.Text = src.TextContent;
-                    StartTickerAnimations(src.ScrollSpeed);
-                }
-            }
+            if (ListSources.SelectedItem is StudioSource source && GraphicPlacement.IsGraphic(source))
+                OpenGraphics(source);
         }
 
-        private void StartTickerAnimations(double speedPxPerSec = 70.0)
+        private void OpenGraphics(StudioSource? created)
         {
-            try
+            if (ListScenes.SelectedItem is not StudioScene scene)
             {
-                var textLength = Math.Max(TxtPreviewTicker.Text.Length * 8, 800);
-                var durationSec = Math.Max(8, (textLength + 800) / Math.Max(20, speedPxPerSec));
-
-                var scrollAnim = new System.Windows.Media.Animation.DoubleAnimation
-                {
-                    From = 600,
-                    To = -textLength,
-                    Duration = TimeSpan.FromSeconds(durationSec),
-                    RepeatBehavior = System.Windows.Media.Animation.RepeatBehavior.Forever
-                };
-
-                TxtPreviewTicker.BeginAnimation(Canvas.LeftProperty, scrollAnim);
-                TxtProgramTicker.BeginAnimation(Canvas.LeftProperty, scrollAnim);
+                MessageBox.Show("Choisissez d'abord une scène.", "Habillage", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
             }
-            catch { }
+
+            if (created != null && !scene.Sources.Contains(created))
+            {
+                GraphicPlacement.Ensure(created);
+                scene.Sources.Add(created);
+            }
+
+            var board = new GraphicsBoardWindow(scene, created ?? (ListSources.SelectedItem as StudioSource)) { Owner = this };
+            board.Applied += ApplyOverlaysFromScene;
+            board.ShowDialog();
+            ApplyOverlaysFromScene();
+        }
+
+        private void ApplyOverlaysFromScene()
+        {
+            PaintPreviewOverlays();
+            PaintProgramOverlays();
+        }
+
+        private void PaintPreviewOverlays()
+        {
+            if (_previewScene == null)
+                return;
+            _previewOverlays.Paint(CanvasPreviewGraphics, _previewScene.Sources);
+        }
+
+        private void PaintProgramOverlays()
+        {
+            var scene = _programScene ?? _previewScene;
+            if (scene == null)
+                return;
+            _programOverlays.Paint(CanvasProgramGraphics, scene.Sources);
+            ProgramGraphicStamp.Use(scene.Sources);
         }
 
         private void MenuFullscreen_Click(object sender, RoutedEventArgs e)
@@ -1124,7 +1222,15 @@ namespace EeccStudio
 
         private void MenuResetUi_Click(object sender, RoutedEventArgs e)
         {
-            MessageBox.Show("Interface réinitialisée aux réglages par défaut.", "EECC Studio", MessageBoxButton.OK, MessageBoxImage.Information);
+            WindowStyle = WindowStyle.SingleBorderWindow;
+            WindowState = WindowState.Normal;
+            Width = 1480;
+            Height = 900;
+            if (!_isStudioMode)
+                BtnStudioMode_Click(sender, e);
+            TBarSlider.Value = 0;
+            ImgProgramMix.Opacity = 0;
+            ImgProgramVideo.Opacity = 1;
         }
 
         private void MenuLanStatus_Click(object sender, RoutedEventArgs e)
@@ -1157,7 +1263,7 @@ namespace EeccStudio
 
         private void MenuCmsManager_Click(object sender, RoutedEventArgs e)
         {
-            var win = new EeccTvCmsWindow { Owner = this };
+            var win = new EeccTvCmsWindow { Owner = this, StudioServer = _cameraServer };
             win.Show();
         }
 
@@ -1268,6 +1374,12 @@ namespace EeccStudio
             }
         }
 
+        private static bool IsJpeg(byte[] bytes) =>
+            bytes.Length > 3 && bytes[0] == 0xFF && bytes[1] == 0xD8;
+
+        private static bool IsDedicatedProgramSlot(string slot) =>
+            slot is "HDMI-1" or "Screen-1" or "Media-1";
+
         private static void ShowJpeg(System.Windows.Controls.Image target, System.Windows.Controls.Grid slate, BitmapSource bitmap)
         {
             target.Source = bitmap;
@@ -1336,13 +1448,13 @@ namespace EeccStudio
                 try
                 {
                     var bitmap = CreateBitmapFromFrame(frame);
-                    if (_selectedPreviewSlot == "HDMI-1" || _previewScene?.Sources.Any(s => s.Type == SourceType.PhysicalCamera) == true)
+                    if (_selectedPreviewSlot == "HDMI-1")
                     {
                         ImgPreviewVideo.Source = bitmap;
                         PanelPreviewSlate.Visibility = Visibility.Collapsed;
                     }
 
-                    if (_selectedProgramSlot == "HDMI-1" || _programScene?.Sources.Any(s => s.Type == SourceType.PhysicalCamera) == true)
+                    if (_selectedProgramSlot == "HDMI-1")
                     {
                         ImgProgramVideo.Source = bitmap;
                         PanelProgramSlate.Visibility = Visibility.Collapsed;
@@ -1507,44 +1619,309 @@ namespace EeccStudio
             return match.Success ? "Cam-" + match.Groups[1].Value : null;
         }
 
-        private void MenuEditTransform_Reset_Click(object sender, RoutedEventArgs e)
+        private void MenuEditTransform_Reset_Click(object sender, RoutedEventArgs e) =>
+            TransformSelected(SourceTransform.Reset, "Réinitialiser la transformation");
+
+        private void MenuEditTransform_Rotate90CW_Click(object sender, RoutedEventArgs e) =>
+            TransformSelected(source => SourceTransform.Rotate(source, 90), "Pivoter de 90°");
+
+        private void MenuEditTransform_Rotate90CCW_Click(object sender, RoutedEventArgs e) =>
+            TransformSelected(source => SourceTransform.Rotate(source, -90), "Pivoter de -90°");
+
+        private void MenuEditTransform_Rotate180_Click(object sender, RoutedEventArgs e) =>
+            TransformSelected(source => SourceTransform.Rotate(source, 180), "Pivoter de 180°");
+
+        private void MenuEditTransform_FlipH_Click(object sender, RoutedEventArgs e) =>
+            TransformSelected(SourceTransform.FlipHorizontal, "Miroir horizontal");
+
+        private void MenuEditTransform_FlipV_Click(object sender, RoutedEventArgs e) =>
+            TransformSelected(SourceTransform.FlipVertical, "Miroir vertical");
+
+        private void MenuEditTransform_Fit_Click(object sender, RoutedEventArgs e)
         {
-            MessageBox.Show("Transformation de la source réinitialisée.", "OBS Studio", MessageBoxButton.OK, MessageBoxImage.Information);
+            ImgPreviewVideo.Stretch = Stretch.Uniform;
+            ImgProgramVideo.Stretch = Stretch.Uniform;
+            ImgProgramMix.Stretch = Stretch.Uniform;
+            CenterVideoMonitors();
+            TxtProgramLiveFooter.Text = "Source ajustée au canevas";
         }
 
-        private void MenuEditTransform_Rotate90CW_Click(object sender, RoutedEventArgs e)
+        private void MenuEditTransform_Center_Click(object sender, RoutedEventArgs e)
         {
-            MessageBox.Show("Rotation 90° horaire appliquée.", "OBS Studio", MessageBoxButton.OK, MessageBoxImage.Information);
+            CenterVideoMonitors();
+            TxtProgramLiveFooter.Text = "Source centrée";
         }
 
-        private void MenuEditTransform_Rotate90CCW_Click(object sender, RoutedEventArgs e)
+        private void MenuUndo_Click(object sender, RoutedEventArgs e)
         {
-            MessageBox.Show("Rotation 90° anti-horaire appliquée.", "OBS Studio", MessageBoxButton.OK, MessageBoxImage.Information);
+            if (!_undo.TryUndo())
+                return;
+            ListSources.Items.Refresh();
+            PersistCollection();
         }
 
-        private void MenuEditTransform_Rotate180_Click(object sender, RoutedEventArgs e)
+        private void MenuRedo_Click(object sender, RoutedEventArgs e)
         {
-            MessageBox.Show("Rotation 180° appliquée.", "OBS Studio", MessageBoxButton.OK, MessageBoxImage.Information);
+            if (!_undo.TryRedo())
+                return;
+            ListSources.Items.Refresh();
+            PersistCollection();
         }
 
-        private void MenuEditTransform_FlipH_Click(object sender, RoutedEventArgs e)
+        private void MenuCopySource_Click(object sender, RoutedEventArgs e)
         {
-            MessageBox.Show("Miroir horizontal appliqué.", "OBS Studio", MessageBoxButton.OK, MessageBoxImage.Information);
+            if (ListSources.SelectedItem is StudioSource src)
+                _copiedSource = src;
         }
 
-        private void MenuEditTransform_FlipV_Click(object sender, RoutedEventArgs e)
+        private void MenuPasteSource_Click(object sender, RoutedEventArgs e)
         {
-            MessageBox.Show("Miroir vertical appliqué.", "OBS Studio", MessageBoxButton.OK, MessageBoxImage.Information);
+            if (_copiedSource == null || ListScenes.SelectedItem is not StudioScene scene)
+                return;
+            var sameScene = scene.Sources.Contains(_copiedSource);
+            var item = sameScene ? _copiedSource.Clone() : _copiedSource;
+            if (!sameScene && scene.Sources.Contains(item))
+                item = _copiedSource.Clone();
+            scene.Sources.Add(item);
+            ListSources.SelectedItem = item;
+            Remember("Coller la source", () => scene.Sources.Remove(item), () => scene.Sources.Add(item));
+        }
+
+        private void MenuFilters_Click(object sender, RoutedEventArgs e) =>
+            MenuSourceProperties_Click(sender, e);
+
+        private void BtnMoveSourceUp_Click(object sender, RoutedEventArgs e) => MoveSource(-1);
+        private void BtnMoveSourceDown_Click(object sender, RoutedEventArgs e) => MoveSource(1);
+
+        private void BtnMoveSourceTop_Click(object sender, RoutedEventArgs e)
+        {
+            if (ListSources.SelectedIndex > 0)
+                MoveSource(-ListSources.SelectedIndex);
+        }
+
+        private void BtnMoveSourceBottom_Click(object sender, RoutedEventArgs e)
+        {
+            if (ListScenes.SelectedItem is StudioScene scene && ListSources.SelectedIndex >= 0)
+                MoveSource(scene.Sources.Count - 1 - ListSources.SelectedIndex);
+        }
+
+        private void SourceEye_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not FrameworkElement { DataContext: StudioSource src })
+                return;
+            var was = src.IsVisible;
+            src.IsVisible = !was;
+            ListSources.Items.Refresh();
+            ApplyOverlaysFromScene();
+            Remember("Visibilité", () => { src.IsVisible = was; ListSources.Items.Refresh(); }, () => { src.IsVisible = !was; ListSources.Items.Refresh(); });
+            e.Handled = true;
+        }
+
+        private void TransitionDuration_LostFocus(object sender, RoutedEventArgs e)
+        {
+            var ms = TransitionDurationMs(sender as TextBox);
+            var text = ms + " ms";
+            TxtTransitionDuration.Text = text;
+            TxtCenterTransitionDuration.Text = text;
+            TxtFadeButton.Text = "Fondu (" + text + ")";
+        }
+
+        private void TBarSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (!IsLoaded)
+                return;
+            ImgProgramMix.Source = ImgPreviewVideo.Source;
+            ImgProgramMix.Opacity = e.NewValue / 100.0;
+            ImgProgramVideo.Opacity = 1.0 - e.NewValue / 100.0;
+            _tBarDragging = e.NewValue > 0;
+        }
+
+        private void TBarSlider_Released(object sender, MouseButtonEventArgs e)
+        {
+            if (!_tBarDragging)
+                return;
+            var commit = TBarSlider.Value >= 98;
+            TBarSlider.Value = 0;
+            ImgProgramMix.Opacity = 0;
+            ImgProgramVideo.Opacity = 1;
+            _tBarDragging = false;
+            if (commit)
+                BtnCut_Click(sender, new RoutedEventArgs());
+        }
+
+        private void MainWindow_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            if (Keyboard.FocusedElement is TextBox)
+                return;
+            if (Keyboard.Modifiers == ModifierKeys.Control && e.Key == Key.Z)
+            {
+                MenuUndo_Click(sender, e);
+                e.Handled = true;
+            }
+            else if (Keyboard.Modifiers == ModifierKeys.Control && e.Key == Key.Y)
+            {
+                MenuRedo_Click(sender, e);
+                e.Handled = true;
+            }
+            else if (Keyboard.Modifiers == ModifierKeys.Control && e.Key == Key.C)
+            {
+                MenuCopySource_Click(sender, e);
+                e.Handled = true;
+            }
+            else if (Keyboard.Modifiers == ModifierKeys.Control && e.Key == Key.V)
+            {
+                MenuPasteSource_Click(sender, e);
+                e.Handled = true;
+            }
+        }
+
+        private void MenuProfileNew_Click(object sender, RoutedEventArgs e) =>
+            SwitchProfile(Prompt("Nouveau profil", "Nom du profil") );
+
+        private void MenuProfileDuplicate_Click(object sender, RoutedEventArgs e) =>
+            SwitchProfile(Prompt("Dupliquer le profil", _profileName + " copie"));
+
+        private void MenuProfileRename_Click(object sender, RoutedEventArgs e)
+        {
+            var name = Prompt("Renommer le profil", _profileName);
+            if (string.IsNullOrWhiteSpace(name) || name == _profileName)
+                return;
+            var root = ProfilesRoot();
+            var from = Path.Combine(root, SceneCollectionFile.Sanitize(_profileName));
+            var to = Path.Combine(root, SceneCollectionFile.Sanitize(name));
+            PersistCollection();
+            if (Directory.Exists(from) && !Directory.Exists(to))
+                Directory.Move(from, to);
+            _profileName = name.Trim();
+            RefreshWindowTitle();
+        }
+
+        private void MenuProfilePick_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not MenuItem item)
+                return;
+            var header = item.Header?.ToString() ?? "";
+            var name = header.Contains("Chorale", StringComparison.Ordinal) ? "Répétition Chorale & Louange"
+                : header.Contains("Séminaire", StringComparison.Ordinal) ? "Séminaire & Événement Spécial"
+                : "Culte Dominical EECC";
+            if (name == _profileName)
+                return;
+            PersistCollection();
+            _profileName = name;
+            TryLoadCollection();
+            CheckProfileMenus();
+            RefreshWindowTitle();
+        }
+
+        private void MenuCollectionNew_Click(object sender, RoutedEventArgs e)
+        {
+            var name = Prompt("Nouvelle collection", "Nouvelle collection");
+            if (string.IsNullOrWhiteSpace(name))
+                return;
+            PersistCollection();
+            _collectionName = name.Trim();
+            _scenes.Clear();
+            var scene = new StudioScene("Scène", "Collection vide");
+            _scenes.Add(scene);
+            ListScenes.SelectedItem = scene;
+            PersistCollection();
+            RefreshWindowTitle();
+        }
+
+        private void MenuCollectionDuplicate_Click(object sender, RoutedEventArgs e)
+        {
+            var name = Prompt("Dupliquer la collection", _collectionName + " copie");
+            if (string.IsNullOrWhiteSpace(name))
+                return;
+            PersistCollection();
+            _collectionName = name.Trim();
+            PersistCollection();
+            RefreshWindowTitle();
+        }
+
+        private void MenuCollectionRename_Click(object sender, RoutedEventArgs e)
+        {
+            var name = Prompt("Renommer la collection", _collectionName);
+            if (string.IsNullOrWhiteSpace(name))
+                return;
+            var previous = CollectionPath();
+            _collectionName = name.Trim();
+            PersistCollection();
+            if (!string.Equals(previous, CollectionPath(), StringComparison.OrdinalIgnoreCase) && File.Exists(previous))
+                File.Delete(previous);
+            RefreshWindowTitle();
+        }
+
+        private void MenuCollectionPick_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not MenuItem item)
+                return;
+            var name = (item.Header?.ToString() ?? "").Contains("Démo", StringComparison.Ordinal)
+                ? "Studio Démo & Tests"
+                : "Production Culte EECC";
+            if (name == _collectionName)
+                return;
+            PersistCollection();
+            _collectionName = name;
+            TryLoadCollection();
+            MenuCollectionProduction.IsChecked = name.StartsWith("Production", StringComparison.Ordinal);
+            MenuCollectionDemo.IsChecked = !MenuCollectionProduction.IsChecked;
+            RefreshWindowTitle();
+        }
+
+        private void MenuProfileExport_Click(object sender, RoutedEventArgs e)
+        {
+            var dialog = new Microsoft.Win32.SaveFileDialog
+            {
+                Filter = "Collection EECC (*.json)|*.json",
+                FileName = SceneCollectionFile.Sanitize(_collectionName) + ".json",
+            };
+            if (dialog.ShowDialog(this) != true)
+                return;
+            SceneCollectionFile.Save(dialog.FileName, _scenes);
+        }
+
+        private void MenuProfileImport_Click(object sender, RoutedEventArgs e)
+        {
+            var dialog = new Microsoft.Win32.OpenFileDialog { Filter = "Collection EECC (*.json)|*.json" };
+            if (dialog.ShowDialog(this) != true)
+                return;
+            var loaded = SceneCollectionFile.Load(dialog.FileName);
+            if (loaded.Count == 0)
+            {
+                MessageBox.Show("Ce fichier ne contient aucune scène.", "Importer", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+            ReplaceScenes(loaded);
+            PersistCollection();
         }
 
         private void MenuTools_AutoConfig_Click(object sender, RoutedEventArgs e)
         {
-            MessageBox.Show("Assistant de configuration automatique OBS Studio :\nRésolution canevas : 1080p60.", "Configuration Automatique", MessageBoxButton.OK, MessageBoxImage.Information);
+            TxtTransitionDuration.Text = "300 ms";
+            TxtCenterTransitionDuration.Text = "300 ms";
+            TxtFadeButton.Text = "Fondu (300 ms)";
+            var width = _gpuCompositor?.CanvasWidth ?? 1920;
+            var height = _gpuCompositor?.CanvasHeight ?? 1080;
+            var fps = _gpuCompositor?.CanvasFps ?? 60;
+            MessageBox.Show(
+                $"Canevas conservé : {width}×{height} à {fps} images/s.\nDurée de transition : 300 ms.\nLes téléphones restent limités à 15 sur le port {_cameraServer.ListeningPort}.",
+                "Configuration automatique",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
         }
 
-        private void MenuTools_EeccCamTorch_Click(object sender, RoutedEventArgs e)
+        private async void MenuTools_EeccCamTorch_Click(object sender, RoutedEventArgs e)
         {
-            MessageBox.Show("Contrôle torche & signal tally téléphones mobiles actifs.", "EECC Caméra", MessageBoxButton.OK, MessageBoxImage.Information);
+            var sent = 0;
+            foreach (var camera in _cameraServer.ConnectedCameras.Values)
+            {
+                if (await _cameraServer.SendCommandAsync(camera.StreamName, "toggle_torch"))
+                    sent++;
+            }
+            TxtProgramLiveFooter.Text = sent == 0
+                ? "Aucun téléphone connecté pour la torche"
+                : $"Torche basculée sur {sent} téléphone(s)";
         }
 
         private void MenuHelp_Logs_Click(object sender, RoutedEventArgs e)
@@ -1556,6 +1933,174 @@ namespace EeccStudio
                 Process.Start(new ProcessStartInfo("explorer.exe", dir) { UseShellExecute = true });
             }
             catch { }
+        }
+
+        private void TransformSelected(Func<StudioSource, bool> operation, string label)
+        {
+            if (ListSources.SelectedItem is not StudioSource source)
+            {
+                MessageBox.Show("Sélectionnez une source dans le dock Sources.", "Transformer", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+            var before = SourceTransform.Capture(source);
+            if (!operation(source))
+            {
+                TxtProgramLiveFooter.Text = "Source verrouillée";
+                return;
+            }
+            var after = SourceTransform.Capture(source);
+            Remember(label, () => RestoreTransform(source, before), () => RestoreTransform(source, after));
+            RestoreTransform(source, after);
+        }
+
+        private void RestoreTransform(StudioSource source, SourceTransform.Snapshot snapshot)
+        {
+            SourceTransform.Restore(source, snapshot);
+            ListSources.Items.Refresh();
+            var slot = SlotFromSource(source);
+            if (slot == null)
+                return;
+            var frame = _cameraServer.GetCameraFrame(slot);
+            if (frame == null || !TryDecodeJpeg(frame, out var bitmap, source.RotationAngle, source.FlipHorizontal, source.FlipVertical) || bitmap == null)
+                return;
+            if (slot == _selectedPreviewSlot)
+                ShowJpeg(ImgPreviewVideo, PanelPreviewSlate, bitmap);
+            if (slot == _selectedProgramSlot)
+                ShowJpeg(ImgProgramVideo, PanelProgramSlate, bitmap);
+            ImgPreviewVideo.Opacity = source.Opacity;
+            ImgProgramVideo.Opacity = source.Opacity;
+        }
+
+        private void MoveSource(int delta)
+        {
+            if (ListScenes.SelectedItem is not StudioScene scene || ListSources.SelectedItem is not StudioSource source)
+                return;
+            var from = scene.Sources.IndexOf(source);
+            var to = from + delta;
+            if (from < 0 || to < 0 || to >= scene.Sources.Count)
+                return;
+            scene.Sources.Move(from, to);
+            ListSources.SelectedIndex = to;
+            Remember("Ordre des sources",
+                () => { scene.Sources.Move(to, from); ListSources.SelectedIndex = from; },
+                () => { scene.Sources.Move(from, to); ListSources.SelectedIndex = to; });
+        }
+
+        private void Remember(string name, Action undo, Action redo)
+        {
+            _undo.Push(name, undo, redo);
+            PersistCollection();
+        }
+
+        private int TransitionDurationMs(TextBox? source = null)
+        {
+            var text = source?.Text ?? TxtTransitionDuration.Text;
+            var digits = new string(text.Where(char.IsDigit).ToArray());
+            return int.TryParse(digits, out var ms) && ms is >= 0 and <= 60_000 ? ms : 300;
+        }
+
+        private void CenterVideoMonitors()
+        {
+            ImgPreviewVideo.HorizontalAlignment = HorizontalAlignment.Center;
+            ImgPreviewVideo.VerticalAlignment = VerticalAlignment.Center;
+            ImgProgramVideo.HorizontalAlignment = HorizontalAlignment.Center;
+            ImgProgramVideo.VerticalAlignment = VerticalAlignment.Center;
+            ImgProgramVideo.RenderTransform = Transform.Identity;
+        }
+
+        private static string ProfilesRoot() =>
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "EECC_Studio", "profiles");
+
+        private string CollectionPath() =>
+            SceneCollectionFile.PathFor(ProfilesRoot(), _profileName, _collectionName);
+
+        private void PersistCollection()
+        {
+            if (App.IsSmokeTest)
+                return;
+            try { SceneCollectionFile.Save(CollectionPath(), _scenes); }
+            catch (Exception ex) { App.WriteLog(ex.ToString()); }
+        }
+
+        private void TryLoadCollection()
+        {
+            try
+            {
+                var loaded = SceneCollectionFile.Load(CollectionPath());
+                if (loaded.Count > 0)
+                    ReplaceScenes(loaded);
+            }
+            catch (Exception ex)
+            {
+                App.WriteLog(ex.ToString());
+            }
+        }
+
+        private void ReplaceScenes(List<StudioScene> loaded)
+        {
+            _scenes.Clear();
+            foreach (var scene in loaded)
+                _scenes.Add(scene);
+            _programScene = _scenes[0];
+            _previewScene = _scenes[0];
+            ListScenes.SelectedIndex = 0;
+            ListSources.ItemsSource = _scenes[0].Sources;
+            UpdatePreviewDisplay();
+            UpdateProgramDisplay();
+            ApplyOverlaysFromScene();
+        }
+
+        private void SwitchProfile(string? name)
+        {
+            if (string.IsNullOrWhiteSpace(name))
+                return;
+            PersistCollection();
+            _profileName = name.Trim();
+            if (File.Exists(CollectionPath()))
+                TryLoadCollection();
+            else
+                PersistCollection();
+            CheckProfileMenus();
+            RefreshWindowTitle();
+        }
+
+        private void CheckProfileMenus()
+        {
+            MenuProfileSunday.IsChecked = _profileName.Contains("Dominical", StringComparison.Ordinal);
+            MenuProfileChoir.IsChecked = _profileName.Contains("Chorale", StringComparison.Ordinal);
+            MenuProfileSeminar.IsChecked = _profileName.Contains("Séminaire", StringComparison.Ordinal);
+        }
+
+        private void RefreshWindowTitle() =>
+            Title = $"EECC Studio — Profil : {_profileName} — Collection : {_collectionName}";
+
+        private string? Prompt(string title, string initial)
+        {
+            var box = new TextBox
+            {
+                Text = initial,
+                Margin = new Thickness(12, 12, 12, 8),
+                Padding = new Thickness(6, 4, 6, 4),
+            };
+            var ok = new Button { Content = "OK", Width = 88, Height = 28, Margin = new Thickness(0, 0, 8, 12), IsDefault = true, HorizontalAlignment = HorizontalAlignment.Right };
+            var panel = new DockPanel();
+            DockPanel.SetDock(ok, Dock.Bottom);
+            panel.Children.Add(ok);
+            panel.Children.Add(box);
+            var dialog = new Window
+            {
+                Title = title,
+                Width = 420,
+                Height = 150,
+                ResizeMode = ResizeMode.NoResize,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                Owner = this,
+                Content = panel,
+                Background = (Brush)FindResource("ObsWindowBackground"),
+            };
+            string? result = null;
+            ok.Click += (_, _) => { result = box.Text; dialog.DialogResult = true; };
+            return dialog.ShowDialog() == true ? result?.Trim() : null;
         }
     }
 }

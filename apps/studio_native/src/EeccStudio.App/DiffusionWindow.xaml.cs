@@ -176,6 +176,14 @@ public partial class DiffusionWindow : Window
 
             TxtStatus.Text = Format(snapshot);
             TxtValidation.Text = snapshot.TvIsLive ? validation.Summary : snapshot.Summary;
+            if (snapshot.TvIsLive)
+            {
+                var playback = snapshot.Destinations
+                    .FirstOrDefault(item => item.Kind == DestinationKind.EeccTv)?.PlaybackUrl
+                    ?? $"http://{_server.GetLocalIpAddress()}:{_server.Port}/live/stream";
+                var catalog = await EeccTvCatalog.PublishLiveAsync(playback, _server.ProgramTitle, _server.Speaker);
+                TxtStatus.Text = Format(snapshot) + "\n" + catalog;
+            }
             if (!snapshot.TvIsLive)
             {
                 await session.DisposeAsync();
@@ -234,6 +242,7 @@ public partial class DiffusionWindow : Window
         private readonly ComboBox _platform;
         private readonly TextBox _url;
         private readonly PasswordBox _key;
+        private readonly CheckBox _vertical;
         private readonly TextBlock _note;
         private readonly string _id;
 
@@ -291,6 +300,14 @@ public partial class DiffusionWindow : Window
             stack.Children.Add(_url);
             stack.Children.Add(Label("Clé de flux"));
             stack.Children.Add(_key);
+            _vertical = new CheckBox
+            {
+                Content = "Sortie verticale 9:16 (TikTok, Shorts, Instagram)",
+                IsChecked = restored?.Vertical == true,
+                Foreground = Brush("#F0F6FC"),
+                Margin = new Thickness(0, 8, 0, 0)
+            };
+            stack.Children.Add(_vertical);
             stack.Children.Add(_note);
             stack.Children.Add(removeButton);
 
@@ -322,7 +339,8 @@ public partial class DiffusionWindow : Window
                 DisplayName = _name.Text.Trim(),
                 Platform = platform,
                 IngestUrl = _url.Text.Trim(),
-                StreamKey = new StreamKey(_key.Password)
+                StreamKey = new StreamKey(_key.Password),
+                Vertical = _vertical.IsChecked == true
             };
         }
 
@@ -331,6 +349,8 @@ public partial class DiffusionWindow : Window
             var platform = (_platform.SelectedItem as ComboBoxItem)?.Tag is ExternalPlatform value
                 ? value
                 : ExternalPlatform.Custom;
+            if (platform == ExternalPlatform.TikTok && fillEmptyUrl)
+                _vertical.IsChecked = true;
             _note.Text = BroadcastModeText.PlatformWarning(platform) ?? "Destination personnalisée. Seul un récepteur local est exercé par les tests.";
             if (!fillEmptyUrl || _url.Text.Length > 0)
                 return;

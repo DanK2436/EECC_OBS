@@ -30,6 +30,7 @@ class _LiveScreenState extends State<LiveScreen> with SingleTickerProviderStateM
   ChewieController? _chewieController;
   bool _isVideoPlayerInitialized = false;
   String? _videoErrorMessage;
+  String? _studioFrameUrl;
   Timer? _liveRefreshTimer;
 
   @override
@@ -92,6 +93,22 @@ class _LiveScreenState extends State<LiveScreen> with SingleTickerProviderStateM
 
   /// Initialise le lecteur vidéo matériel réel (HLS .m3u8 ou flux hébergé)
   Future<void> _initLiveVideoPlayer(String streamUrl) async {
+    if (_isStudioJpeg(streamUrl)) {
+      _chewieController?.dispose();
+      _videoPlayerController?.dispose();
+      _chewieController = null;
+      _videoPlayerController = null;
+      if (mounted) {
+        setState(() {
+          _studioFrameUrl = _studioFrameEndpoint(streamUrl);
+          _isVideoPlayerInitialized = false;
+          _videoErrorMessage = null;
+        });
+      }
+      return;
+    }
+
+    _studioFrameUrl = null;
     try {
       _chewieController?.dispose();
       _videoPlayerController?.dispose();
@@ -424,6 +441,10 @@ class _LiveScreenState extends State<LiveScreen> with SingleTickerProviderStateM
       );
     }
 
+    if (_studioFrameUrl != null) {
+      return StudioProgramView(frameUrl: _studioFrameUrl!);
+    }
+
     if (_isVideoPlayerInitialized && _chewieController != null) {
       return Chewie(controller: _chewieController!);
     }
@@ -466,6 +487,63 @@ class _LiveScreenState extends State<LiveScreen> with SingleTickerProviderStateM
         child: Text(
           'En attente du flux en direct...',
           style: TextStyle(color: Colors.white70),
+        ),
+      ),
+    );
+  }
+
+  bool _isStudioJpeg(String url) =>
+      url.contains('/live/stream') || url.contains('/live/frame.jpg');
+
+  String _studioFrameEndpoint(String url) {
+    final bare = url.split('?').first;
+    if (bare.endsWith('/live/frame.jpg')) return bare;
+    return bare.replaceFirst('/live/stream', '/live/frame.jpg');
+  }
+}
+
+class StudioProgramView extends StatefulWidget {
+  const StudioProgramView({super.key, required this.frameUrl});
+
+  final String frameUrl;
+
+  @override
+  State<StudioProgramView> createState() => _StudioProgramViewState();
+}
+
+class _StudioProgramViewState extends State<StudioProgramView> {
+  Timer? _timer;
+  int _tick = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(milliseconds: 200), (_) {
+      if (mounted) setState(() => _tick++);
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final separator = widget.frameUrl.contains('?') ? '&' : '?';
+    return ColoredBox(
+      color: Colors.black,
+      child: Image.network(
+        '${widget.frameUrl}${separator}t=$_tick',
+        gaplessPlayback: true,
+        fit: BoxFit.contain,
+        errorBuilder: (_, __, ___) => const Center(
+          child: Text(
+            'EECC Studio est en direct, mais aucune image n\'arrive encore.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.white70),
+          ),
         ),
       ),
     );

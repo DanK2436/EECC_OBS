@@ -66,9 +66,9 @@ Filename: "netsh"; Parameters: "advfirewall firewall delete rule name=""EECC Stu
 
 [Code]
 const
-  WM_SETTINGCHANGE = $001A;
-  HWND_BROADCAST = $FFFF;
-  SMTO_ABORTIFHUNG = $0002;
+  EeccWmSettingChange = $001A;
+  EeccHwndBroadcast = $FFFF;
+  EeccSmtoAbortIfHung = $0002;
 
 function SendMessageTimeout(hWnd: Integer; Msg: Cardinal; wParam: Integer; lParam: String; fuFlags: Cardinal; uTimeout: Cardinal; var lpdwResult: Cardinal): Integer;
   external 'SendMessageTimeoutW@user32.dll stdcall';
@@ -163,7 +163,7 @@ procedure BroadcastEnvironmentChange;
 var
   Unused: Cardinal;
 begin
-  SendMessageTimeout(HWND_BROADCAST, WM_SETTINGCHANGE, 0, 'Environment', SMTO_ABORTIFHUNG, 5000, Unused);
+  SendMessageTimeout(EeccHwndBroadcast, EeccWmSettingChange, 0, 'Environment', EeccSmtoAbortIfHung, 5000, Unused);
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
